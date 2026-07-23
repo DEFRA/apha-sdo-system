@@ -1,4 +1,6 @@
-@use "govuk-frontend";
+// Includes govuk-frontend, configured with $govuk-assets-path: "/assets/"
+// (served by the /assets route registered in src/server/plugins/router.js)
+@use "pkg:@defra/forms-engine-plugin";
 
 @use "variables";
 @use "helpers";

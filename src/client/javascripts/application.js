@@ -1,14 +1,5 @@
-import {
-  createAll,
-  Button,
-  Checkboxes,
-  ErrorSummary,
-  Radios,
-  SkipLink
-} from 'govuk-frontend'
+import { initAll } from '@defra/forms-engine-plugin/shared.js'
 
-createAll(Button)
-createAll(Checkboxes)
-createAll(ErrorSummary)
-createAll(Radios)
-createAll(SkipLink)
+// Initialises GOV.UK Frontend components plus the forms-engine-plugin
+// client-side behaviour (autocomplete, file upload, etc.)
+initAll()

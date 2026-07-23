@@ -195,6 +195,14 @@ export const config = convict({
       env: 'REDIS_TLS'
     }
   },
+  formsEngine: {
+    baseUrl: {
+      doc: 'Base URL used by @defra/forms-engine-plugin to build absolute links (e.g. save-and-exit and file upload callbacks)',
+      format: 'url',
+      default: 'http://localhost:3000',
+      env: 'FORMS_ENGINE_BASE_URL'
+    }
+  },
   nunjucks: {
     watch: {
       doc: 'Reload templates when they are changed.',
