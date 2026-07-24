@@ -1,15 +1,24 @@
-version: '3.4'
 services:
-  floci:
-    image: hectorvent/floci:latest-aws
+  localstack:
+    image: localstack/localstack:3.0.2
     ports:
-      - '4566:4566'
+      - '4566:4566' # LocalStack Gateway
+      - '4510-4559:4510-4559' # external services port range
     env_file:
       - 'compose/aws.env'
     environment:
-      FLOCI_DEFAULT_REGION: eu-west-2
+      DEBUG: ${DEBUG:-1}
+      LS_LOG: WARN # LocalStack DEBUG Level
+      SERVICES: s3,sqs,sns,firehose
+      LOCALSTACK_HOST: 127.0.0.1
     volumes:
-      - ./compose/floci/start.d:/etc/floci/init/start.d:ro
+      - '${TMPDIR:-/tmp}/localstack:/var/lib/localstack'
+      - './compose/localstack:/etc/localstack/init/ready.d:ro'
+    healthcheck:
+      test: ['CMD', 'stat', '/tmp/READY']
+      interval: 3s
+      start_period: 5s
+      retries: 20
     networks:
       - cdp-tenant
 
@@ -36,6 +45,50 @@ services:
       retries: 3
       start_period: 30s
 
+  # local proxy for browser uploads to the cdp-uploader
+  proxy:
+    image: nginxproxy/nginx-proxy:1.4
+    ports:
+      - '7300:80'
+    environment:
+      - ENABLE_IPV6=true
+      - DEFAULT_ROOT="418"
+      - DEFAULT_HOST=~^uploader\..*\.sslip\.io
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - cdp-tenant
+
+  cdp-uploader:
+    image: defradigital/cdp-uploader:${CDP_UPLOADER_VERSION:-latest}
+    ports:
+      - '7337:7337'
+    depends_on:
+      localstack:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - 'compose/aws.env'
+    environment:
+      VIRTUAL_HOST: ~^uploader\..*\.sslip\.io
+      VIRTUAL_PATH: /
+      VIRTUAL_PORT: 7337
+      PORT: 7337
+      NODE_ENV: development
+      REDIS_HOST: redis
+      USE_SINGLE_INSTANCE_CACHE: true
+      MOCK_VIRUS_SCAN_ENABLED: true
+      MOCK_VIRUS_RESULT_DELAY: 3
+      SQS_ENDPOINT: http://localstack:4566
+      S3_ENDPOINT: http://localstack:4566
+      CONSUMER_BUCKETS: apha-sdo-uploads
+    extra_hosts:
+      # lets scan-completion callbacks reach an app running on the host
+      - 'host.docker.internal:host-gateway'
+    networks:
+      - cdp-tenant
+
   ################################################################################
 
   your-frontend:
@@ -43,12 +96,14 @@ services:
     ports:
       - '3000:3000'
     links:
-      - 'floci:floci'
+      - 'localstack:localstack'
       - 'redis:redis'
     depends_on:
-      floci:
+      localstack:
         condition: service_healthy
       redis:
+        condition: service_started
+      cdp-uploader:
         condition: service_started
     env_file:
       - 'compose/aws.env'
@@ -60,6 +115,11 @@ services:
       SESSION_COOKIE_SECURE: false
       USE_SINGLE_INSTANCE_CACHE: true
       REDIS_TLS: false
+      # File upload (read by @defra/forms-engine-plugin)
+      UPLOADER_URL: http://cdp-uploader:7337
+      UPLOADER_BUCKET_NAME: apha-sdo-uploads
+      STAGING_PREFIX: staging
+      SUBMISSION_URL: http://your-frontend:3000
     networks:
       - cdp-tenant
 
@@ -68,10 +128,10 @@ services:
   #   ports:
   #     - '3555:3555'
   #   links:
-  #     - 'foci:floci'
+  #     - 'localstack:localstack'
   #     - 'mongodb:mongodb'
   #   depends_on:
-  #     floci:
+  #     localstack:
   #       condition: service_healthy
   #     mongodb:
   #       condition: service_started

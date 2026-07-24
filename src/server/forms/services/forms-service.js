@@ -1,12 +1,13 @@
 import Boom from '@hapi/boom'
 
 import * as exampleApplication from '../definitions/example-application.js'
+import * as sdoTest from '../definitions/sdo-test.js'
 
 /**
  * Register new forms here. Each entry is a module exporting `metadata` and
  * `definition` (see src/server/forms/definitions/example-application.js).
  */
-const forms = [exampleApplication]
+const forms = [exampleApplication, sdoTest]
 
 const formsBySlug = new Map(forms.map((form) => [form.metadata.slug, form]))
 const formsById = new Map(forms.map((form) => [form.metadata.id, form]))
