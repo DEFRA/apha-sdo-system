@@ -65,9 +65,8 @@ describe('RedisUploadStore', () => {
     })
 
     it('should handle Redis client initialization failure gracefully', async () => {
-      const { buildRedisClient } = await import(
-        '../common/helpers/redis-client.js'
-      )
+      const { buildRedisClient } =
+        await import('../common/helpers/redis-client.js')
       buildRedisClient.mockImplementationOnce(() => {
         throw new Error('Redis connection failed')
       })

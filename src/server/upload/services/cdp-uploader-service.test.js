@@ -165,7 +165,9 @@ describe('CdpUploaderService', () => {
     it('resolves immediately when local status is clean', async () => {
       vi.useFakeTimers()
       const service = new CdpUploaderService()
-      mockRedisUploadStore.getUpload.mockResolvedValue({ virusScanStatus: 'clean' })
+      mockRedisUploadStore.getUpload.mockResolvedValue({
+        virusScanStatus: 'clean'
+      })
 
       const pollPromise = service.pollVirusScanStatus('upload-2', 1, 10)
       await vi.advanceTimersByTimeAsync(10)
@@ -180,7 +182,9 @@ describe('CdpUploaderService', () => {
     it('updates store and resolves when CDP reports clean', async () => {
       vi.useFakeTimers()
       const service = new CdpUploaderService()
-      mockRedisUploadStore.getUpload.mockResolvedValue({ virusScanStatus: 'pending' })
+      mockRedisUploadStore.getUpload.mockResolvedValue({
+        virusScanStatus: 'pending'
+      })
       global.fetch.mockResolvedValue({
         ok: true,
         json: async () => ({ virusScanStatus: 'clean', status: 'completed' })
@@ -193,16 +197,21 @@ describe('CdpUploaderService', () => {
         status: 'clean',
         uploadId: 'upload-3'
       })
-      expect(mockRedisUploadStore.updateUpload).toHaveBeenCalledWith('upload-3', {
-        virusScanStatus: 'clean',
-        status: 'completed'
-      })
+      expect(mockRedisUploadStore.updateUpload).toHaveBeenCalledWith(
+        'upload-3',
+        {
+          virusScanStatus: 'clean',
+          status: 'completed'
+        }
+      )
     })
 
     it('rejects with timeout when max attempts reached', async () => {
       vi.useFakeTimers()
       const service = new CdpUploaderService()
-      mockRedisUploadStore.getUpload.mockResolvedValue({ virusScanStatus: 'pending' })
+      mockRedisUploadStore.getUpload.mockResolvedValue({
+        virusScanStatus: 'pending'
+      })
       global.fetch.mockResolvedValue({ ok: false })
 
       const pollPromise = service.pollVirusScanStatus('upload-4', 1, 10)
@@ -378,7 +387,9 @@ describe('CdpUploaderService', () => {
       const service = new CdpUploaderService()
       mockRedisUploadStore.getAllUploads.mockResolvedValue([{ uploadId: '1' }])
 
-      await expect(service.getAllUploads()).resolves.toEqual([{ uploadId: '1' }])
+      await expect(service.getAllUploads()).resolves.toEqual([
+        { uploadId: '1' }
+      ])
       expect(mockRedisUploadStore.getAllUploads).toHaveBeenCalled()
     })
   })

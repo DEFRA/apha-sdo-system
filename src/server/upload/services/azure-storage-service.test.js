@@ -135,8 +135,7 @@ describe('azureStorageService', () => {
         uploadId,
         blobName: file.originalname,
         url: 'https://test.blob.core.windows.net/test-container/test.xlsx',
-        plainUrl:
-          'https://test.blob.core.windows.net/test-container/test.xlsx',
+        plainUrl: 'https://test.blob.core.windows.net/test-container/test.xlsx',
         size: file.buffer.length,
         contentType: file.mimetype
       })
@@ -178,7 +177,8 @@ describe('azureStorageService', () => {
     })
 
     it('uses hapi filename and content-type when standard properties are missing', async () => {
-      const { blobServiceClient, containerClient } = createMockBlobServiceClient()
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient()
       const file = {
         _data: Buffer.from('csv,data'),
         hapi: {
@@ -203,7 +203,8 @@ describe('azureStorageService', () => {
     })
 
     it('uploads a raw Buffer input', async () => {
-      const { blobServiceClient, blockBlobClient } = createMockBlobServiceClient()
+      const { blobServiceClient, blockBlobClient } =
+        createMockBlobServiceClient()
       const file = Buffer.from('raw-bytes')
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
@@ -225,7 +226,8 @@ describe('azureStorageService', () => {
     })
 
     it('uploads a stream-like input using streamToBuffer', async () => {
-      const { blobServiceClient, blockBlobClient } = createMockBlobServiceClient()
+      const { blobServiceClient, blockBlobClient } =
+        createMockBlobServiceClient()
       const streamLikeFile = {
         on: vi.fn()
       }
@@ -284,7 +286,10 @@ describe('azureStorageService', () => {
 
   describe('disabled guards', () => {
     it.each([
-      ['downloadFile', () => azureStorageService.downloadFile('upload-1', 'a.txt')],
+      [
+        'downloadFile',
+        () => azureStorageService.downloadFile('upload-1', 'a.txt')
+      ],
       [
         'generateSasUrl',
         () => azureStorageService.generateSasUrl('upload-1', 'a.txt')
@@ -295,7 +300,9 @@ describe('azureStorageService', () => {
     ])('throws when Azure is disabled for %s', async (_, action) => {
       mockAzureConfig.enabled = false
 
-      await expect(action()).rejects.toThrow('Azure Blob Storage is not enabled')
+      await expect(action()).rejects.toThrow(
+        'Azure Blob Storage is not enabled'
+      )
     })
   })
 
@@ -315,7 +322,10 @@ describe('azureStorageService', () => {
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
-      const result = await azureStorageService.downloadFile('upload-8', 'a.json')
+      const result = await azureStorageService.downloadFile(
+        'upload-8',
+        'a.json'
+      )
 
       expect(result).toEqual({
         success: true,
@@ -415,11 +425,12 @@ describe('azureStorageService', () => {
           metadata: { type: 'form-data' }
         }
       ]
-      const { blobServiceClient, containerClient } = createMockBlobServiceClient({
-        containerClient: {
-          listBlobsFlat: vi.fn().mockReturnValue(createBlobIterator(blobs))
-        }
-      })
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient({
+          containerClient: {
+            listBlobsFlat: vi.fn().mockReturnValue(createBlobIterator(blobs))
+          }
+        })
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
@@ -453,13 +464,14 @@ describe('azureStorageService', () => {
     })
 
     it('wraps list failures', async () => {
-      const { blobServiceClient, containerClient } = createMockBlobServiceClient({
-        containerClient: {
-          listBlobsFlat: vi.fn().mockImplementation(() => {
-            throw new Error('list failed')
-          })
-        }
-      })
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient({
+          containerClient: {
+            listBlobsFlat: vi.fn().mockImplementation(() => {
+              throw new Error('list failed')
+            })
+          }
+        })
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
@@ -561,7 +573,8 @@ describe('azureStorageService', () => {
       vi.useFakeTimers()
       mockAzureConfig.backgroundProcessing = true
 
-      const { blobServiceClient, blockBlobClient } = createMockBlobServiceClient()
+      const { blobServiceClient, blockBlobClient } =
+        createMockBlobServiceClient()
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
