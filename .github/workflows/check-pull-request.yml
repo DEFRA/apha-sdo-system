@@ -18,21 +18,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Test code and Create Test Coverage Reports
+      - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
+      - name: Install dependencies
+        run: npm ci
+
       - name: Security audit
         run: npm run security-audit
 
-      - run: |
-          npm ci
-          npm run build:frontend
-          npm run format:check
-          npm run lint
-          npm test
+      - name: Build frontend
+        run: npm run build:frontend
+
+      - name: Check code formatting
+        run: npm run format:check
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run tests with coverage
+        run: npm test
+
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        if: always()
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage/coverage-final.json
+          flags: unittests
+          fail_ci_if_error: false
 
       - name: Test Docker Image Build
         run: |

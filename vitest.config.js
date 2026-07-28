@@ -11,6 +11,10 @@ export default defineConfig({
       reportsDirectory: './coverage',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.js'],
+      lines: 90,
+      functions: 90,
+      branches: 90,
+      statements: 90,
       exclude: [
         ...configDefaults.exclude,
         '.public',
