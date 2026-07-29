@@ -10,6 +10,7 @@ Core delivery platform Node.js Frontend Template.
   - [Node.js](#nodejs)
 - [Server-side Caching](#server-side-caching)
 - [Redis](#redis)
+- [File upload (cdp-uploader)](#file-upload-cdp-uploader)
 - [Local Development](#local-development)
   - [Setup](#setup)
   - [Development](#development)
@@ -58,6 +59,17 @@ matches the service name. e.g. `my-service` will have access to everything in Re
 
 If your service does not require a session cache to be shared between instances or if you don't require Redis, you can
 disable setting `SESSION_CACHE_ENGINE=false` or changing the default value in `src/config/index.js`.
+
+## File upload (cdp-uploader)
+
+File upload pages (`FileUploadPageController`) are handled by `@defra/forms-engine-plugin`, backed by the
+platform's [cdp-uploader](https://github.com/DEFRA/cdp-uploader). The uploader virus-scans files, delivers
+clean ones to our S3 bucket under `{STAGING_PREFIX}/{uploadId}/{fileId}` and POSTs a callback to
+`{SUBMISSION_URL}/file` (see `src/server/routes/file-callback`).
+
+The plugin reads `UPLOADER_URL`, `UPLOADER_BUCKET_NAME`, `STAGING_PREFIX` and `SUBMISSION_URL` from
+environment variables. For local development copy [.env.example](.env.example) to `.env` and run
+`docker compose up`; the mock virus scanner rejects any file with `virus` in its name.
 
 ## Proxy
 
@@ -183,9 +195,10 @@ docker run -p 3000:3000 apha-sdo-system
 
 A local environment with:
 
-- Floci (replacing Localstack) for AWS services (S3, SQS)
+- LocalStack for AWS services (S3, SQS)
 - Redis
 - MongoDB
+- cdp-uploader (with mock virus scanning) and its nginx proxy
 - This service.
 - A commented out backend example.
 

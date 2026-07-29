@@ -15,10 +15,25 @@ class RedisUploadStore {
     this.keyNamespace = 'uploads'
     this.defaultTTL = 24 * 60 * 60 // 24 hours in seconds
     this.fallbackStore = new Map() // In-memory fallback when Redis is unavailable
-    this.redisAvailable = true
+    this.redisAvailable = false
+    this.redisClient = null
+    this._initialised = false
+  }
+
+  /**
+   * Lazily create the Redis client on first use, so importing this module
+   * has no side effects (no connection at import time).
+   * @private
+   */
+  _ensureRedis() {
+    if (this._initialised) {
+      return
+    }
+    this._initialised = true
 
     try {
       this.redisClient = buildRedisClient(config.get('redis'))
+      this.redisAvailable = true
       this._setupRedisEventHandlers()
     } catch (error) {
       this.logger.warn(
@@ -108,6 +123,8 @@ class RedisUploadStore {
    * @returns {Promise<boolean>} Success status
    */
   async setUpload(uploadId, data, ttl = this.defaultTTL) {
+    this._ensureRedis()
+
     if (!uploadId || typeof uploadId !== 'string') {
       throw new Error('Upload ID must be a non-empty string')
     }
@@ -167,6 +184,8 @@ class RedisUploadStore {
    * @returns {Promise<object|null>} Upload data or null if not found
    */
   async getUpload(uploadId) {
+    this._ensureRedis()
+
     if (!uploadId || typeof uploadId !== 'string') {
       throw new Error('Upload ID must be a non-empty string')
     }
@@ -265,6 +284,8 @@ class RedisUploadStore {
    * @returns {Promise<boolean>} Success status (true if deleted or didn't exist)
    */
   async deleteUpload(uploadId) {
+    this._ensureRedis()
+
     if (!uploadId || typeof uploadId !== 'string') {
       throw new Error('Upload ID must be a non-empty string')
     }
@@ -308,6 +329,8 @@ class RedisUploadStore {
    * @returns {Promise<boolean>} Whether upload exists
    */
   async existsUpload(uploadId) {
+    this._ensureRedis()
+
     if (!uploadId || typeof uploadId !== 'string') {
       throw new Error('Upload ID must be a non-empty string')
     }
@@ -363,6 +386,8 @@ class RedisUploadStore {
    * @returns {Promise<Array>} Array of upload objects
    */
   async getAllUploads(limit = 100) {
+    this._ensureRedis()
+
     const uploads = []
     const pattern = `${this.keyNamespace}:*`
 
@@ -427,6 +452,8 @@ class RedisUploadStore {
    * @returns {Promise<number>} Number of uploads cleaned up
    */
   async cleanupExpiredUploads() {
+    this._ensureRedis()
+
     let cleanedCount = 0
 
     // For fallback storage, manually check and remove expired entries
@@ -467,6 +494,8 @@ class RedisUploadStore {
    * @returns {Promise<object>} Store statistics
    */
   async getStats() {
+    this._ensureRedis()
+
     const stats = {
       redisAvailable: this.redisAvailable,
       fallbackStoreSize: this.fallbackStore.size,

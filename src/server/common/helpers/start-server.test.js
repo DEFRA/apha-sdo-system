@@ -9,6 +9,8 @@ describe('#startServer', () => {
   let startServerImport
   let createServerImport
 
+  // Importing server.js pulls in the whole plugin graph, which can exceed
+  // the default 10s hook timeout when test files run in parallel.
   beforeAll(async () => {
     vi.stubEnv('PORT', '3097')
 
@@ -17,7 +19,7 @@ describe('#startServer', () => {
 
     createServerSpy = vi.spyOn(createServerImport, 'createServer')
     hapiServerSpy = vi.spyOn(hapi, 'server')
-  })
+  }, 60000)
 
   afterAll(() => {
     vi.unstubAllEnvs()

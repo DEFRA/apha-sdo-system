@@ -18,6 +18,7 @@ import { secureContext } from '@defra/hapi-secure-context'
 import { contentSecurityPolicy } from './plugins/content-security-policy.js'
 import { metrics } from '@defra/cdp-metrics'
 import { services } from './forms/services/index.js'
+import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
 
 export async function createServer() {
   const server = hapi.server({
@@ -93,6 +94,13 @@ export async function createServer() {
        * submissions. See src/server/forms/services
        */
       services,
+      /**
+       * Custom page controllers referenced by form definitions but not
+       * shipped with the plugin
+       */
+      controllers: {
+        SummaryPageWithConfirmationEmailController
+      },
       /**
        * View context made available to pages rendered by the plugin, reusing
        * the same context (assetPath, getAssetPath, serviceName, etc.) as the

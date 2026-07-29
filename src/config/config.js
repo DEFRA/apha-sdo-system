@@ -203,6 +203,136 @@ export const config = convict({
       env: 'FORMS_ENGINE_BASE_URL'
     }
   },
+  azure: {
+    // Shared app-registration credentials, reusable by the upcoming
+    // Defra ID / Azure AD authentication as well as blob storage.
+    identity: {
+      tenantId: {
+        doc: 'Azure AD tenant ID',
+        format: String,
+        default: '',
+        env: 'AZURE_TENANT_ID'
+      },
+      clientId: {
+        doc: 'Azure AD application (client) ID',
+        format: String,
+        default: '',
+        env: 'AZURE_CLIENT_ID'
+      },
+      clientSecret: {
+        doc: 'Azure AD client secret',
+        format: String,
+        default: '',
+        sensitive: true,
+        env: 'AZURE_CLIENT_SECRET'
+      }
+    },
+    storage: {
+      enabled: {
+        doc: 'Enable transfer of submissions to Azure Blob Storage',
+        format: Boolean,
+        default: false,
+        env: 'AZURE_STORAGE_ENABLED'
+      },
+      connectionString: {
+        doc: 'Azure Storage connection string (local development / Azurite)',
+        format: String,
+        default: '',
+        sensitive: true,
+        env: 'AZURE_STORAGE_CONNECTION_STRING'
+      },
+      accountName: {
+        doc: 'Azure Storage account name (used with account key or AAD credential)',
+        format: String,
+        default: '',
+        env: 'AZURE_STORAGE_ACCOUNT_NAME'
+      },
+      accountKey: {
+        doc: 'Azure Storage account key',
+        format: String,
+        default: '',
+        sensitive: true,
+        env: 'AZURE_STORAGE_ACCOUNT_KEY'
+      },
+      containerName: {
+        doc: 'Azure Blob container that receives submissions',
+        format: String,
+        default: 'uploads',
+        env: 'AZURE_CONTAINER_NAME'
+      }
+    }
+  },
+  cdpUploader: {
+    // Defaults fall back to the UPLOADER_* env vars read by
+    // @defra/forms-engine-plugin so the two config surfaces cannot drift.
+    url: {
+      doc: 'cdp-uploader base URL',
+      format: String,
+      default:
+        process.env.CDP_UPLOADER_ENDPOINT ??
+        process.env.UPLOADER_URL ??
+        'http://localhost:7337',
+      env: 'CDP_UPLOADER_URL'
+    },
+    bucket: {
+      doc: 'S3 bucket the cdp-uploader delivers scanned files to',
+      format: String,
+      default: process.env.UPLOADER_BUCKET_NAME ?? 'apha-sdo-uploads',
+      env: 'CDP_UPLOADER_BUCKET'
+    },
+    stagingPrefix: {
+      doc: 'Key prefix within the scanned-files bucket used by the legacy upload pipeline. Note: expects a trailing slash (the legacy CdpUploaderService concatenates it directly), unlike the forms-engine STAGING_PREFIX. Defaults follow STAGING_PREFIX so both pipelines point at the same location.',
+      format: String,
+      default: `${process.env.STAGING_PREFIX ?? 'staging'}/`,
+      env: 'CDP_UPLOADER_STAGING_PREFIX'
+    },
+    timeout: {
+      doc: 'Timeout in milliseconds for requests to the cdp-uploader',
+      format: Number,
+      default: 30000,
+      env: 'CDP_UPLOADER_TIMEOUT'
+    },
+    retryAttempts: {
+      doc: 'Retry attempts for failed cdp-uploader requests',
+      format: Number,
+      default: 3,
+      env: 'CDP_UPLOADER_RETRY_ATTEMPTS'
+    },
+    callbackAuthToken: {
+      doc: 'Bearer token expected on cdp-uploader callbacks (legacy, unused by the forms-engine journey)',
+      format: String,
+      default: '',
+      sensitive: true,
+      env: 'CALLBACK_AUTH_TOKEN'
+    },
+    maxFileSize: {
+      doc: 'Maximum upload file size in bytes',
+      format: Number,
+      default: Number(process.env.CDP_UPLOADER_MAX_FILE_SIZE ?? 52428800),
+      env: 'MAX_FILE_SIZE'
+    }
+  },
+  s3: {
+    region: {
+      doc: 'AWS region for the scanned-files bucket',
+      format: String,
+      default: 'eu-west-2',
+      env: 'AWS_REGION'
+    },
+    bucket: {
+      doc: 'Bucket scanned files are downloaded from (same bucket the cdp-uploader delivers to)',
+      format: String,
+      default: 'apha-sdo-uploads',
+      env: 'UPLOADER_BUCKET_NAME'
+    },
+    endpoint: {
+      doc: 'Custom S3 endpoint (localstack in local development)',
+      format: String,
+      nullable: true,
+      default: null,
+      env: 'S3_ENDPOINT'
+    }
+  },
   nunjucks: {
     watch: {
       doc: 'Reload templates when they are changed.',

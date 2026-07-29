@@ -1,4 +1,7 @@
 import { uploadConfig } from '../../../config/upload-config.js'
+import { createLogger } from '../../common/helpers/logging/logger.js'
+
+const logger = createLogger()
 
 export const azureStorageService = {
   async uploadFile(uploadId, file, metadata = {}) {
@@ -14,24 +17,26 @@ export const azureStorageService = {
 
       await containerClient.createIfNotExists()
 
+      // blobPrefix groups the blobs of a submission (e.g. its reference
+      // number); it is not persisted as blob metadata.
+      const { blobPrefix, ...blobMetadata } = metadata
+
       const fileName =
-        metadata.originalName ||
+        blobMetadata.originalName ||
         file.originalname ||
         file.hapi?.filename ||
         'unnamed-file'
-      const blobName = fileName
+      const blobName = blobPrefix ? `${blobPrefix}/${fileName}` : fileName
       const blockBlobClient = containerClient.getBlockBlobClient(blobName)
 
-      console.log('Azure upload - filename resolution', {
-        uploadId,
-        resolvedFileName: fileName,
-        resolvedBlobName: blobName,
-        fileExtension: fileName.match(/\.[^.]+$/)?.[0],
-        metadata_originalName: metadata.originalName,
-        file_originalname: file.originalname,
-        file_hapi_filename: file.hapi?.filename,
-        metadataType: metadata.type
-      })
+      logger.debug(
+        {
+          uploadId,
+          resolvedFileName: fileName,
+          resolvedBlobName: blobName
+        },
+        'Azure upload - filename resolution'
+      )
 
       let buffer
       if (Buffer.isBuffer(file)) {
@@ -48,7 +53,7 @@ export const azureStorageService = {
 
       // Determine content type
       const contentType =
-        metadata.contentType ||
+        blobMetadata.contentType ||
         file.mimetype ||
         file.hapi?.headers?.['content-type'] ||
         'application/octet-stream'
@@ -62,9 +67,9 @@ export const azureStorageService = {
           uploadId,
           originalName: fileName,
           uploadedAt: new Date().toISOString(),
-          uploadedBy: metadata.uploadedBy || 'system',
-          type: metadata.type || 'file',
-          ...metadata
+          uploadedBy: blobMetadata.uploadedBy || 'system',
+          type: blobMetadata.type || 'file',
+          ...blobMetadata
         }
       }
 
@@ -286,10 +291,10 @@ export const azureStorageService = {
           processingType
         })
       } catch (error) {
-        console.error('Background processing failed:', {
-          message: error.message,
-          uploadId: uploadId || 'unknown'
-        })
+        logger.error(
+          { error: error.message, uploadId: uploadId || 'unknown' },
+          'Background processing failed'
+        )
       }
     }, 1000) // Process after 1 second
 
