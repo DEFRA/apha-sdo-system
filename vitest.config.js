@@ -6,6 +6,10 @@ export default defineConfig({
     environment: 'node',
     clearMocks: true,
     hookTimeout: 60000,
+    reporters: ['default', 'junit'],
+    outputFile: {
+      junit: './test-results/junit.xml'
+    },
     coverage: {
       provider: 'v8',
       reportsDirectory: './coverage',
