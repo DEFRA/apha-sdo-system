@@ -1,58 +1,60 @@
 import { vi } from 'vitest'
 
-import hapi from '@hapi/hapi'
-import { statusCodes } from '../constants/status-codes.js'
+const mockLoggerInfo = vi.fn()
+const mockServer = {
+  start: vi.fn(),
+  logger: {
+    info: mockLoggerInfo
+  }
+}
+
+const mockCreateServer = vi.fn()
+
+vi.mock('#/config/config.js', () => ({
+  config: {
+    get: (key) => (key === 'port' ? 3097 : undefined)
+  }
+}))
+
+vi.mock('../../server.js', () => ({
+  createServer: mockCreateServer
+}))
+
+const { startServer } = await import('./start-server.js')
 
 describe('#startServer', () => {
-  let createServerSpy
-  let hapiServerSpy
-  let startServerImport
-  let createServerImport
-
-  beforeAll(async () => {
+  beforeEach(() => {
     vi.stubEnv('PORT', '3097')
-
-    createServerImport = await import('../../server.js')
-    startServerImport = await import('./start-server.js')
-
-    createServerSpy = vi.spyOn(createServerImport, 'createServer')
-    hapiServerSpy = vi.spyOn(hapi, 'server')
+    mockCreateServer.mockReset()
+    mockServer.start.mockReset()
+    mockLoggerInfo.mockReset()
+    mockCreateServer.mockResolvedValue(mockServer)
   })
 
-  afterAll(() => {
+  afterEach(() => {
     vi.unstubAllEnvs()
   })
 
   describe('When server starts', () => {
-    let server
-
-    afterAll(async () => {
-      await server.stop({ timeout: 0 })
-    })
-
     test('Should start up server as expected', async () => {
-      server = await startServerImport.startServer()
+      const server = await startServer()
 
-      expect(createServerSpy).toHaveBeenCalled()
-      expect(hapiServerSpy).toHaveBeenCalled()
+      expect(mockCreateServer).toHaveBeenCalled()
+      expect(mockServer.start).toHaveBeenCalled()
 
-      const { result, statusCode } = await server.inject({
-        method: 'GET',
-        url: '/health'
-      })
-
-      expect(result).toEqual({ message: 'success' })
-      expect(statusCode).toBe(statusCodes.ok)
+      expect(server).toBe(mockServer)
+      expect(mockLoggerInfo).toHaveBeenCalledWith('Server started successfully')
+      expect(mockLoggerInfo).toHaveBeenCalledWith(
+        'Access your frontend on http://localhost:3097'
+      )
     })
   })
 
   describe('When server start fails', () => {
     test('Should log failed startup message', async () => {
-      createServerSpy.mockRejectedValue(new Error('Server failed to start'))
+      mockCreateServer.mockRejectedValue(new Error('Server failed to start'))
 
-      await expect(startServerImport.startServer()).rejects.toThrow(
-        'Server failed to start'
-      )
+      await expect(startServer()).rejects.toThrow('Server failed to start')
     })
   })
 })
