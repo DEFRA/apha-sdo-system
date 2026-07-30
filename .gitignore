@@ -6,6 +6,7 @@
 node_modules
 npm-debug.log
 coverage
+test-results
 .cache
 .envrc
 tsconfig.tsbuildinfo
