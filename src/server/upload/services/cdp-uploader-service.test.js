@@ -36,8 +36,9 @@ vi.mock('../../services/redis-upload-store.js', () => ({
   redisUploadStore: mockRedisUploadStore
 }))
 
-vi.mock('uuid', () => ({
-  v4: mockUuid
+vi.mock('node:crypto', async (importOriginal) => ({
+  ...(await importOriginal()),
+  randomUUID: mockUuid
 }))
 
 import { CdpUploaderService } from './cdp-uploader-service.js'

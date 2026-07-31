@@ -44,8 +44,10 @@ describe('RedisUploadStore', () => {
   let mockRedisClient
 
   beforeEach(() => {
-    // Create fresh instance for each test
+    // Create fresh instance for each test. The Redis client is created
+    // lazily on first use, so trigger it explicitly to get the mock client.
     store = new RedisUploadStore()
+    store._ensureRedis()
     mockRedisClient = store.redisClient
 
     // Clear any existing data
@@ -64,6 +66,13 @@ describe('RedisUploadStore', () => {
       expect(store.fallbackStore).toBeInstanceOf(Map)
     })
 
+    it('should not connect to Redis until first use', () => {
+      const lazyStore = new RedisUploadStore()
+
+      expect(lazyStore.redisClient).toBeNull()
+      expect(lazyStore.redisAvailable).toBe(false)
+    })
+
     it('should handle Redis client initialization failure gracefully', async () => {
       const { buildRedisClient } =
         await import('../common/helpers/redis-client.js')
@@ -72,6 +81,7 @@ describe('RedisUploadStore', () => {
       })
 
       const storeWithFailure = new RedisUploadStore()
+      storeWithFailure._ensureRedis()
       expect(storeWithFailure.redisAvailable).toBe(false)
     })
   })

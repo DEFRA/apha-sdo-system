@@ -1,11 +1,15 @@
+import { randomUUID } from 'node:crypto'
+
 import { uploadConfig } from '../../../config/upload-config.js'
-import { v4 as uuidv4 } from 'uuid'
 import { redisUploadStore } from '../../services/redis-upload-store.js'
+import { createLogger } from '../../common/helpers/logging/logger.js'
+
+const logger = createLogger()
 
 export class CdpUploaderService {
   async uploadFile({ file, metadata }) {
     const config = uploadConfig.getCdpUploaderConfig()
-    const localUploadId = uuidv4()
+    const localUploadId = randomUUID()
     let cdpUploadId
 
     try {
@@ -193,10 +197,10 @@ export class CdpUploaderService {
             }
           } catch (fetchError) {
             // CDP status check failed, continue polling
-            console.warn('CDP status check failed, will retry', {
-              uploadId,
-              error: fetchError.message
-            })
+            logger.warn(
+              { uploadId, error: fetchError.message },
+              'CDP status check failed, will retry'
+            )
           }
 
           // Check max attempts

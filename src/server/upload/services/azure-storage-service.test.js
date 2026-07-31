@@ -4,20 +4,32 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { azureStorageService } from './azure-storage-service.js'
 
-const { mockGetAzureBlobClient, mockAzureConfig } = vi.hoisted(() => ({
-  mockGetAzureBlobClient: vi.fn(),
-  mockAzureConfig: {
-    enabled: true,
-    containerName: 'test-container',
-    backgroundProcessing: false
-  }
-}))
+const { mockGetAzureBlobClient, mockAzureConfig, mockLogger } = vi.hoisted(
+  () => ({
+    mockGetAzureBlobClient: vi.fn(),
+    mockAzureConfig: {
+      enabled: true,
+      containerName: 'test-container',
+      backgroundProcessing: false
+    },
+    mockLogger: {
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      debug: vi.fn()
+    }
+  })
+)
 
 vi.mock('../../../config/upload-config.js', () => ({
   uploadConfig: {
     azureConfig: mockAzureConfig,
     getAzureBlobClient: mockGetAzureBlobClient
   }
+}))
+
+vi.mock('../../common/helpers/logging/logger.js', () => ({
+  createLogger: () => mockLogger
 }))
 
 vi.mock('@azure/storage-blob')
@@ -607,21 +619,17 @@ describe('azureStorageService', () => {
       vi.useFakeTimers()
       mockAzureConfig.backgroundProcessing = true
 
-      const consoleErrorSpy = vi
-        .spyOn(console, 'error')
-        .mockImplementation(() => undefined)
-
       mockGetAzureBlobClient.mockRejectedValue(new Error('background broke'))
 
       await azureStorageService.processFileInBackground('upload-17', 'file.txt')
       await vi.advanceTimersByTimeAsync(1000)
 
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Background processing failed:',
+      expect(mockLogger.error).toHaveBeenCalledWith(
         {
-          message: 'background broke',
+          error: 'background broke',
           uploadId: 'upload-17'
-        }
+        },
+        'Background processing failed'
       )
     })
   })
