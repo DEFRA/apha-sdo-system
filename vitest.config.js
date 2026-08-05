@@ -23,6 +23,8 @@ export default defineConfig({
         ...configDefaults.exclude,
         '.public',
         'coverage',
+        'src/index.js',
+        'src/client/**',
         'postcss.config.js',
         'stylelint.config.js',
         'vitest.config.js',
