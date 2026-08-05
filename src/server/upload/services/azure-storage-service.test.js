@@ -298,14 +298,8 @@ describe('azureStorageService', () => {
 
   describe('disabled guards', () => {
     it.each([
-      [
-        'downloadFile',
-        () => azureStorageService.downloadFile('a.txt')
-      ],
-      [
-        'generateSasUrl',
-        () => azureStorageService.generateSasUrl('a.txt')
-      ],
+      ['downloadFile', () => azureStorageService.downloadFile('a.txt')],
+      ['generateSasUrl', () => azureStorageService.generateSasUrl('a.txt')],
       ['listFiles', () => azureStorageService.listFiles()],
       ['deleteFile', () => azureStorageService.deleteFile('a.txt')],
       ['getContainerStats', () => azureStorageService.getContainerStats()]
@@ -334,9 +328,7 @@ describe('azureStorageService', () => {
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
-      const result = await azureStorageService.downloadFile(
-        'a.json'
-      )
+      const result = await azureStorageService.downloadFile('a.json')
 
       expect(result).toEqual({
         success: true,

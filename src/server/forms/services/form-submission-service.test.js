@@ -8,7 +8,9 @@ describe('formSubmissionService', () => {
       const files = [{ id: 'file-1' }, { id: 'file-2' }]
       const key = 'retrieval-key-1'
 
-      await expect(formSubmissionService.persistFiles(files, key)).resolves.toEqual({
+      await expect(
+        formSubmissionService.persistFiles(files, key)
+      ).resolves.toEqual({
         persistedFiles: 2,
         persistedRetrievalKey: key
       })

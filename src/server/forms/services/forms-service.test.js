@@ -12,7 +12,9 @@ describe('formsService', () => {
     })
 
     it('rejects when slug is unknown', async () => {
-      await expect(formsService.getFormMetadata('unknown-form')).rejects.toMatchObject({
+      await expect(
+        formsService.getFormMetadata('unknown-form')
+      ).rejects.toMatchObject({
         isBoom: true,
         output: { statusCode: 404 }
       })
@@ -30,7 +32,9 @@ describe('formsService', () => {
     })
 
     it('rejects when id is unknown', async () => {
-      await expect(formsService.getFormMetadataById('unknown-id')).rejects.toMatchObject({
+      await expect(
+        formsService.getFormMetadataById('unknown-id')
+      ).rejects.toMatchObject({
         isBoom: true,
         output: { statusCode: 404 }
       })
@@ -49,7 +53,9 @@ describe('formsService', () => {
     })
 
     it('rejects when definition id is unknown', async () => {
-      await expect(formsService.getFormDefinition('missing-id', {})).rejects.toMatchObject({
+      await expect(
+        formsService.getFormDefinition('missing-id', {})
+      ).rejects.toMatchObject({
         isBoom: true,
         output: { statusCode: 404 }
       })

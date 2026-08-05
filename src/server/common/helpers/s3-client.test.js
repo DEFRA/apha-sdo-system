@@ -55,8 +55,8 @@ describe('downloadFromS3', () => {
 
     const { downloadFromS3 } = await import('./s3-client.js')
 
-    await expect(
-      downloadFromS3('my-bucket', 'missing.csv')
-    ).rejects.toThrow('S3 unavailable')
+    await expect(downloadFromS3('my-bucket', 'missing.csv')).rejects.toThrow(
+      'S3 unavailable'
+    )
   })
 })
