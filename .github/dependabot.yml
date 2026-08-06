@@ -11,20 +11,22 @@ updates:
       build:
         patterns:
           - '@babel/*'
-          - 'autoprefixer'
-          - 'babel-plugin-module-resolver'
-          - 'babel-loader'
-          - 'babel-plugin-transform-import-meta'
-          - 'tsx'
-          - 'webpack'
-          - 'webpack-*'
-          - 'terser-webpack-plugin'
+          - '@defra/hapi-connect'
+          - '@vitest/coverage-v8'
+          - 'cheerio'
+          - 'cross-env'
+          - 'eslint'
+          - 'vite'
+          - 'sass-embedded'
+          - 'sass-*'
 
       lint:
         patterns:
+          - 'neostandard'
           - 'prettier'
           - 'stylelint'
           - 'stylelint-*'
+          - 'stylelint-config-gds'
 
       logging:
         patterns:
@@ -32,26 +34,42 @@ updates:
           - '*-pino-format'
           - 'pino'
           - 'pino-*'
+          - 'pino-pretty'
+
+      runtime:
+        patterns:
+          - '@aws-sdk/*'
+          - '@azure/*'
+          - '@defra/*'
+          - '@elastic/*'
+          - '@hapi/*'
+          - 'blankie'
+          - 'convict'
+          - 'convict-format-with-validator'
+          - 'cssnano'
+          - 'cssnano-preset-default'
+          - 'date-fns'
+          - 'govuk-frontend'
+          - 'hapi-pino'
+          - 'hapi-pulse'
+          - 'ioredis'
+          - 'lodash'
+          - 'nunjucks'
+          - 'pino'
 
       tools:
         patterns:
           - 'husky'
           - 'vitest'
           - 'vitest-*'
+          - 'vitest-fetch-mock'
           - 'nodemon'
           - 'npm-run-all'
-          - 'lodash'
-          - 'source-map-loader'
-          - 'sass-*'
           - 'postcss-*'
 
       types:
         patterns:
           - '@types/*'
-
-    ignore:
-      - dependency-name: 'eslint-*'
-      - dependency-name: 'eslint'
 
     # Schedule run every Monday, local time
     schedule:
