@@ -162,6 +162,29 @@ describe('#outputService.submit', () => {
     )
   })
 
+  test("uses the S3 object's content type when the file state has none", async () => {
+    downloadFromS3.mockResolvedValue({
+      buffer: Buffer.from('file-content'),
+      contentType: 'application/vnd.ms-excel'
+    })
+
+    const context = {
+      referenceNumber: 'REF-1',
+      relevantState: {
+        supportingDocuments: [buildFileState({ contentType: null })]
+      }
+    }
+    const request = buildRequest()
+
+    await outputService.submit(...submitArgs(context, request))
+
+    expect(azureStorageService.uploadFile).toHaveBeenCalledWith(
+      'upload-1',
+      expect.objectContaining({ mimetype: 'application/vnd.ms-excel' }),
+      expect.objectContaining({ contentType: 'application/vnd.ms-excel' })
+    )
+  })
+
   test('skips files that are not complete', async () => {
     const context = {
       referenceNumber: 'REF-1',

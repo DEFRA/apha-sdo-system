@@ -1,27 +1,18 @@
 import { config } from './config.js'
 
 /**
- * Upload configuration facade.
+ * Storage client factory for the S3-to-Azure submission transfer.
  *
- * Exposes the same public API as apha-sdo-frontend's upload-config so code
- * migrated from that repo (upload services, upload controller, forms.js)
- * works without import changes, while all values are sourced from the
- * convict config in ./config.js.
- *
- * The Azure and AWS SDKs are imported lazily so that loading this module
- * (and therefore the server) stays fast when no transfer is happening.
+ * Values are sourced from the convict config in ./config.js. The Azure and
+ * AWS SDKs are imported lazily so that loading this module (and therefore
+ * the server) stays fast when no transfer is happening.
  */
 export class UploadConfig {
   constructor() {
-    this.cdpUploaderConfig = {
-      endpoint: config.get('cdpUploader.url')
-    }
-
     this.azureConfig = {
       enabled: config.get('azure.storage.enabled'),
       connectionString: config.get('azure.storage.connectionString'),
-      containerName: config.get('azure.storage.containerName'),
-      backgroundProcessing: false
+      containerName: config.get('azure.storage.containerName')
     }
 
     this.s3Config = {
@@ -30,27 +21,8 @@ export class UploadConfig {
       endpoint: config.get('s3.endpoint')
     }
 
-    this.formsEngineConfig = {
-      uploadPath: '/upload',
-      maxFileSize: config.get('cdpUploader.maxFileSize'),
-      uploadDirectory: './uploads',
-      allowedFileTypes: ['.csv', '.xls', '.xlsx']
-    }
-
     this._azureBlobClient = null
     this._s3Client = null
-  }
-
-  getCdpUploaderConfig() {
-    return {
-      url: config.get('cdpUploader.url'),
-      bucket: config.get('cdpUploader.bucket'),
-      stagingPrefix: config.get('cdpUploader.stagingPrefix'),
-      maxFileSize: config.get('cdpUploader.maxFileSize'),
-      timeout: config.get('cdpUploader.timeout'),
-      retryAttempts: config.get('cdpUploader.retryAttempts'),
-      callbackAuthToken: config.get('cdpUploader.callbackAuthToken')
-    }
   }
 
   /**
@@ -123,15 +95,6 @@ export class UploadConfig {
     })
 
     return this._s3Client
-  }
-
-  getFormsEngineConfig() {
-    return {
-      uploadPath: this.formsEngineConfig.uploadPath,
-      maxFileSize: this.formsEngineConfig.maxFileSize,
-      allowedFileTypes: this.formsEngineConfig.allowedFileTypes,
-      uploadDirectory: this.formsEngineConfig.uploadDirectory
-    }
   }
 }
 

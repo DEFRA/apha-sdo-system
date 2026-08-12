@@ -263,50 +263,6 @@ export const azureStorageService = {
   },
 
   /**
-   * Process files in background (for virus scanning, format conversion, etc.)
-   */
-  async processFileInBackground(uploadId, filename, processingType = 'scan') {
-    if (!uploadConfig.azureConfig.backgroundProcessing) {
-      return { success: false, message: 'Background processing is disabled' }
-    }
-
-    // This would typically integrate with Azure Functions, Logic Apps, or Service Bus
-    // For now, we'll simulate background processing
-    setTimeout(async () => {
-      try {
-        // Simulate processing
-        const blobServiceClient = await uploadConfig.getAzureBlobClient()
-        const containerClient = blobServiceClient.getContainerClient(
-          uploadConfig.azureConfig.containerName
-        )
-        const blobName = filename
-        const blockBlobClient = containerClient.getBlockBlobClient(blobName)
-
-        // Update metadata to mark as processed
-        const properties = await blockBlobClient.getProperties()
-        await blockBlobClient.setMetadata({
-          ...properties.metadata,
-          processed: 'true',
-          processedAt: new Date().toISOString(),
-          processingType
-        })
-      } catch (error) {
-        logger.error(
-          { error: error.message, uploadId: uploadId || 'unknown' },
-          'Background processing failed'
-        )
-      }
-    }, 1000) // Process after 1 second
-
-    return {
-      success: true,
-      message: 'Background processing started',
-      processingType,
-      estimatedCompletionTime: '1-2 minutes'
-    }
-  },
-
-  /**
    * Convert stream to buffer
    */
   async streamToBuffer(stream) {

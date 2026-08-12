@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { azureStorageService } from './azure-storage-service.js'
 
@@ -9,8 +9,7 @@ const { mockGetAzureBlobClient, mockAzureConfig, mockLogger } = vi.hoisted(
     mockGetAzureBlobClient: vi.fn(),
     mockAzureConfig: {
       enabled: true,
-      containerName: 'test-container',
-      backgroundProcessing: false
+      containerName: 'test-container'
     },
     mockLogger: {
       info: vi.fn(),
@@ -83,11 +82,6 @@ describe('azureStorageService', () => {
     mockGetAzureBlobClient.mockReset()
     mockAzureConfig.enabled = true
     mockAzureConfig.containerName = 'test-container'
-    mockAzureConfig.backgroundProcessing = false
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   describe('uploadFile', () => {
@@ -565,71 +559,6 @@ describe('azureStorageService', () => {
 
       await expect(azureStorageService.getContainerStats()).rejects.toThrow(
         'Get container stats failed: stats failed'
-      )
-    })
-  })
-
-  describe('processFileInBackground', () => {
-    it('returns a disabled response when background processing is off', async () => {
-      mockAzureConfig.backgroundProcessing = false
-
-      await expect(
-        azureStorageService.processFileInBackground('upload-15', 'file.txt')
-      ).resolves.toEqual({
-        success: false,
-        message: 'Background processing is disabled'
-      })
-    })
-
-    it('schedules metadata updates when background processing is enabled', async () => {
-      vi.useFakeTimers()
-      mockAzureConfig.backgroundProcessing = true
-
-      const { blobServiceClient, blockBlobClient } =
-        createMockBlobServiceClient()
-
-      mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
-
-      const result = await azureStorageService.processFileInBackground(
-        'upload-16',
-        'file.txt',
-        'convert'
-      )
-
-      expect(result).toEqual({
-        success: true,
-        message: 'Background processing started',
-        processingType: 'convert',
-        estimatedCompletionTime: '1-2 minutes'
-      })
-
-      await vi.advanceTimersByTimeAsync(1000)
-
-      expect(blockBlobClient.getProperties).toHaveBeenCalled()
-      expect(blockBlobClient.setMetadata).toHaveBeenCalledWith(
-        expect.objectContaining({
-          existing: 'yes',
-          processed: 'true',
-          processingType: 'convert'
-        })
-      )
-    })
-
-    it('logs background processing failures', async () => {
-      vi.useFakeTimers()
-      mockAzureConfig.backgroundProcessing = true
-
-      mockGetAzureBlobClient.mockRejectedValue(new Error('background broke'))
-
-      await azureStorageService.processFileInBackground('upload-17', 'file.txt')
-      await vi.advanceTimersByTimeAsync(1000)
-
-      expect(mockLogger.error).toHaveBeenCalledWith(
-        {
-          error: 'background broke',
-          uploadId: 'upload-17'
-        },
-        'Background processing failed'
       )
     })
   })

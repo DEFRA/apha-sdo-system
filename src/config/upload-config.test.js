@@ -157,21 +157,15 @@ describe('#UploadConfig', () => {
         region: config.get('s3.region')
       })
     })
-  })
 
-  describe('getCdpUploaderConfig', () => {
-    test('exposes the cdp-uploader settings from convict', () => {
-      const cdpConfig = new UploadConfig().getCdpUploaderConfig()
+    test('caches the client between calls', async () => {
+      setConfig()
 
-      expect(cdpConfig).toEqual({
-        url: config.get('cdpUploader.url'),
-        bucket: config.get('cdpUploader.bucket'),
-        stagingPrefix: config.get('cdpUploader.stagingPrefix'),
-        maxFileSize: config.get('cdpUploader.maxFileSize'),
-        timeout: config.get('cdpUploader.timeout'),
-        retryAttempts: config.get('cdpUploader.retryAttempts'),
-        callbackAuthToken: config.get('cdpUploader.callbackAuthToken')
-      })
+      const uploadConfig = new UploadConfig()
+      await uploadConfig.getS3Client()
+      await uploadConfig.getS3Client()
+
+      expect(S3Client).toHaveBeenCalledTimes(1)
     })
   })
 })
