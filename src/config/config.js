@@ -263,53 +263,11 @@ export const config = convict({
     }
   },
   cdpUploader: {
-    // Defaults fall back to the UPLOADER_* env vars read by
-    // @defra/forms-engine-plugin so the two config surfaces cannot drift.
-    url: {
-      doc: 'cdp-uploader base URL',
-      format: String,
-      default:
-        process.env.CDP_UPLOADER_ENDPOINT ??
-        process.env.UPLOADER_URL ??
-        'http://localhost:7337',
-      env: 'CDP_UPLOADER_URL'
-    },
-    bucket: {
-      doc: 'S3 bucket the cdp-uploader delivers scanned files to',
-      format: String,
-      default: process.env.UPLOADER_BUCKET_NAME ?? 'apha-sdo-uploads',
-      env: 'CDP_UPLOADER_BUCKET'
-    },
     stagingPrefix: {
-      doc: 'Key prefix within the scanned-files bucket used by the legacy upload pipeline. Note: expects a trailing slash (the legacy CdpUploaderService concatenates it directly), unlike the forms-engine STAGING_PREFIX. Defaults follow STAGING_PREFIX so both pipelines point at the same location.',
+      doc: 'Key prefix within the scanned-files bucket, used to resolve the conventional S3 location of a scanned file when no scan record is available. Defaults follow the STAGING_PREFIX env var read by @defra/forms-engine-plugin so the two config surfaces cannot drift. Trailing slashes are tolerated.',
       format: String,
       default: `${process.env.STAGING_PREFIX ?? 'staging'}/`,
       env: 'CDP_UPLOADER_STAGING_PREFIX'
-    },
-    timeout: {
-      doc: 'Timeout in milliseconds for requests to the cdp-uploader',
-      format: Number,
-      default: 30000,
-      env: 'CDP_UPLOADER_TIMEOUT'
-    },
-    retryAttempts: {
-      doc: 'Retry attempts for failed cdp-uploader requests',
-      format: Number,
-      default: 3,
-      env: 'CDP_UPLOADER_RETRY_ATTEMPTS'
-    },
-    callbackAuthToken: {
-      doc: 'Bearer token expected on cdp-uploader callbacks (legacy, unused by the forms-engine journey)',
-      format: String,
-      default: '',
-      sensitive: true,
-      env: 'CALLBACK_AUTH_TOKEN'
-    },
-    maxFileSize: {
-      doc: 'Maximum upload file size in bytes',
-      format: Number,
-      default: Number(process.env.CDP_UPLOADER_MAX_FILE_SIZE ?? 52428800),
-      env: 'MAX_FILE_SIZE'
     }
   },
   s3: {
