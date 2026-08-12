@@ -298,16 +298,10 @@ describe('azureStorageService', () => {
 
   describe('disabled guards', () => {
     it.each([
-      [
-        'downloadFile',
-        () => azureStorageService.downloadFile('upload-1', 'a.txt')
-      ],
-      [
-        'generateSasUrl',
-        () => azureStorageService.generateSasUrl('upload-1', 'a.txt')
-      ],
+      ['downloadFile', () => azureStorageService.downloadFile('a.txt')],
+      ['generateSasUrl', () => azureStorageService.generateSasUrl('a.txt')],
       ['listFiles', () => azureStorageService.listFiles()],
-      ['deleteFile', () => azureStorageService.deleteFile('upload-1', 'a.txt')],
+      ['deleteFile', () => azureStorageService.deleteFile('a.txt')],
       ['getContainerStats', () => azureStorageService.getContainerStats()]
     ])('throws when Azure is disabled for %s', async (_, action) => {
       mockAzureConfig.enabled = false
@@ -334,10 +328,7 @@ describe('azureStorageService', () => {
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
-      const result = await azureStorageService.downloadFile(
-        'upload-8',
-        'a.json'
-      )
+      const result = await azureStorageService.downloadFile('a.json')
 
       expect(result).toEqual({
         success: true,
@@ -359,7 +350,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.downloadFile('upload-9', 'missing.txt')
+        azureStorageService.downloadFile('missing.txt')
       ).resolves.toEqual({ success: false, error: 'File not found' })
     })
 
@@ -373,7 +364,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.downloadFile('upload-10', 'broken.txt')
+        azureStorageService.downloadFile('broken.txt')
       ).rejects.toThrow('Azure download failed: download failed')
     })
   })
@@ -390,7 +381,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.generateSasUrl('upload-11', 'file.txt')
+        azureStorageService.generateSasUrl('file.txt')
       ).resolves.toEqual({
         success: true,
         sasUrl: 'https://test.blob.core.windows.net/test-container/file.txt',
@@ -408,7 +399,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.generateSasUrl('upload-12', 'missing.txt')
+        azureStorageService.generateSasUrl('missing.txt')
       ).rejects.toThrow('URL generation failed: File not found')
     })
   })
@@ -506,7 +497,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.deleteFile('upload-13', 'stale.txt')
+        azureStorageService.deleteFile('stale.txt')
       ).resolves.toEqual({
         success: false,
         deleted: false
@@ -523,7 +514,7 @@ describe('azureStorageService', () => {
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(
-        azureStorageService.deleteFile('upload-14', 'broken.txt')
+        azureStorageService.deleteFile('broken.txt')
       ).rejects.toThrow('Azure delete failed: delete failed')
     })
   })

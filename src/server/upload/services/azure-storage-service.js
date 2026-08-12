@@ -100,7 +100,7 @@ export const azureStorageService = {
   /**
    * Download file from Azure Blob Storage
    */
-  async downloadFile(uploadId, filename) {
+  async downloadFile(filename) {
     if (!uploadConfig.azureConfig.enabled) {
       throw new Error('Azure Blob Storage is not enabled')
     }
@@ -134,7 +134,7 @@ export const azureStorageService = {
   /**
    * Generate URL for direct access
    */
-  async generateSasUrl(uploadId, filename, permissions = 'r', expiryHours = 1) {
+  async generateSasUrl(filename) {
     if (!uploadConfig.azureConfig.enabled) {
       throw new Error('Azure Blob Storage is not enabled')
     }
@@ -204,7 +204,7 @@ export const azureStorageService = {
   /**
    * Delete file from Azure Blob Storage
    */
-  async deleteFile(uploadId, filename) {
+  async deleteFile(filename) {
     if (!uploadConfig.azureConfig.enabled) {
       throw new Error('Azure Blob Storage is not enabled')
     }
