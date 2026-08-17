@@ -1,0 +1,55 @@
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/radios/macro.njk" import govukRadios %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+
+{% block content %}
+  {% if error %}
+    {% set errorMessage = { text: error } %}
+    {{ govukErrorSummary({
+      titleText: "There is a problem",
+      errorList: [
+        {
+          text: error,
+          href: "#authProvider"
+        }
+      ]
+    }) }}
+  {% endif %}
+
+  <form method="post" action="/sign-in-choose" novalidate>
+    <input type="hidden" name="crumb" value="{{ crumb }}">
+    {{ govukRadios({
+      name: "authProvider",
+      fieldset: {
+        legend: {
+          text: pageTitle,
+          isPageHeading: true,
+          classes: "govuk-fieldset__legend--l"
+        }
+      },
+      items: [
+        {
+          value: "defraId",
+          text: "Defra ID",
+          hint: {
+            text: "For internal users with a Defra or APHA email address"
+          }
+        },
+        {
+          value: "external",
+          text: "Government Gateway or GOV.UK One Login",
+          hint: {
+            text: "For external data providers (not available yet)"
+          }
+        }
+      ],
+      errorMessage: errorMessage
+    }) }}
+    {{ govukButton({
+      type: "submit",
+      text: "Sign in"
+    }) }}
+  </form>
+{% endblock %}

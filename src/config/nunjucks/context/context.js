@@ -2,7 +2,6 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 
 import { config } from '#/config/config.js'
-import { buildNavigation } from './build-navigation.js'
 import { createLogger } from '#/server/common/helpers/logging/logger.js'
 
 const logger = createLogger()
@@ -14,7 +13,7 @@ const manifestPath = path.join(
 
 let viteManifest
 
-export function context(request) {
+export function context(_request) {
   if (config.get('isProduction') && !viteManifest) {
     try {
       viteManifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
@@ -28,7 +27,6 @@ export function context(request) {
     serviceName: config.get('serviceName'),
     serviceUrl: '/',
     breadcrumbs: [],
-    navigation: buildNavigation(request),
     getAssetPath(asset) {
       if (!config.get('isProduction')) {
         return `${assetPath}/${asset}`

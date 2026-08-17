@@ -1,0 +1,23 @@
+{% extends 'layouts/page.njk' %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds">
+      <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+      <p class="govuk-body">
+        Signing in with Government Gateway or GOV.UK One Login is not available
+        yet. External data providers will be able to sign in in a future
+        release.
+      </p>
+      <p class="govuk-body">
+        If you have a Defra or APHA email address, you can
+        <a class="govuk-link" href="/sign-in-choose">sign in with Defra ID</a>.
+      </p>
+      <p class="govuk-body">
+        If you're an external partner needing access to submit surveillance
+        data, please contact APHA:
+        <a class="govuk-link" href="mailto:seda@apha.gov.uk">seda@apha.gov.uk</a>
+      </p>
+    </div>
+  </div>
+{% endblock %}

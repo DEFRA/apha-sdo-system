@@ -1,7 +1,8 @@
 import inert from '@hapi/inert'
 
 import { home } from '../routes/home/index.js'
-import { about } from '../routes/about/index.js'
+import { authRoutes } from '../routes/auth/index.js'
+import { submissionWelcome } from '../routes/submission-welcome/index.js'
 import { health } from '../routes/health/index.js'
 import { fileCallback } from '../routes/file-callback/index.js'
 import { serveFormAssets } from './serve-form-assets.js'
@@ -18,7 +19,13 @@ export const router = {
       await server.register([health])
 
       // Application specific routes, add your own routes here
-      await server.register([home, about])
+      await server.register([home])
+
+      // Sign-in journey screens (UI only, no auth strategy registered)
+      await server.register([authRoutes])
+
+      // Post-sign-in welcome screen
+      await server.register([submissionWelcome])
 
       // cdp-uploader scan-completion callback
       await server.register([fileCallback])

@@ -1,0 +1,60 @@
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/radios/macro.njk" import govukRadios %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+
+{% block content %}
+  {% if error %}
+    {% set errorMessage = { text: error } %}
+    {{ govukErrorSummary({
+      titleText: "There is a problem",
+      errorList: [
+        {
+          text: error,
+          href: "#submissionAction"
+        }
+      ]
+    }) }}
+  {% endif %}
+
+  <h1 class="govuk-heading-xl">{{ pageTitle }}</h1>
+
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds">
+      <p class="govuk-body">
+        Use this service to submit veterinary surveillance data to APHA.
+      </p>
+
+      <form method="post" action="/submission-welcome" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+        {{ govukRadios({
+          name: "submissionAction",
+          items: [
+            {
+              value: "submitReport",
+              text: "Submit report",
+              hint: {
+                text: "Upload a data file (CSV, XML, or XLSX)"
+              }
+            }
+          ],
+          errorMessage: errorMessage
+        }) }}
+        {{ govukButton({
+          type: "submit",
+          text: "Continue"
+        }) }}
+      </form>
+    </div>
+
+    <div class="govuk-grid-column-one-third">
+      <div class="govuk-body">
+        <h2 class="govuk-heading-s">Quick links</h2>
+        <ul class="govuk-list">
+          <li><a href="https://www.gov.uk/guidance/view-apha-surveillance-reports-publications-and-data" class="govuk-link">Go to APHA Dashboard</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+{% endblock %}
