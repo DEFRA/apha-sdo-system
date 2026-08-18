@@ -25,8 +25,7 @@ const userMessages = {
     'The file could not be uploaded. Try again later.',
   [uploadErrorCodes.STORAGE_UNAVAILABLE]:
     'The upload service is temporarily unavailable. Try again later.',
-  [uploadErrorCodes.UNKNOWN_ERROR]:
-    'Something went wrong. Try again later.'
+  [uploadErrorCodes.UNKNOWN_ERROR]: 'Something went wrong. Try again later.'
 }
 
 /**
@@ -69,7 +68,9 @@ export function buildUploadErrorResponse({
   return {
     success: false,
     errorCode: resolvedCode,
-    message: userMessages[resolvedCode] ?? userMessages[uploadErrorCodes.UNKNOWN_ERROR],
+    message:
+      userMessages[resolvedCode] ??
+      userMessages[uploadErrorCodes.UNKNOWN_ERROR],
     correlationId: id
   }
 }

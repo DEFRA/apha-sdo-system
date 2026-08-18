@@ -24,10 +24,10 @@ correlationId: string
 Example:
 
 {
-  "success": false,
-  "errorCode": "FILE_TOO_LARGE",
-  "message": "The selected file must be smaller than the maximum allowed size.",
-  "correlationId": "9c2e6f7a-2b6f-4f1e-9e66-2f1115b3f7b2"
+"success": false,
+"errorCode": "FILE_TOO_LARGE",
+"message": "The selected file must be smaller than the maximum allowed size.",
+"correlationId": "9c2e6f7a-2b6f-4f1e-9e66-2f1115b3f7b2"
 }
 
 ## Error categories

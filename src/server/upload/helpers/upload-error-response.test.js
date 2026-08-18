@@ -102,7 +102,9 @@ describe('#buildUploadErrorResponse', () => {
         errorCode: uploadErrorCodes.FILE_EMPTY
       })
 
-      expect(message).toBe('The selected file is empty. Choose a different file.')
+      expect(message).toBe(
+        'The selected file is empty. Choose a different file.'
+      )
     })
 
     test('maps FILE_MISSING to the correct safe message', () => {
@@ -239,7 +241,10 @@ describe('#buildUploadErrorResponse', () => {
       })
 
       expect(mockLoggerError).toHaveBeenCalledWith(
-        expect.objectContaining({ uploadId: 'abc-123', fileName: 'report.pdf' }),
+        expect.objectContaining({
+          uploadId: 'abc-123',
+          fileName: 'report.pdf'
+        }),
         'Upload error'
       )
     })
