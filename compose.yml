@@ -40,6 +40,32 @@ services:
     networks:
       - cdp-tenant
 
+  # OIDC provider stand-in for local Entra sign-in
+  oidc-stub:
+    image: node:24-alpine
+    working_dir: /app
+    volumes:
+      - ./:/app:ro
+    command: node scripts/oidc-stub.js
+    environment:
+      OIDC_STUB_HOST: 0.0.0.0
+    ports:
+      - '5556:5556'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--spider',
+          'http://127.0.0.1:5556/.well-known/openid-configuration'
+        ]
+      interval: 3s
+      timeout: 2s
+      retries: 20
+    networks:
+      - cdp-tenant
+
   mongodb:
     image: mongo:7.0.28
     networks:

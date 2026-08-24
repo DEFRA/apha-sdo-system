@@ -59,9 +59,24 @@ describe('context and cache', () => {
           assetPath: '/public/assets',
           breadcrumbs: [],
           getAssetPath: expect.any(Function),
+          isAuthenticated: false,
           serviceName: 'apha-sdo-system',
-          serviceUrl: '/'
+          serviceUrl: '/',
+          signedInUser: null
         })
+      })
+
+      test('Should expose authenticated user context', () => {
+        const user = { id: 'user-id', name: 'A Person' }
+        const authenticatedContext = contextImport.context({
+          auth: {
+            isAuthenticated: true,
+            credentials: { user }
+          }
+        })
+
+        expect(authenticatedContext.isAuthenticated).toBe(true)
+        expect(authenticatedContext.signedInUser).toBe(user)
       })
 
       describe('With valid asset path', () => {
@@ -136,8 +151,10 @@ describe('context and cache', () => {
           assetPath: '/public/assets',
           breadcrumbs: [],
           getAssetPath: expect.any(Function),
+          isAuthenticated: false,
           serviceName: 'apha-sdo-system',
-          serviceUrl: '/'
+          serviceUrl: '/',
+          signedInUser: null
         })
       })
     })

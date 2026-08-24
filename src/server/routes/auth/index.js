@@ -1,40 +1,71 @@
 import {
-  AUTH_PATHS,
+  entraCallbackController,
+  frontChannelLogoutController,
   signInChooseGetController,
   signInChoosePostController,
-  signInExternalController
+  signInEntraController,
+  signInExternalController,
+  signedOutController,
+  signOutController
 } from './controller.js'
+import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 
 /**
- * Sign-in journey screens (UI only). The journey starts at /sign-in-choose
- * where the user picks a provider:
+ * The journey starts at /sign-in-choose where the user picks a provider:
  *
- * - Defra ID (internal users, Entra ID / Azure AD): goes straight to the
- *   form journey (no auth yet)
+ * - Defra Single Sign-on (internal users): Entra ID OIDC
  * - Government Gateway or GOV.UK One Login (external users): placeholder
- *   page only
+ *   page only.
  */
+function publicRoute(method, path, controller, options = {}) {
+  return {
+    method,
+    path,
+    ...controller,
+    options: {
+      auth: false,
+      ...options
+    }
+  }
+}
+
+const routes = [
+  publicRoute('GET', AUTH_PATHS.SIGN_IN_CHOOSE, signInChooseGetController),
+  publicRoute('POST', AUTH_PATHS.SIGN_IN_CHOOSE, signInChoosePostController),
+  publicRoute('GET', AUTH_PATHS.SIGN_IN_EXTERNAL, signInExternalController),
+  publicRoute('GET', AUTH_PATHS.SIGN_IN_ENTRA, signInEntraController),
+  publicRoute(
+    ['GET', 'POST'],
+    AUTH_PATHS.ENTRA_CALLBACK,
+    entraCallbackController,
+    {
+      plugins: {
+        crumb: false
+      }
+    }
+  ),
+  publicRoute('GET', AUTH_PATHS.SIGN_OUT, signOutController),
+  publicRoute(
+    'GET',
+    AUTH_PATHS.FRONT_CHANNEL_LOGOUT,
+    frontChannelLogoutController,
+    {
+      security: {
+        xframe: false
+      },
+      plugins: {
+        blankie: false
+      }
+    }
+  ),
+  publicRoute('GET', AUTH_PATHS.SIGNED_OUT, signedOutController)
+]
+
 export const authRoutes = {
   plugin: {
     name: 'auth-routes',
     register(server) {
-      server.route([
-        {
-          method: 'GET',
-          path: AUTH_PATHS.SIGN_IN_CHOOSE,
-          ...signInChooseGetController
-        },
-        {
-          method: 'POST',
-          path: AUTH_PATHS.SIGN_IN_CHOOSE,
-          ...signInChoosePostController
-        },
-        {
-          method: 'GET',
-          path: AUTH_PATHS.SIGN_IN_EXTERNAL,
-          ...signInExternalController
-        }
-      ])
+      server.route(routes)
     }
   }
 }

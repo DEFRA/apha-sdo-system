@@ -19,6 +19,7 @@ function extractFiles(form = {}) {
 // The uploader retries via SQS until it gets a 2xx back.
 export const fileCallbackController = {
   options: {
+    auth: false,
     plugins: {
       crumb: false // server-to-server callback, no CSRF token
     },

@@ -1,6 +1,12 @@
 import Blankie from 'blankie'
 
+import { config } from '#/config/config.js'
+import { getEntraIdDiscoveryUrl } from '#/server/auth/credential-provider.js'
+
 const uploaderUrl = process.env.UPLOADER_URL ?? 'http://localhost:7337'
+const oidcAuthorizationOrigin = new URL(
+  getEntraIdDiscoveryUrl(config.get('auth.entraId'))
+).origin
 
 // A local cdp-uploader (docker compose) is reached directly or via the nginx
 // proxy; in real CDP environments the upload URL is relative so 'self' covers it
@@ -31,7 +37,12 @@ const contentSecurityPolicy = {
     frameSrc: ['self', 'data:'],
     objectSrc: ['none'],
     frameAncestors: ['none'],
-    formAction: ['self', uploaderUrl, ...localUploaderOrigins],
+    formAction: [
+      'self',
+      oidcAuthorizationOrigin,
+      uploaderUrl,
+      ...localUploaderOrigins
+    ],
     manifestSrc: ['self'],
     generateNonces: false
   }

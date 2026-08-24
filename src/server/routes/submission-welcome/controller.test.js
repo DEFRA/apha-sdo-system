@@ -12,6 +12,14 @@ function getCookieValue(response, name) {
 
 describe('submission welcome routes', () => {
   let server
+  const auth = {
+    strategy: 'session',
+    credentials: {
+      sessionId: 'test-session',
+      user: { id: 'user-id', name: 'A Person' },
+      claims: {}
+    }
+  }
 
   beforeAll(async () => {
     server = await createServer()
@@ -25,13 +33,15 @@ describe('submission welcome routes', () => {
   async function postSubmissionWelcome(payload = {}) {
     const getResponse = await server.inject({
       method: 'GET',
-      url: '/submission-welcome'
+      url: '/submission-welcome',
+      auth
     })
     const crumb = getCookieValue(getResponse, 'crumb')
 
     return server.inject({
       method: 'POST',
       url: '/submission-welcome',
+      auth,
       headers: { cookie: `crumb=${crumb}` },
       payload: { ...payload, crumb }
     })
@@ -41,7 +51,8 @@ describe('submission welcome routes', () => {
     test('Should render the submit report option', async () => {
       const { result, statusCode } = await server.inject({
         method: 'GET',
-        url: '/submission-welcome'
+        url: '/submission-welcome',
+        auth
       })
 
       expect(statusCode).toBe(statusCodes.ok)

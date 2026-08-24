@@ -1,0 +1,12 @@
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/button/macro.njk" import govukButton %}
+
+{% block content %}
+  <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+  <p class="govuk-body">Your session has ended.</p>
+  {{ govukButton({
+    text: "Sign in again",
+    href: "/sign-in-choose"
+  }) }}
+{% endblock %}

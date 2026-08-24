@@ -1,4 +1,6 @@
 import { createServer } from '#/server/server.js'
+import { config } from '#/config/config.js'
+import { getEntraIdDiscoveryUrl } from '#/server/auth/credential-provider.js'
 
 describe('#contentSecurityPolicy', () => {
   let server
@@ -19,5 +21,11 @@ describe('#contentSecurityPolicy', () => {
     })
 
     expect(resp.headers['content-security-policy']).toBeDefined()
+    const oidcOrigin = new URL(
+      getEntraIdDiscoveryUrl(config.get('auth.entraId'))
+    ).origin
+    expect(resp.headers['content-security-policy']).toContain(
+      `form-action 'self' ${oidcOrigin}`
+    )
   })
 })

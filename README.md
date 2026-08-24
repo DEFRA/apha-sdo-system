@@ -4,231 +4,188 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=DEFRA_apha-sdo-system&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=DEFRA_apha-sdo-system)
 [![Coverage](https://sonarcloud.io/api/project_badges/measure?project=DEFRA_apha-sdo-system&metric=coverage)](https://sonarcloud.io/summary/new_code?id=DEFRA_apha-sdo-system)
 
-Core delivery platform Node.js Frontend Template.
-
-- [Requirements](#requirements)
-  - [Node.js](#nodejs)
-- [Server-side Caching](#server-side-caching)
-- [Redis](#redis)
-- [File upload (cdp-uploader)](#file-upload-cdp-uploader)
-- [Local Development](#local-development)
-  - [Setup](#setup)
-  - [Development](#development)
-  - [Production](#production)
-  - [Npm scripts](#npm-scripts)
-  - [Update dependencies](#update-dependencies)
-  - [Formatting](#formatting)
-    - [Windows prettier issue](#windows-prettier-issue)
-- [Docker](#docker)
-  - [Development image](#development-image)
-  - [Production image](#production-image)
-  - [Docker Compose](#docker-compose)
-  - [Dependabot](#dependabot)
-  - [SonarCloud](#sonarcloud)
-- [Licence](#licence)
-  - [About the licence](#about-the-licence)
+Frontend service for APHA SDO submissions, built with Hapi and the DEFRA forms engine.
 
 ## Requirements
 
-### Node.js
+- Node.js 24 (use the version in `.nvmrc`)
+- npm
+- Docker
 
-Please install Node Version Manager [nvm](https://github.com/creationix/nvm)
+## Run it locally
 
-To use the correct version of Node.js for this application, via nvm:
+You need Node.js, npm and Docker. Use the Node version in `.nvmrc`.
 
 ```bash
-cd apha-sdo-system
 nvm use
-```
-
-## Server-side Caching
-
-We use Catbox for server-side caching. By default the service will use CatboxRedis when deployed and CatboxMemory for
-local development.
-You can override the default behaviour by setting the `SESSION_CACHE_ENGINE` environment variable to either `redis` or
-`memory`.
-
-Please note: CatboxMemory (`memory`) is _not_ suitable for production use! The cache will not be shared between each
-instance of the service and it will not persist between restarts.
-
-## Redis
-
-Redis is an in-memory key-value store. Every instance of a service has access to the same Redis key-value store similar
-to how services might have a database (or MongoDB). All frontend services are given access to a namespaced prefixed that
-matches the service name. e.g. `my-service` will have access to everything in Redis that is prefixed with `my-service`.
-
-If your service does not require a session cache to be shared between instances or if you don't require Redis, you can
-disable setting `SESSION_CACHE_ENGINE=false` or changing the default value in `src/config/index.js`.
-
-## File upload (cdp-uploader)
-
-File upload pages (`FileUploadPageController`) are handled by `@defra/forms-engine-plugin`, backed by the
-platform's [cdp-uploader](https://github.com/DEFRA/cdp-uploader). The uploader virus-scans files, delivers
-clean ones to our S3 bucket under `{STAGING_PREFIX}/{uploadId}/{fileId}` and POSTs a callback to
-`{SUBMISSION_URL}/file` (see `src/server/routes/file-callback`).
-
-The plugin reads `UPLOADER_URL`, `UPLOADER_BUCKET_NAME`, `STAGING_PREFIX` and `SUBMISSION_URL` from
-environment variables. For local development copy [.env.example](.env.example) to `.env` and run
-`docker compose up`; the mock virus scanner rejects any file with `virus` in its name.
-
-## Proxy
-
-We are using forward-proxy which is set up by default. To make use of this: `import { fetch } from 'undici'` then
-because of the `setGlobalDispatcher(new ProxyAgent(proxyUrl))` calls will use the ProxyAgent Dispatcher
-
-If you are not using Wreck, Axios or Undici or a similar http that uses `Request`. Then you may have to provide the
-proxy dispatcher:
-
-To add the dispatcher to your own client:
-
-```javascript
-import { ProxyAgent } from 'undici'
-
-return await fetch(url, {
-  dispatcher: new ProxyAgent({
-    uri: proxyUrl,
-    keepAliveTimeout: 10,
-    keepAliveMaxTimeout: 10
-  })
-})
-```
-
-## Local Development
-
-### Setup
-
-Install application dependencies:
-
-```bash
 npm install
-```
-
-### Git hooks
-
-Install git hooks (optional)
-
-```bash
-npm run git:hooks
-```
-
-### Development
-
-To run the application in `development` mode run:
-
-```bash
+cp .env.example .env
+npm run docker:up
 npm run dev
 ```
 
-### Production
+Open <http://localhost:3000>.
 
-To mimic the application running in `production` mode locally run:
+`docker:up` starts the local dependencies, including LocalStack, Redis,
+Azurite, cdp-uploader and the OIDC stub.
 
-```bash
-npm start
+## Authentication
+
+Internal Defra and APHA users sign in with Microsoft Entra ID using the
+authorization-code flow with PKCE.
+
+- Local development uses the OIDC stub on `http://localhost:5556`.
+- DEV uses the real `apha-sdo-system-dev` Entra registration.
+- External authentication is not implemented yet.
+
+Authentication is required for the form journeys. Health checks, static
+assets, the uploader callback, the home page and authentication routes remain
+public.
+
+Only a random session ID is stored in the browser. Tokens and identity claims
+are stored in the server-side cache: memory locally and Redis when deployed.
+
+### Test authentication locally
+
+The local `.env` should use the values from `.env.example`. Do not put the DEV
+client ID, tenant ID or secret in it.
+
+```dotenv
+AUTH_ENTRA_ID_CREDENTIAL_MODE=mock
+AUTH_ENTRA_ID_OIDC_CONFIGURATION_URL=http://localhost:5556/.well-known/openid-configuration
+AUTH_ENTRA_ID_CLIENT_ID=local-stub-client
+AUTH_ENTRA_ID_AUTHORIZATION_MODE=groups
+AUTH_ENTRA_ID_ALLOWED_GROUP_IDS=local-dev-group
+APP_BASE_URL=http://localhost:3000
 ```
 
-### Npm scripts
+Run `npm run docker:up`, start the app and select **Defra Single Sign-on**.
+Successful authentication lands on `/submission-welcome`.
 
-All available Npm scripts can be seen in [package.json](./package.json)
-To view them in your command line run:
+## First DEV authentication test
 
-```bash
-npm run
+The tenant, client ID and callback combination has been checked against Entra:
+
+- Tenant ID: `6f504113-6b64-43f2-ade9-242e05780007`
+- Client ID: `de586797-a50f-4b14-b777-e5889a37e4f8`
+- Callback:
+  `https://apha-sdo-system.dev.cdp-int.defra.cloud/signin-entra-id`
+
+`Assignment required` is currently set to **No**. For the first smoke test we
+will deliberately allow any user authenticated by the fixed DefraDev tenant.
+This is temporary and must be replaced with group authorization before wider
+testing.
+
+The remaining checks before deployment are:
+
+1. Add the temporary DEV client secret to CDP Secrets.
+2. Add a new cookie password to CDP Secrets.
+
+### DEV environment variables
+
+```dotenv
+APP_BASE_URL=https://apha-sdo-system.dev.cdp-int.defra.cloud
+AUTH_ENTRA_ID_CREDENTIAL_MODE=client-secret
+AUTH_ENTRA_ID_TENANT_ID=6f504113-6b64-43f2-ade9-242e05780007
+AUTH_ENTRA_ID_CLIENT_ID=de586797-a50f-4b14-b777-e5889a37e4f8
+AUTH_ENTRA_ID_AUTHORIZATION_MODE=tenant-only
+AUTH_ENTRA_ID_TENANT_WIDE_ACCESS_CONFIRMED=true
+SESSION_COOKIE_SECURE=true
+SESSION_CACHE_ENGINE=redis
 ```
 
-### Update dependencies
+Do not set `AUTH_ENTRA_ID_OIDC_CONFIGURATION_URL` in DEV. CDP must also supply
+`NODE_USE_ENV_PROXY=1` with its normal proxy settings.
 
-To update dependencies use [npm-check-updates](https://github.com/raineorshine/npm-check-updates):
+### DEV secrets
 
-> The following script is a good start. Check out all the options on
-> the [npm-check-updates](https://github.com/raineorshine/npm-check-updates)
-
-```bash
-ncu --interactive --format group
+```dotenv
+AUTH_ENTRA_ID_CLIENT_SECRET=<temporary-dev-secret>
+SESSION_COOKIE_PASSWORD=<unique-random-value-at-least-32-characters>
 ```
 
-### Formatting
+Do not put these values in source control, logs or tickets.
 
-#### Windows prettier issue
+### Smoke-test steps
 
-If you are having issues with formatting of line breaks on Windows update your global git config by running:
+1. Open <https://apha-sdo-system.dev.cdp-int.defra.cloud>.
+2. Select **Defra Single Sign-on**.
+3. Sign in with a Defra or APHA account in the DefraDev tenant.
+4. Confirm you land on `/submission-welcome`.
+5. Open `/sdo-test` and confirm the protected form is available.
+6. In a private browser window, open `/sdo-test` directly and confirm it
+   redirects to sign-in.
+7. Check the application logs. Cookies, authorization codes, secrets and
+   tokens must not be present.
+
+If sign-in fails, record the Entra `AADSTS` code, callback error and
+application correlation ID.
+
+After this first test succeeds, complete the logout, denied-user, token
+refresh and multi-instance Redis tests. Then change authorization to `groups`,
+set `AUTH_ENTRA_ID_ALLOWED_GROUP_IDS` to the approved group object IDs and
+configure Entra to include group claims in the ID token. Environment variables
+alone cannot provide group membership. DEV can move from a client secret to
+web identity once its federated credential is available.
+
+## Sessions and Redis
+
+Sessions use Catbox memory locally and Redis in deployed environments. Set
+`SESSION_CACHE_ENGINE` to `memory` or `redis` when an override is needed.
+
+Memory sessions must not be used in CDP because they are not shared between
+application instances and are lost when an instance restarts.
+
+## File uploads
+
+File uploads are handled by `@defra/forms-engine-plugin` and
+[cdp-uploader](https://github.com/DEFRA/cdp-uploader). The uploader scans each
+file, stores clean files in S3 and calls this service at `/file`.
+
+Local configuration is in `.env.example`. The local mock scanner rejects
+filenames containing `virus`.
+
+## CDP proxy
+
+CDP injects its HTTP proxy settings and `NODE_USE_ENV_PROXY=1`. OIDC
+discovery, sign-in and token refresh use the Node proxy support. The future
+web-identity STS client is configured to use the same proxy.
+
+No proxy configuration is needed when running against the local OIDC stub.
+
+## Useful commands
 
 ```bash
-git config --global core.autocrlf false
+npm run dev              # start the app with file watching
+npm run auth:stub        # run only the local OIDC provider
+npm run docker:up        # start local dependencies
+npm run docker:down      # stop local dependencies
+npm test                 # run tests with coverage
+npm run lint             # run JavaScript and SCSS linting
+npm run format:check     # check formatting
+npm run build:frontend   # build frontend assets
+npm start                # run the production build locally
 ```
 
 ## Docker
 
-### Development image
+`npm run docker:up` starts the dependencies used by an app running on the
+host. The local OIDC stub advertises `localhost`, so authentication is tested
+with `npm run dev` on the host rather than the `your-frontend` Compose service.
 
-> [!TIP]
-> For Apple Silicon users, you may need to add `--platform linux/amd64` to the `docker run` command to ensure
-> compatibility fEx: `docker build --platform=linux/arm64 --no-cache --tag apha-sdo-system`
-
-Build:
+Build the development image with:
 
 ```bash
-docker build --target development --no-cache --tag apha-sdo-system:development .
+docker build --target development --tag apha-sdo-system:development .
 ```
 
-Run:
+Build the production image with:
 
 ```bash
-docker run -p 3000:3000 apha-sdo-system:development
+docker build --tag apha-sdo-system .
 ```
-
-### Production image
-
-Build:
-
-```bash
-docker build --no-cache --tag apha-sdo-system .
-```
-
-Run:
-
-```bash
-docker run -p 3000:3000 apha-sdo-system
-```
-
-### Docker Compose
-
-A local environment with:
-
-- LocalStack for AWS services (S3, SQS)
-- Redis
-- MongoDB
-- cdp-uploader (with mock virus scanning) and its nginx proxy
-- This service.
-- A commented out backend example.
-
-```bash
-docker compose up --build -d
-```
-
-### Dependabot
-
-We have added an example dependabot configuration file to the repository. You can enable it by renaming
-the [.github/example.dependabot.yml](.github/example.dependabot.yml) to `.github/dependabot.yml`
-
-### SonarCloud
-
-Instructions for setting up SonarCloud can be found in [sonar-project.properties](./sonar-project.properties).
 
 ## Licence
 
-THIS INFORMATION IS LICENSED UNDER THE CONDITIONS OF THE OPEN GOVERNMENT LICENCE found at:
-
-<http://www.nationalarchives.gov.uk/doc/open-government-licence/version/3>
-
-The following attribution statement MUST be cited in your products and applications when using this information.
-
-> Contains public sector information licensed under the Open Government license v3
-
-### About the licence
-
-The Open Government Licence (OGL) was developed by the Controller of Her Majesty's Stationery Office (HMSO) to enable
-information providers in the public sector to license the use and re-use of their information under a common open
-licence.
-
-It is designed to encourage use and re-use of information freely and flexibly, with only a few conditions.
+This project is licensed under the
+[Open Government Licence v3](https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/).

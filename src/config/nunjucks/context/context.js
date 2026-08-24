@@ -13,7 +13,7 @@ const manifestPath = path.join(
 
 let viteManifest
 
-export function context(_request) {
+export function context(request) {
   if (config.get('isProduction') && !viteManifest) {
     try {
       viteManifest = JSON.parse(readFileSync(manifestPath, 'utf-8'))
@@ -26,6 +26,8 @@ export function context(_request) {
     assetPath: `${assetPath}/assets`,
     serviceName: config.get('serviceName'),
     serviceUrl: '/',
+    isAuthenticated: request?.auth?.isAuthenticated ?? false,
+    signedInUser: request?.auth?.credentials?.user ?? null,
     breadcrumbs: [],
     getAssetPath(asset) {
       if (!config.get('isProduction')) {
