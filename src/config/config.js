@@ -203,9 +203,93 @@ export const config = convict({
       env: 'FORMS_ENGINE_BASE_URL'
     }
   },
+  appBaseUrl: {
+    doc: 'Externally visible application base URL used for OIDC redirects',
+    format: 'url',
+    default: 'http://localhost:3000',
+    env: 'APP_BASE_URL'
+  },
+  auth: {
+    entraId: {
+      credentialMode: {
+        doc: 'How the application authenticates to the Entra token endpoint',
+        format: ['mock', 'client-secret', 'web-identity'],
+        default: 'mock',
+        env: 'AUTH_ENTRA_ID_CREDENTIAL_MODE'
+      },
+      tenantId: {
+        doc: 'Microsoft Entra tenant ID',
+        format: String,
+        default: '',
+        env: 'AUTH_ENTRA_ID_TENANT_ID'
+      },
+      clientId: {
+        doc: 'Microsoft Entra application (client) ID',
+        format: String,
+        default: 'local-stub-client',
+        env: 'AUTH_ENTRA_ID_CLIENT_ID'
+      },
+      clientSecret: {
+        doc: 'Microsoft Entra client secret for client-secret mode',
+        format: String,
+        default: '',
+        env: 'AUTH_ENTRA_ID_CLIENT_SECRET',
+        sensitive: true
+      },
+      discoveryUrl: {
+        doc: 'OIDC discovery URL override; derived from tenantId when omitted',
+        format: String,
+        nullable: true,
+        default: null,
+        env: 'AUTH_ENTRA_ID_OIDC_CONFIGURATION_URL'
+      },
+      scopes: {
+        doc: 'Space-separated OIDC scopes',
+        format: String,
+        default: 'openid profile email offline_access',
+        env: 'AUTH_ENTRA_ID_SCOPES'
+      },
+      allowedGroupIds: {
+        doc: 'Entra group object IDs allowed to access the service',
+        format: Array,
+        default: [],
+        env: 'AUTH_ENTRA_ID_ALLOWED_GROUP_IDS'
+      },
+      authorizationMode: {
+        doc: 'Whether access is checked by group claims, Entra assignment or tenant only',
+        format: ['groups', 'assignment-only', 'tenant-only'],
+        default: 'groups',
+        env: 'AUTH_ENTRA_ID_AUTHORIZATION_MODE'
+      },
+      assignmentRequiredConfirmed: {
+        doc: 'Confirms Entra Enterprise Application assignment is required',
+        format: Boolean,
+        default: false,
+        env: 'AUTH_ENTRA_ID_ASSIGNMENT_REQUIRED_CONFIRMED'
+      },
+      tenantWideAccessConfirmed: {
+        doc: 'Confirms temporary access for any authenticated user in the configured tenant',
+        format: Boolean,
+        default: false,
+        env: 'AUTH_ENTRA_ID_TENANT_WIDE_ACCESS_CONFIRMED'
+      },
+      federatedAudience: {
+        doc: 'Audience configured on the Entra federated credential',
+        format: Array,
+        default: ['api://AzureADTokenExchange'],
+        env: 'AUTH_ENTRA_ID_FEDERATED_AUDIENCE'
+      },
+      earlyRefreshMs: {
+        doc: 'Refresh access tokens this many milliseconds before expiry',
+        format: 'nat',
+        default: 300000,
+        env: 'AUTH_ENTRA_ID_EARLY_REFRESH_MS'
+      }
+    }
+  },
   azure: {
-    // Shared app-registration credentials, reusable by the upcoming
-    // Defra ID / Azure AD authentication as well as blob storage.
+    // Credentials used for Azure Blob Storage. Interactive user
+    // authentication has separate, least-privilege AUTH_ENTRA_ID_* settings.
     identity: {
       tenantId: {
         doc: 'Azure AD tenant ID',

@@ -19,7 +19,15 @@ describe('#errors', () => {
   test('Should provide expected Not Found page', async () => {
     const { result, statusCode } = await server.inject({
       method: 'GET',
-      url: '/non-existent-path'
+      url: '/non-existent-path',
+      auth: {
+        strategy: 'session',
+        credentials: {
+          sessionId: 'test-session',
+          user: { id: 'user-id', name: 'A Person' },
+          claims: {}
+        }
+      }
     })
 
     expect(result).toEqual(

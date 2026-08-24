@@ -7,6 +7,7 @@ import { health } from '../routes/health/index.js'
 import { fileCallback } from '../routes/file-callback/index.js'
 import { serveFormAssets } from './serve-form-assets.js'
 import { serveStaticFiles } from './serve-static-files.js'
+import { viteDevAssets } from './vite-dev-assets.js'
 import { config } from '#/config/config.js'
 
 export const router = {
@@ -21,7 +22,7 @@ export const router = {
       // Application specific routes, add your own routes here
       await server.register([home])
 
-      // Sign-in journey screens (UI only, no auth strategy registered)
+      // Interactive sign-in, callback and logout routes
       await server.register([authRoutes])
 
       // Post-sign-in welcome screen
@@ -43,15 +44,15 @@ export const router = {
           })
 
           await server.register({
-            plugin: (await import('@defra/hapi-connect')).default,
+            plugin: viteDevAssets,
             options: {
               path: '/public',
-              middleware: [vite.middlewares]
+              middleware: vite.middlewares
             }
           })
         })()
       } else {
-        server.register(serveStaticFiles)
+        await server.register(serveStaticFiles)
       }
     }
   }

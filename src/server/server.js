@@ -19,6 +19,8 @@ import { contentSecurityPolicy } from './plugins/content-security-policy.js'
 import { metrics } from '@defra/cdp-metrics'
 import { services } from './forms/services/index.js'
 import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
+import { openId } from './plugins/auth/open-id.js'
+import { sessionCookie } from './plugins/auth/session-cookie.js'
 
 export async function createServer() {
   const server = hapi.server({
@@ -65,6 +67,8 @@ export async function createServer() {
     secureContext,
     pulse,
     sessionCache,
+    openId,
+    sessionCookie,
     nunjucksConfig,
     Scooter,
     contentSecurityPolicy,

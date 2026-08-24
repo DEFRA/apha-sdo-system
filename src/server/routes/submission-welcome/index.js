@@ -4,8 +4,8 @@ import {
 } from './controller.js'
 
 /**
- * Sets up the routes for the /submission-welcome screen, shown after the
- * mock Defra ID sign-in and before the form journey.
+ * Sets up the protected /submission-welcome screen, shown after internal
+ * users authenticate and before the form journey.
  */
 export const submissionWelcome = {
   plugin: {

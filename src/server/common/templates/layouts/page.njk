@@ -2,6 +2,7 @@
 
 {# Import GOVUK components globally #}
 {% from "govuk/components/breadcrumbs/macro.njk" import govukBreadcrumbs %}
+{% from "govuk/components/service-navigation/macro.njk" import govukServiceNavigation %}
 
 {# Import custom components globally #}
 {% from "heading/macro.njk" import appHeading %}
@@ -30,6 +31,17 @@
     serviceUrl: serviceUrl,
     useTudorCrown: true
   }) }}
+
+  {% if isAuthenticated %}
+    {{ govukServiceNavigation({
+      navigation: [
+        {
+          text: "Sign out",
+          href: "/sign-out"
+        }
+      ]
+    }) }}
+  {% endif %}
 {% endblock %}
 
 {% block pageTitle %}
