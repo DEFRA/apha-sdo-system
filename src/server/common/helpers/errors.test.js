@@ -123,4 +123,23 @@ describe('#catchAll', () => {
       statusCodes.internalServerError
     )
   })
+
+  test('Should render a safe message and correlationId from boom.data when present', () => {
+    const safeMessage = 'Your file could not be saved. Try again later.'
+    const correlationId = 'cdp-trace-id-123'
+    const request = mockRequest(statusCodes.internalServerError)
+    request.response.data = { safeMessage, correlationId }
+
+    catchAll(request, mockToolkit)
+
+    expect(mockToolkitView).toHaveBeenCalledWith(errorPage, {
+      pageTitle: safeMessage,
+      heading: statusCodes.internalServerError,
+      message: safeMessage,
+      correlationId
+    })
+    expect(mockToolkitCode).toHaveBeenCalledWith(
+      statusCodes.internalServerError
+    )
+  })
 })

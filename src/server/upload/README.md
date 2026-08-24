@@ -1,10 +1,23 @@
-# Upload API error contract
+# Azure transfer error handling
 
-This folder contains the backend upload error model used for file validation, upload failures, security scan failures, and unexpected errors.
+This folder contains the backend error handling for the one upload step our
+own code owns: transferring a scanned file from S3 staging into Azure Blob
+Storage, and writing the submission JSON alongside it (see
+[output-service.js](../forms/services/output-service.js)).
 
-## Purpose
+## Scope - what this is not
 
-Provide a safe, consistent response format to the front end while keeping technical details in backend logs.
+This app is server-side rendered (GOV.UK Design System pages), not a JSON
+API, so there is no front-end HTTP client to consume a `{success, errorCode,
+message, correlationId}` payload.
+
+File size limits, file type checks and virus scanning happen upstream in the
+CDP uploader and are already surfaced to users by
+`@defra/forms-engine-plugin`'s `FileUploadField`, which has its own
+pre-approved messages (e.g. "The selected file must be smaller than 100MB",
+"The selected file must be a {type}", "The selected file contains a virus")
+plus its own unknown-error fallback. This folder does not duplicate that
+handling.
 
 ## Source files
 
@@ -12,124 +25,89 @@ Provide a safe, consistent response format to the front end while keeping techni
 - helpers/upload-error-response.js
 - helpers/upload-error-response.test.js
 
-## Standard error response model
+## How it works
 
-All upload and upload-validation failures returned to the front end must use this shape:
-
-success: false
-errorCode: string
-message: string
-correlationId: string
-
-Example:
-
-{
-"success": false,
-"errorCode": "FILE_TOO_LARGE",
-"message": "The selected file must be smaller than the maximum allowed size.",
-"correlationId": "9c2e6f7a-2b6f-4f1e-9e66-2f1115b3f7b2"
-}
+1. `outputService.submit` (in `output-service.js`) wraps the Azure transfer
+   and submission-JSON upload in a try/catch.
+2. On failure, `buildUploadTransferError` in `helpers/upload-error-response.js`
+   logs the full technical cause internally and returns a `Boom.internal`
+   error carrying only a safe message, an error code, and a correlationId in
+   `boom.data`.
+3. That Boom error propagates up to the existing global `onPreResponse`
+   handler (`catchAll` in
+   [errors.js](../common/helpers/errors.js)), which renders it on the
+   standard `error/index` page - the same page every other error in this app
+   already uses. No new consumer or contract is needed.
 
 ## Error categories
 
 Defined in constants/upload-error-codes.js:
 
-- FILE_TOO_LARGE
-- FILE_TYPE_NOT_ALLOWED
-- FILE_EMPTY
-- FILE_MISSING
-- SECURITY_SCAN_FAILED
 - UPLOAD_FAILED
 - STORAGE_UNAVAILABLE
 - UNKNOWN_ERROR
 
 ## Security and sensitive data rules
 
-- Front end responses must never include malware names, macro detection results, scan engine output, tokens, connection strings, stack traces, or raw infrastructure error details.
-- SECURITY_SCAN_FAILED must use a deliberately vague user-facing message.
-- Detailed failure context is logged internally only.
-- Internal log entries are emitted through the standard service logger and are available in the platform log pipeline (including the CDP portal where configured).
+- The rendered error page must never include stack traces, connection
+  strings, S3/Azure error detail, or any other internal exception content.
+- Detailed failure context (the original error, stack, referenceNumber, etc.)
+  is logged internally only, via `helpers/upload-error-response.js`.
+- Internal log entries are emitted through the standard service logger and
+  are available in the platform log pipeline, including the CDP portal.
 
 ## Correlation ID rules
 
-- Every response includes correlationId.
-- If request context already provides one, pass it through.
-- If not provided, generate one.
-- Use correlationId in support and investigation workflows to find matching logs.
-- Use the same correlationId when searching logs in CDP observability tools.
+- The correlationId is the existing request trace ID (read via `getTraceId()`
+  from `@defra/hapi-tracing`), which is the same ID already stamped on every
+  log line for that request via the `x-cdp-request-id` header (see
+  [logger-options.js](../plugins/logger-options.js)). It is not a new,
+  disconnected ID.
+- The error page shows this correlationId so a user can quote it to support,
+  and that same ID can be searched for directly in CDP log search.
 
 ## Usage pattern
 
-1. Catch the internal error in upload service or controller.
-2. Map the failure to an errorCode from constants/upload-error-codes.js.
-3. Build the response with helpers/upload-error-response.js.
-4. Return that object to the front end.
-5. Do not return internal exception details.
+1. Wrap the Azure transfer/upload call in a try/catch (see
+   `output-service.js`).
+2. On failure, call `buildUploadTransferError` with an errorCode from
+   `constants/upload-error-codes.js` and the original error as `cause`.
+3. Throw the returned Boom error - do not return or render the original
+   error's message anywhere.
 
-## Example usage
-
-### Controller-level error mapping
-
-```javascript
-import { statusCodes } from '../common/constants/status-codes.js'
-import { uploadErrorCodes } from './constants/upload-error-codes.js'
-import { buildUploadErrorResponse } from './helpers/upload-error-response.js'
-
-export const uploadController = {
-  async handler(request, h) {
-    try {
-      await request.services().uploadService.upload(request.payload.file)
-      return h.response({ success: true }).code(statusCodes.ok)
-    } catch (error) {
-      const correlationId = request.info.id
-
-      const response = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.UPLOAD_FAILED,
-        cause: error,
-        correlationId,
-        logContext: {
-          route: request.path,
-          method: request.method
-        }
-      })
-
-      return h.response(response).code(statusCodes.badRequest)
-    }
-  }
-}
-```
-
-### Security-scan failure mapping
+### Example
 
 ```javascript
 import { uploadErrorCodes } from './constants/upload-error-codes.js'
-import { buildUploadErrorResponse } from './helpers/upload-error-response.js'
+import { buildUploadTransferError } from './helpers/upload-error-response.js'
 
-function mapScanFailure({ scanError, correlationId }) {
-  return buildUploadErrorResponse({
-    errorCode: uploadErrorCodes.SECURITY_SCAN_FAILED,
-    cause: scanError,
-    correlationId,
-    logContext: { stage: 'security-scan' }
+try {
+  await azureStorageService.uploadFile(uploadId, file, metadata)
+} catch (error) {
+  throw buildUploadTransferError({
+    errorCode: uploadErrorCodes.UPLOAD_FAILED,
+    cause: error,
+    logContext: { referenceNumber }
   })
 }
 ```
 
-The response sent to the front end remains safe and generic for
-SECURITY_SCAN_FAILED, while the technical scan detail stays in internal logs.
-
 ## Unknown error handling
 
-- If a failure cannot be classified, return UNKNOWN_ERROR.
+- If a failure cannot be classified, use UNKNOWN_ERROR.
 - The user-facing message for UNKNOWN_ERROR must remain generic and safe.
 
 ## Test coverage
 
-Contract and safety behavior are validated in helpers/upload-error-response.test.js, including:
+Contract and safety behaviour are validated in
+helpers/upload-error-response.test.js, including:
 
-- consistent response shape
-- category-to-message mapping
-- correlationId behavior
-- unknown error fallback
-- sensitive detail redaction in responses
-- internal logging of technical details
+- Boom error shape (status code, data.errorCode, data.safeMessage)
+- correlationId sourced from the existing trace ID, with a safe fallback
+- category-to-message mapping and unknown error fallback
+- sensitive detail redaction (raw cause/stack never present on the boom
+  error, only in the logger call)
+
+[output-service.test.js](../forms/services/output-service.test.js) covers the
+integration: an Azure transfer failure is rethrown as a safe error while the
+raw cause is still recorded in Redis for investigation.

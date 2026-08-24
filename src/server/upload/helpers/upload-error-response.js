@@ -1,4 +1,5 @@
-import { randomUUID } from 'node:crypto'
+import Boom from '@hapi/boom'
+import { getTraceId } from '@defra/hapi-tracing'
 
 import { createLogger } from '../../common/helpers/logging/logger.js'
 import { uploadErrorCodes } from '../constants/upload-error-codes.js'
@@ -6,71 +7,65 @@ import { uploadErrorCodes } from '../constants/upload-error-codes.js'
 const logger = createLogger()
 
 /**
- * Safe user-facing messages keyed by error code.
- * Security-sensitive categories (e.g. SECURITY_SCAN_FAILED) use a deliberately
- * vague message so that malware detection results are never revealed to the user.
+ * Safe, pre-approved user-facing messages keyed by error code. These cover
+ * only the Azure transfer step; upload/type/virus-scan messages are already
+ * handled upstream by the forms-engine-plugin.
  */
 const userMessages = {
-  [uploadErrorCodes.FILE_TOO_LARGE]:
-    'The selected file must be smaller than the maximum allowed size.',
-  [uploadErrorCodes.FILE_TYPE_NOT_ALLOWED]:
-    'The selected file type is not allowed. Check the guidance and try again.',
-  [uploadErrorCodes.FILE_EMPTY]:
-    'The selected file is empty. Choose a different file.',
-  [uploadErrorCodes.FILE_MISSING]:
-    'No file was selected. Choose a file and try again.',
-  [uploadErrorCodes.SECURITY_SCAN_FAILED]:
-    'The file could not be accepted. If the problem continues, contact support.',
   [uploadErrorCodes.UPLOAD_FAILED]:
-    'The file could not be uploaded. Try again later.',
+    'Your file could not be saved. Try submitting again, and contact us if the problem continues.',
   [uploadErrorCodes.STORAGE_UNAVAILABLE]:
     'The upload service is temporarily unavailable. Try again later.',
-  [uploadErrorCodes.UNKNOWN_ERROR]: 'Something went wrong. Try again later.'
+  [uploadErrorCodes.UNKNOWN_ERROR]:
+    'Something went wrong while processing your submission. Try again later.'
 }
 
 /**
- * Build a safe, consistent error response for the front end.
+ * Build a Boom error for an Azure transfer failure.
  *
- * Sensitive technical detail is written to the internal logger only and is
- * never included in the returned object.
+ * Technical detail (cause, stack, extra context) is written to the internal
+ * logger only. The returned Boom error carries just a safe message and a
+ * correlationId in `data`, for the SSR error page (see errors.js) to render.
+ *
+ * The correlationId is the existing request trace ID (from the `x-cdp-request-id`
+ * header, via @defra/hapi-tracing) so it matches what already appears
+ * against every log line for this request - not a disconnected new ID.
  *
  * @param {object} options
- * @param {string} options.errorCode        - One of uploadErrorCodes
- * @param {Error|string} [options.cause]    - Internal error for logging only
- * @param {string} [options.correlationId]  - Existing request/correlation ID; a UUID is generated if omitted
- * @param {object} [options.logContext]     - Extra key/value pairs to include in the internal log entry
- * @returns {{ success: false, errorCode: string, message: string, correlationId: string }}
+ * @param {string} options.errorCode      - One of uploadErrorCodes
+ * @param {Error|string} [options.cause]  - Internal error for logging only
+ * @param {object} [options.logContext]   - Extra key/value pairs for the internal log entry
+ * @returns {import('@hapi/boom').Boom}
  */
-export function buildUploadErrorResponse({
+export function buildUploadTransferError({
   errorCode,
   cause,
-  correlationId,
   logContext = {}
 }) {
   const resolvedCode = uploadErrorCodes[errorCode]
     ? errorCode
     : uploadErrorCodes.UNKNOWN_ERROR
 
-  const id = correlationId ?? randomUUID()
+  const correlationId = getTraceId() ?? 'unknown'
 
-  // Log full technical detail internally — never surfaces to the user, this goes to the CDP portal
+  // Log full technical detail internally - never surfaces to the user.
   logger.error(
     {
-      correlationId: id,
+      correlationId,
       errorCode: resolvedCode,
       cause: cause instanceof Error ? cause.message : cause,
       stack: cause instanceof Error ? cause.stack : undefined,
       ...logContext
     },
-    'Upload error'
+    'Azure transfer error'
   )
 
-  return {
-    success: false,
+  const safeMessage =
+    userMessages[resolvedCode] ?? userMessages[uploadErrorCodes.UNKNOWN_ERROR]
+
+  return Boom.internal(safeMessage, {
+    safeMessage,
     errorCode: resolvedCode,
-    message:
-      userMessages[resolvedCode] ??
-      userMessages[uploadErrorCodes.UNKNOWN_ERROR],
-    correlationId: id
-  }
+    correlationId
+  })
 }

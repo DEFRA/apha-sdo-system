@@ -1,269 +1,194 @@
 import { vi, describe, test, expect, beforeEach } from 'vitest'
 
-import { buildUploadErrorResponse } from './upload-error-response.js'
+import { buildUploadTransferError } from './upload-error-response.js'
 import { uploadErrorCodes } from '../constants/upload-error-codes.js'
 
-// Use vi.hoisted so the mock fn is available when vi.mock factory runs.
-const { mockLoggerError } = vi.hoisted(() => ({
-  mockLoggerError: vi.fn()
+// Use vi.hoisted so the mock fns are available when vi.mock factories run.
+const { mockLoggerError, mockGetTraceId } = vi.hoisted(() => ({
+  mockLoggerError: vi.fn(),
+  mockGetTraceId: vi.fn()
 }))
 
-// Mock the logger so we can assert on internal log calls without real I/O.
 vi.mock('../../common/helpers/logging/logger.js', () => ({
   createLogger: () => ({ error: mockLoggerError })
 }))
 
-// Stub crypto so correlationId is deterministic when not supplied.
-const FIXED_UUID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
-vi.mock('node:crypto', () => ({ randomUUID: () => FIXED_UUID }))
+vi.mock('@defra/hapi-tracing', () => ({
+  getTraceId: mockGetTraceId
+}))
 
-describe('#buildUploadErrorResponse', () => {
+const FIXED_TRACE_ID = 'cdp-trace-id-123'
+
+describe('#buildUploadTransferError', () => {
   beforeEach(() => {
     mockLoggerError.mockClear()
+    mockGetTraceId.mockReturnValue(FIXED_TRACE_ID)
   })
 
-  describe('response shape', () => {
-    test('always returns success: false', () => {
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_TOO_LARGE
-      })
-
-      expect(result.success).toBe(false)
-    })
-
-    test('includes the errorCode in the response', () => {
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_TOO_LARGE
-      })
-
-      expect(result.errorCode).toBe(uploadErrorCodes.FILE_TOO_LARGE)
-    })
-
-    test('includes a correlationId in the response', () => {
-      const result = buildUploadErrorResponse({
+  describe('Boom error shape', () => {
+    test('returns a Boom error with a 500 status', () => {
+      const error = buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED
       })
 
-      expect(result.correlationId).toBeDefined()
-      expect(typeof result.correlationId).toBe('string')
+      expect(error.isBoom).toBe(true)
+      expect(error.output.statusCode).toBe(500)
     })
 
-    test('uses the provided correlationId when supplied', () => {
-      const supplied = 'my-correlation-id-123'
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.UPLOAD_FAILED,
-        correlationId: supplied
-      })
-
-      expect(result.correlationId).toBe(supplied)
-    })
-
-    test('generates a correlationId when none is provided', () => {
-      const result = buildUploadErrorResponse({
+    test('attaches the errorCode to boom.data', () => {
+      const error = buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED
       })
 
-      expect(result.correlationId).toBe(FIXED_UUID)
+      expect(error.data.errorCode).toBe(uploadErrorCodes.UPLOAD_FAILED)
     })
 
-    test('includes a user-facing message string', () => {
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_MISSING
-      })
-
-      expect(typeof result.message).toBe('string')
-      expect(result.message.length).toBeGreaterThan(0)
-    })
-  })
-
-  describe('validation error messages', () => {
-    test('maps FILE_TOO_LARGE to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_TOO_LARGE
-      })
-
-      expect(message).toBe(
-        'The selected file must be smaller than the maximum allowed size.'
-      )
-    })
-
-    test('maps FILE_TYPE_NOT_ALLOWED to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_TYPE_NOT_ALLOWED
-      })
-
-      expect(message).toBe(
-        'The selected file type is not allowed. Check the guidance and try again.'
-      )
-    })
-
-    test('maps FILE_EMPTY to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_EMPTY
-      })
-
-      expect(message).toBe(
-        'The selected file is empty. Choose a different file.'
-      )
-    })
-
-    test('maps FILE_MISSING to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.FILE_MISSING
-      })
-
-      expect(message).toBe('No file was selected. Choose a file and try again.')
-    })
-  })
-
-  describe('upload / storage error messages', () => {
-    test('maps UPLOAD_FAILED to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
+    test('attaches a safeMessage string to boom.data', () => {
+      const error = buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED
       })
 
-      expect(message).toBe('The file could not be uploaded. Try again later.')
-    })
-
-    test('maps STORAGE_UNAVAILABLE to the correct safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.STORAGE_UNAVAILABLE
-      })
-
-      expect(message).toBe(
-        'The upload service is temporarily unavailable. Try again later.'
-      )
+      expect(typeof error.data.safeMessage).toBe('string')
+      expect(error.data.safeMessage.length).toBeGreaterThan(0)
     })
   })
 
-  describe('security scan errors', () => {
-    test('maps SECURITY_SCAN_FAILED to a vague safe message', () => {
-      const { message } = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.SECURITY_SCAN_FAILED
+  describe('correlationId', () => {
+    test('uses the existing trace ID (x-cdp-request-id) as the correlationId', () => {
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED
       })
 
-      expect(message).toBe(
-        'The file could not be accepted. If the problem continues, contact support.'
-      )
+      expect(error.data.correlationId).toBe(FIXED_TRACE_ID)
     })
 
-    test('does not include malware or threat details in the response', () => {
-      const cause = new Error('Malware detected: EICAR-Test-File trojan')
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.SECURITY_SCAN_FAILED,
-        cause
+    test('falls back to "unknown" when no trace ID is available', () => {
+      mockGetTraceId.mockReturnValue(undefined)
+
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED
       })
 
-      const serialised = JSON.stringify(result)
-      expect(serialised).not.toContain('Malware')
-      expect(serialised).not.toContain('EICAR')
-      expect(serialised).not.toContain('trojan')
+      expect(error.data.correlationId).toBe('unknown')
     })
 
-    test('does not include macro detection details in the response', () => {
-      const cause = new Error('Macros detected in uploaded document')
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.SECURITY_SCAN_FAILED,
-        cause
-      })
-
-      const serialised = JSON.stringify(result)
-      expect(serialised).not.toContain('Macros')
-      expect(serialised).not.toContain('macro')
-    })
-
-    test('logs the security scan cause internally', () => {
-      const cause = new Error('Malware detected: EICAR-Test-File trojan')
-      buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.SECURITY_SCAN_FAILED,
-        cause
-      })
+    test('logs the same correlationId used in boom.data', () => {
+      buildUploadTransferError({ errorCode: uploadErrorCodes.UPLOAD_FAILED })
 
       expect(mockLoggerError).toHaveBeenCalledWith(
-        expect.objectContaining({ cause: cause.message }),
+        expect.objectContaining({ correlationId: FIXED_TRACE_ID }),
         expect.any(String)
       )
     })
   })
 
-  describe('unexpected / unknown errors', () => {
+  describe('message mapping', () => {
+    test('maps UPLOAD_FAILED to the correct safe message', () => {
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED
+      })
+
+      expect(error.data.safeMessage).toBe(
+        'Your file could not be saved. Try submitting again, and contact us if the problem continues.'
+      )
+    })
+
+    test('maps STORAGE_UNAVAILABLE to the correct safe message', () => {
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.STORAGE_UNAVAILABLE
+      })
+
+      expect(error.data.safeMessage).toBe(
+        'The upload service is temporarily unavailable. Try again later.'
+      )
+    })
+
     test('maps UNKNOWN_ERROR to the generic safe message', () => {
-      const { message } = buildUploadErrorResponse({
+      const error = buildUploadTransferError({
         errorCode: uploadErrorCodes.UNKNOWN_ERROR
       })
 
-      expect(message).toBe('Something went wrong. Try again later.')
+      expect(error.data.safeMessage).toBe(
+        'Something went wrong while processing your submission. Try again later.'
+      )
     })
 
     test('falls back to UNKNOWN_ERROR for an unrecognised error code', () => {
-      const result = buildUploadErrorResponse({
-        errorCode: 'NOT_A_REAL_CODE'
-      })
+      const error = buildUploadTransferError({ errorCode: 'NOT_A_REAL_CODE' })
 
-      expect(result.errorCode).toBe(uploadErrorCodes.UNKNOWN_ERROR)
-      expect(result.message).toBe('Something went wrong. Try again later.')
+      expect(error.data.errorCode).toBe(uploadErrorCodes.UNKNOWN_ERROR)
+      expect(error.data.safeMessage).toBe(
+        'Something went wrong while processing your submission. Try again later.'
+      )
     })
   })
 
-  describe('internal logging', () => {
-    test('logs the technical cause for an Error instance', () => {
-      const cause = new Error('internal connection timeout')
-      buildUploadErrorResponse({
+  describe('sensitive detail redaction', () => {
+    test('does not include the raw cause message in the boom error', () => {
+      const cause = new Error('Azure SAS token: sv=2021&sig=secretvalue')
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED,
+        cause
+      })
+
+      const serialised = JSON.stringify({
+        message: error.message,
+        data: error.data,
+        output: error.output
+      })
+
+      expect(serialised).not.toContain('SAS')
+      expect(serialised).not.toContain('sig=')
+      expect(serialised).not.toContain('secretvalue')
+    })
+
+    test('does not include stack traces in boom.data', () => {
+      const cause = new Error('connection reset by peer')
+      const error = buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED,
+        cause
+      })
+
+      expect(error.data.stack).toBeUndefined()
+    })
+
+    test('logs the technical cause and stack internally only', () => {
+      const cause = new Error('connection reset by peer')
+      buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED,
         cause
       })
 
       expect(mockLoggerError).toHaveBeenCalledWith(
         expect.objectContaining({
-          cause: 'internal connection timeout',
+          cause: 'connection reset by peer',
           stack: cause.stack
         }),
-        'Upload error'
+        'Azure transfer error'
       )
     })
 
     test('logs a string cause when no Error object is provided', () => {
-      buildUploadErrorResponse({
+      buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED,
         cause: 'timeout after 30s'
       })
 
       expect(mockLoggerError).toHaveBeenCalledWith(
         expect.objectContaining({ cause: 'timeout after 30s' }),
-        'Upload error'
+        'Azure transfer error'
       )
     })
 
     test('logs extra context from logContext', () => {
-      buildUploadErrorResponse({
+      buildUploadTransferError({
         errorCode: uploadErrorCodes.UPLOAD_FAILED,
-        logContext: { uploadId: 'abc-123', fileName: 'report.pdf' }
+        logContext: { referenceNumber: 'REF-123' }
       })
 
       expect(mockLoggerError).toHaveBeenCalledWith(
-        expect.objectContaining({
-          uploadId: 'abc-123',
-          fileName: 'report.pdf'
-        }),
-        'Upload error'
-      )
-    })
-
-    test('sensitive technical detail is only in the log, not the response', () => {
-      const cause = new Error('Azure SAS token: sv=2021&sig=secretvalue')
-      const result = buildUploadErrorResponse({
-        errorCode: uploadErrorCodes.UPLOAD_FAILED,
-        cause
-      })
-
-      const serialised = JSON.stringify(result)
-      expect(serialised).not.toContain('SAS')
-      expect(serialised).not.toContain('sig=')
-      expect(serialised).not.toContain('secretvalue')
-
-      expect(mockLoggerError).toHaveBeenCalledWith(
-        expect.objectContaining({ cause: cause.message }),
-        expect.any(String)
+        expect.objectContaining({ referenceNumber: 'REF-123' }),
+        'Azure transfer error'
       )
     })
   })

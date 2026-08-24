@@ -23,7 +23,11 @@ export function catchAll(request, h) {
   }
 
   const statusCode = response.output.statusCode
-  const errorMessage = statusCodeMessage(statusCode)
+  // A safe, pre-approved message/correlationId (e.g. from an Azure transfer
+  // failure) takes priority over the generic per-status-code message.
+  const errorMessage =
+    response.data?.safeMessage ?? statusCodeMessage(statusCode)
+  const correlationId = response.data?.correlationId
 
   if (statusCode >= statusCodes.internalServerError) {
     request.logger.error(response?.stack)
@@ -33,7 +37,8 @@ export function catchAll(request, h) {
     .view('error/index', {
       pageTitle: errorMessage,
       heading: statusCode,
-      message: errorMessage
+      message: errorMessage,
+      correlationId
     })
     .code(statusCode)
 }

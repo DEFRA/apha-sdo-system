@@ -6,6 +6,7 @@ import {
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
+import { uploadErrorCodes } from '#/server/upload/constants/upload-error-codes.js'
 
 vi.mock('#/server/common/helpers/s3-client.js', () => ({
   downloadFromS3: vi.fn()
@@ -234,9 +235,9 @@ describe('#outputService.submit', () => {
     }
     const request = buildRequest()
 
-    await expect(
-      outputService.submit(...submitArgs(context, request))
-    ).rejects.toThrow('S3 unavailable')
+    const error = await outputService
+      .submit(...submitArgs(context, request))
+      .catch((thrown) => thrown)
 
     expect(redisUploadStore.setUpload).toHaveBeenCalledWith(
       'upload-1',
@@ -245,5 +246,12 @@ describe('#outputService.submit', () => {
         transferError: 'S3 unavailable'
       })
     )
+
+    // The raw cause ('S3 unavailable') is recorded in Redis for investigation
+    // above, but the user only ever sees the safe, generic message below.
+    expect(error.isBoom).toBe(true)
+    expect(error.data.errorCode).toBe(uploadErrorCodes.UPLOAD_FAILED)
+    expect(error.data.safeMessage).not.toContain('S3 unavailable')
+    expect(error.data.correlationId).toBeDefined()
   })
 })
