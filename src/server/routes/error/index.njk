@@ -8,6 +8,9 @@
   <div class="govuk-grid-row">
     <div class="govuk-grid-column-two-thirds">
       <p>{{ message }}</p>
+      {% if correlationId %}
+        <p class="govuk-body-s">Reference: {{ correlationId }}</p>
+      {% endif %}
     </div>
   </div>
 {% endblock %}

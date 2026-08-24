@@ -2,6 +2,8 @@ import { config } from '#/config/config.js'
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
+import { uploadErrorCodes } from '#/server/upload/constants/upload-error-codes.js'
+import { buildUploadTransferError } from '#/server/upload/helpers/upload-error-response.js'
 
 // A FileUploadField value in form state is a FileState[]: each entry holds
 // the raw cdp-uploader status response, where status.form.file carries
@@ -199,24 +201,34 @@ export const outputService = {
     const fileStates = extractFileStates(context.relevantState)
     let transferredFiles = 0
 
-    for (const fileState of fileStates) {
-      const transferred = await transferFileToAzure(
-        fileState,
-        referenceNumber,
-        request.logger
-      )
+    try {
+      for (const fileState of fileStates) {
+        const transferred = await transferFileToAzure(
+          fileState,
+          referenceNumber,
+          request.logger
+        )
 
-      if (transferred) {
-        transferredFiles += 1
+        if (transferred) {
+          transferredFiles += 1
+        }
       }
-    }
 
-    await uploadSubmissionJson(
-      referenceNumber,
-      formMetadata?.slug,
-      answers,
-      emailAddress
-    )
+      await uploadSubmissionJson(
+        referenceNumber,
+        formMetadata?.slug,
+        answers,
+        emailAddress
+      )
+    } catch (error) {
+      // Raw S3/Azure errors are never shown to the user; this maps them to
+      // the one safe message/correlationId rendered on the SSR error page.
+      throw buildUploadTransferError({
+        errorCode: uploadErrorCodes.UPLOAD_FAILED,
+        cause: error,
+        logContext: { referenceNumber, form: formMetadata?.slug }
+      })
+    }
 
     request.logger.info(
       {
