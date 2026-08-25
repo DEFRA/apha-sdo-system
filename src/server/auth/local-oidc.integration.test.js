@@ -79,9 +79,12 @@ describe('local OIDC stub', () => {
     expect(protectedResponse.statusCode).toBe(200)
     expect(protectedResponse.result).toContain('Sign out')
 
+    const crumb = getCookieHeader(protectedResponse, 'crumb')?.split('=')[1]
     const signOutResponse = await appServer.inject({
+      method: 'POST',
       url: '/sign-out',
-      headers: { cookie: userSessionCookie }
+      headers: { cookie: `${userSessionCookie}; crumb=${crumb}` },
+      payload: { crumb }
     })
     const providerLogoutUrl = new URL(signOutResponse.headers.location)
 
@@ -91,5 +94,33 @@ describe('local OIDC stub', () => {
     expect(providerLogoutUrl.searchParams.get('post_logout_redirect_uri')).toBe(
       'http://localhost:3000/signed-out'
     )
+  })
+
+  test('returns a deep-linked user to the page they asked for', async () => {
+    const bouncedResponse = await appServer.inject('/bat-rabies')
+
+    expect(bouncedResponse.headers.location).toBe(
+      '/sign-in-choose?redirect=%2Fbat-rabies'
+    )
+
+    const loginResponse = await appServer.inject(
+      '/sign-in-entra?redirect=%2Fbat-rabies'
+    )
+    const handshakeCookies = [
+      getCookieHeader(loginResponse, 'entraOidc'),
+      getCookieHeader(loginResponse, 'signInReturnTo')
+    ].join('; ')
+
+    const authorizeResponse = await fetch(loginResponse.headers.location, {
+      redirect: 'manual'
+    })
+    const callbackUrl = new URL(authorizeResponse.headers.get('location'))
+    const callbackResponse = await appServer.inject({
+      url: `${callbackUrl.pathname}${callbackUrl.search}`,
+      headers: { cookie: handshakeCookies }
+    })
+
+    expect(callbackResponse.statusCode).toBe(302)
+    expect(callbackResponse.headers.location).toBe('/bat-rabies')
   })
 })

@@ -19,6 +19,10 @@ function getCookieHeader(response, name) {
   return setCookieHeaders.find((header) => header?.startsWith(`${name}=`))
 }
 
+function getCookiePair(response, name) {
+  return getCookieHeader(response, name)?.split(';')[0]
+}
+
 describe('auth routes', () => {
   let server
 
@@ -41,22 +45,65 @@ describe('auth routes', () => {
     await server.stop({ timeout: 0 })
   })
 
+  // The test environment restricts the service to a group, so tests that are
+  // not about authorization start from an unrestricted service.
+  beforeEach(() => {
+    config.set('auth.entraId.allowedGroupIds', [])
+  })
+
   afterEach(() => {
     config.set('auth.entraId.allowedGroupIds', [])
     vi.restoreAllMocks()
     vi.unstubAllGlobals()
   })
 
-  async function postSignInChoose(payload = {}) {
-    const getResponse = await server.inject({
-      method: 'GET',
-      url: '/sign-in-choose'
-    })
+  function mockCallback(claims = {}) {
+    return vi
+      .spyOn(server.plugins['hapi-auth-oidc'].oidc, 'callback')
+      .mockResolvedValue({
+        accessToken,
+        refreshToken: 'refresh-token',
+        idToken: 'id-token',
+        claims: {
+          oid: 'user-id',
+          name: 'A Person',
+          preferred_username: 'person@example.gov.uk',
+          ...claims
+        }
+      })
+  }
+
+  function mockLogin() {
+    return vi
+      .spyOn(server.plugins['hapi-auth-oidc'].oidc, 'login')
+      .mockImplementation(async (_request, h) =>
+        h.redirect('https://login.example/authorize')
+      )
+  }
+
+  /**
+   * Completes a callback and returns the cookies a signed-in browser would hold
+   */
+  async function signIn(claims) {
+    mockCallback(claims)
+
+    const response = await server.inject(
+      '/signin-entra-id?code=code&state=state'
+    )
+
+    return {
+      response,
+      cookie: getCookiePair(response, 'userSession')
+    }
+  }
+
+  async function postSignInChoose(payload = {}, url = '/sign-in-choose') {
+    const getResponse = await server.inject({ method: 'GET', url })
     const crumb = getCookieValue(getResponse, 'crumb')
 
     return server.inject({
       method: 'POST',
-      url: '/sign-in-choose',
+      url,
       headers: { cookie: `crumb=${crumb}` },
       payload: { ...payload, crumb }
     })
@@ -77,6 +124,24 @@ describe('auth routes', () => {
       expect(result).toEqual(
         expect.stringContaining('Government Gateway or GOV.UK One Login')
       )
+    })
+
+    test('carries the requested page through the form', async () => {
+      const { result } = await server.inject(
+        '/sign-in-choose?redirect=%2Fbat-rabies'
+      )
+
+      expect(result).toContain(
+        '<input type="hidden" name="redirect" value="/bat-rabies">'
+      )
+    })
+
+    test('does not carry an off-site page through the form', async () => {
+      const { result } = await server.inject(
+        '/sign-in-choose?redirect=https%3A%2F%2Fevil.test'
+      )
+
+      expect(result).not.toContain('name="redirect"')
     })
   })
 
@@ -105,6 +170,32 @@ describe('auth routes', () => {
       expect(statusCode).toBe(statusCodes.redirect)
       expect(headers.location).toBe('/sign-in-choose')
     })
+
+    test('keeps the requested page when continuing to Entra', async () => {
+      const { headers } = await postSignInChoose({
+        authProvider: 'defraId',
+        redirect: '/bat-rabies/report-date'
+      })
+
+      expect(headers.location).toBe(
+        '/sign-in-entra?redirect=%2Fbat-rabies%2Freport-date'
+      )
+    })
+
+    test('keeps the requested page when redisplaying an error', async () => {
+      const { headers } = await postSignInChoose({ redirect: '/bat-rabies' })
+
+      expect(headers.location).toBe('/sign-in-choose?redirect=%2Fbat-rabies')
+    })
+
+    test('discards an off-site requested page', async () => {
+      const { headers } = await postSignInChoose({
+        authProvider: 'defraId',
+        redirect: '//evil.test'
+      })
+
+      expect(headers.location).toBe('/sign-in-entra')
+    })
   })
 
   describe('GET /sign-in-external', () => {
@@ -123,12 +214,7 @@ describe('auth routes', () => {
 
   describe('Entra OIDC routes', () => {
     test('starts the Entra login flow', async () => {
-      vi.spyOn(
-        server.plugins['hapi-auth-oidc'].oidc,
-        'login'
-      ).mockImplementation(async (_request, h) =>
-        h.redirect('https://login.example/authorize')
-      )
+      mockLogin()
 
       const response = await server.inject('/sign-in-entra')
 
@@ -149,34 +235,15 @@ describe('auth routes', () => {
     })
 
     test('creates a server-side session after a valid callback', async () => {
-      vi.spyOn(
-        server.plugins['hapi-auth-oidc'].oidc,
-        'callback'
-      ).mockResolvedValue({
-        accessToken,
-        refreshToken: 'refresh-token',
-        idToken: 'id-token',
-        claims: {
-          oid: 'user-id',
-          name: 'A Person',
-          preferred_username: 'person@example.gov.uk'
-        }
-      })
-
-      const callbackResponse = await server.inject(
-        '/signin-entra-id?code=code&state=state'
-      )
-      const sessionCookie = getCookieHeader(callbackResponse, 'userSession')
+      const { response: callbackResponse, cookie } = await signIn()
 
       expect(callbackResponse.statusCode).toBe(statusCodes.redirect)
       expect(callbackResponse.headers.location).toBe('/submission-welcome')
-      expect(sessionCookie).toBeDefined()
+      expect(cookie).toBeDefined()
 
       const protectedResponse = await server.inject({
         url: '/submission-welcome',
-        headers: {
-          cookie: sessionCookie.split(';')[0]
-        }
+        headers: { cookie }
       })
 
       expect(protectedResponse.statusCode).toBe(statusCodes.ok)
@@ -198,18 +265,7 @@ describe('auth routes', () => {
     })
 
     test('accepts a form_post callback without a CSRF crumb', async () => {
-      vi.spyOn(
-        server.plugins['hapi-auth-oidc'].oidc,
-        'callback'
-      ).mockResolvedValue({
-        accessToken,
-        refreshToken: 'refresh-token',
-        idToken: 'id-token',
-        claims: {
-          oid: 'user-id',
-          name: 'A Person'
-        }
-      })
+      mockCallback()
 
       const response = await server.inject({
         method: 'POST',
@@ -225,28 +281,101 @@ describe('auth routes', () => {
       expect(getCookieHeader(response, 'userSession')).toBeDefined()
     })
 
-    test('rejects a user outside the configured groups', async () => {
-      config.set('auth.entraId.allowedGroupIds', ['allowed-group'])
-      vi.spyOn(
-        server.plugins['hapi-auth-oidc'].oidc,
-        'callback'
-      ).mockResolvedValue({
-        accessToken,
-        refreshToken: 'refresh-token',
-        idToken: 'id-token',
-        claims: {
-          oid: 'user-id',
-          groups: ['other-group']
-        }
+    test('sends the user back to the page that triggered sign-in', async () => {
+      mockLogin()
+
+      const loginResponse = await server.inject(
+        '/sign-in-entra?redirect=%2Fbat-rabies'
+      )
+      const returnToCookie = getCookiePair(loginResponse, 'signInReturnTo')
+
+      expect(returnToCookie).toBeDefined()
+
+      mockCallback()
+
+      const callbackResponse = await server.inject({
+        url: '/signin-entra-id?code=code&state=state',
+        headers: { cookie: returnToCookie }
       })
 
-      const response = await server.inject(
-        '/signin-entra-id?code=code&state=state'
+      expect(callbackResponse.headers.location).toBe('/bat-rabies')
+    })
+
+    test('does not remember an off-site page', async () => {
+      mockLogin()
+
+      const loginResponse = await server.inject(
+        '/sign-in-entra?redirect=https%3A%2F%2Fevil.test%2Fphish'
       )
 
-      expect(response.statusCode).toBe(statusCodes.forbidden)
-      expect(response.result).toContain('Forbidden')
+      expect(getCookieHeader(loginResponse, 'signInReturnTo')).toBeUndefined()
+    })
+  })
+
+  describe('pages that only make sense when signed out', () => {
+    test.each([
+      '/sign-in-choose',
+      '/sign-in-external',
+      '/sign-in-entra',
+      '/signed-out'
+    ])('%s sends a signed-in user to their submissions', async (url) => {
+      const { cookie } = await signIn()
+      const login = mockLogin()
+
+      const response = await server.inject({ url, headers: { cookie } })
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe('/submission-welcome')
+      // A second handshake would replace the session the user already has
+      expect(login).not.toHaveBeenCalled()
+    })
+
+    test('sends a signed-in user on to the page they asked for', async () => {
+      const { cookie } = await signIn()
+
+      const response = await server.inject({
+        url: '/sign-in-choose?redirect=%2Fbat-rabies',
+        headers: { cookie }
+      })
+
+      expect(response.headers.location).toBe('/bat-rabies')
+    })
+
+    test('still renders for a signed-out user', async () => {
+      const response = await server.inject('/signed-out')
+
+      expect(response.statusCode).toBe(statusCodes.ok)
+      expect(response.result).toContain('You have signed out')
+    })
+  })
+
+  describe('authorization', () => {
+    test('sends a user outside the configured groups to the no access page', async () => {
+      config.set('auth.entraId.allowedGroupIds', ['allowed-group'])
+
+      const { response } = await signIn({ groups: ['other-group'] })
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe('/no-access')
       expect(getCookieHeader(response, 'userSession')).toBeUndefined()
+
+      const noAccessResponse = await server.inject({
+        url: '/no-access',
+        headers: { cookie: getCookiePair(response, 'session') }
+      })
+
+      expect(noAccessResponse.statusCode).toBe(statusCodes.forbidden)
+      expect(noAccessResponse.result).toContain(
+        'You do not have access to this service'
+      )
+      expect(noAccessResponse.result).toContain('person@example.gov.uk')
+    })
+
+    test('explains the problem without naming an account', async () => {
+      const response = await server.inject('/no-access')
+
+      expect(response.statusCode).toBe(statusCodes.forbidden)
+      expect(response.result).toContain('not a member of a group')
     })
   })
 
@@ -258,34 +387,23 @@ describe('auth routes', () => {
       ])
 
       expect(welcomeResponse.statusCode).toBe(statusCodes.redirect)
-      expect(welcomeResponse.headers.location).toBe('/sign-in-choose')
+      expect(welcomeResponse.headers.location).toBe(
+        '/sign-in-choose?redirect=%2Fsubmission-welcome'
+      )
       expect(formResponse.statusCode).toBe(statusCodes.redirect)
-      expect(formResponse.headers.location).toBe('/sign-in-choose')
+      expect(formResponse.headers.location).toBe(
+        '/sign-in-choose?redirect=%2Fbat-rabies'
+      )
     })
 
     test('clears the local session for front-channel logout', async () => {
-      vi.spyOn(
-        server.plugins['hapi-auth-oidc'].oidc,
-        'callback'
-      ).mockResolvedValue({
-        accessToken,
-        refreshToken: 'refresh-token',
-        idToken: 'id-token',
-        claims: {
-          oid: 'user-id',
-          name: 'A Person',
-          iss: 'https://login.example/tenant/v2.0',
-          sid: 'entra-session-id'
-        }
+      const { response: callbackResponse, cookie } = await signIn({
+        iss: 'https://login.example/tenant/v2.0',
+        sid: 'entra-session-id'
       })
 
-      const callbackResponse = await server.inject(
-        '/signin-entra-id?code=code&state=state'
-      )
-      const sessionCookie = getCookieHeader(
-        callbackResponse,
-        'userSession'
-      ).split(';')[0]
+      expect(callbackResponse.statusCode).toBe(statusCodes.redirect)
+
       const invalidLogoutResponse = await server.inject(
         '/logout?iss=https%3A%2F%2Fattacker.example&sid=entra-session-id'
       )
@@ -301,9 +419,11 @@ describe('auth routes', () => {
 
       const protectedResponse = await server.inject({
         url: '/submission-welcome',
-        headers: { cookie: sessionCookie }
+        headers: { cookie }
       })
-      expect(protectedResponse.headers.location).toBe('/sign-in-choose')
+      expect(protectedResponse.headers.location).toBe(
+        '/sign-in-choose?redirect=%2Fsubmission-welcome'
+      )
     })
 
     test('rejects front-channel logout without provider claims', async () => {
@@ -311,8 +431,10 @@ describe('auth routes', () => {
 
       expect(response.statusCode).toBe(statusCodes.badRequest)
     })
+  })
 
-    test('redirects user-initiated sign-out to the provider', async () => {
+  describe('sign out', () => {
+    function stubEndSessionEndpoint() {
       vi.stubGlobal(
         'fetch',
         vi.fn().mockResolvedValue({
@@ -322,8 +444,70 @@ describe('auth routes', () => {
           })
         })
       )
+    }
 
-      const response = await server.inject('/sign-out')
+    /**
+     * A signed-in browser: session cookie, plus the crumb from a page it has
+     * loaded
+     */
+    async function signedInBrowser() {
+      const { cookie } = await signIn()
+      const pageResponse = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+      const crumb = getCookieValue(pageResponse, 'crumb')
+
+      return { cookie: `${cookie}; crumb=${crumb}`, crumb }
+    }
+
+    test('is offered as a form rather than a link', async () => {
+      const { cookie } = await signIn()
+
+      const { result } = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(result).toContain('<form method="post" action="/sign-out">')
+      expect(result).not.toContain('href="/sign-out"')
+    })
+
+    test('cannot be triggered by another site linking to it', async () => {
+      const { cookie } = await signIn()
+
+      await server.inject({ url: '/sign-out', headers: { cookie } })
+
+      const protectedResponse = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(protectedResponse.statusCode).toBe(statusCodes.ok)
+    })
+
+    test('rejects a post without a CSRF crumb', async () => {
+      const { cookie } = await signIn()
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/sign-out',
+        headers: { cookie }
+      })
+
+      expect(response.statusCode).toBe(statusCodes.forbidden)
+    })
+
+    test('redirects user-initiated sign-out to the provider', async () => {
+      const { cookie, crumb } = await signedInBrowser()
+      stubEndSessionEndpoint()
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/sign-out',
+        headers: { cookie },
+        payload: { crumb }
+      })
       const location = new URL(response.headers.location)
 
       expect(response.statusCode).toBe(statusCodes.redirect)
@@ -335,11 +519,47 @@ describe('auth routes', () => {
       )
     })
 
-    test('renders the signed-out page', async () => {
-      const response = await server.inject('/signed-out')
+    test('ends the local session', async () => {
+      const { cookie, crumb } = await signedInBrowser()
+      stubEndSessionEndpoint()
 
-      expect(response.statusCode).toBe(statusCodes.ok)
-      expect(response.result).toContain('You have signed out')
+      await server.inject({
+        method: 'POST',
+        url: '/sign-out',
+        headers: { cookie },
+        payload: { crumb }
+      })
+
+      const protectedResponse = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(protectedResponse.statusCode).toBe(statusCodes.redirect)
+      expect(protectedResponse.headers.location).toBe(
+        '/sign-in-choose?redirect=%2Fsubmission-welcome'
+      )
+    })
+  })
+
+  describe('caching', () => {
+    test('keeps signed-in pages out of the browser history', async () => {
+      const { cookie } = await signIn()
+
+      const response = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(response.headers['cache-control']).toBe(
+        'no-cache, no-store, must-revalidate'
+      )
+    })
+
+    test('leaves endpoints that set their own policy alone', async () => {
+      const response = await server.inject('/health')
+
+      expect(response.headers['cache-control']).not.toContain('no-store')
     })
   })
 })

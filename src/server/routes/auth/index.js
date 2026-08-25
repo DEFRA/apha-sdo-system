@@ -1,6 +1,7 @@
 import {
   entraCallbackController,
   frontChannelLogoutController,
+  noAccessController,
   signInChooseGetController,
   signInChoosePostController,
   signInEntraController,
@@ -8,7 +9,11 @@ import {
   signedOutController,
   signOutController
 } from './controller.js'
-import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
+import {
+  AUTH_PATHS,
+  RETURN_TO_QUERY_PARAM
+} from '#/server/auth/auth-constants.js'
+import { getSafeRedirect } from '#/server/auth/safe-redirect.js'
 
 /**
  * The journey starts at /sign-in-choose where the user picks a provider:
@@ -17,7 +22,48 @@ import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
  * - Government Gateway or GOV.UK One Login (external users): placeholder
  *   page only.
  */
-function publicRoute(method, path, controller, options = {}) {
+
+/**
+ * Sends a signed-in user on to the page they asked for instead of letting them
+ * back into the sign-in journey, where choosing a provider would start a second
+ * handshake and replace the session they already have.
+ */
+function redirectWhenSignedIn(request, h) {
+  if (!request.auth.isAuthenticated) {
+    return h.continue
+  }
+
+  const returnTo =
+    request.query?.[RETURN_TO_QUERY_PARAM] ??
+    request.payload?.[RETURN_TO_QUERY_PARAM]
+
+  return h.redirect(getSafeRedirect(returnTo)).takeover()
+}
+
+/**
+ * A page that only makes sense when signed out. `mode: 'try'` rather than
+ * `auth: false` so the handler can see an existing session at all.
+ */
+function guestRoute(method, path, controller, options = {}) {
+  return {
+    method,
+    path,
+    ...controller,
+    options: {
+      auth: { mode: 'try' },
+      ext: {
+        onPreHandler: { method: redirectWhenSignedIn }
+      },
+      ...options
+    }
+  }
+}
+
+/**
+ * An endpoint called by the identity provider rather than browsed to, so there
+ * is no session to consider.
+ */
+function providerRoute(method, path, controller, options = {}) {
   return {
     method,
     path,
@@ -30,11 +76,12 @@ function publicRoute(method, path, controller, options = {}) {
 }
 
 const routes = [
-  publicRoute('GET', AUTH_PATHS.SIGN_IN_CHOOSE, signInChooseGetController),
-  publicRoute('POST', AUTH_PATHS.SIGN_IN_CHOOSE, signInChoosePostController),
-  publicRoute('GET', AUTH_PATHS.SIGN_IN_EXTERNAL, signInExternalController),
-  publicRoute('GET', AUTH_PATHS.SIGN_IN_ENTRA, signInEntraController),
-  publicRoute(
+  guestRoute('GET', AUTH_PATHS.SIGN_IN_CHOOSE, signInChooseGetController),
+  guestRoute('POST', AUTH_PATHS.SIGN_IN_CHOOSE, signInChoosePostController),
+  guestRoute('GET', AUTH_PATHS.SIGN_IN_EXTERNAL, signInExternalController),
+  guestRoute('GET', AUTH_PATHS.SIGN_IN_ENTRA, signInEntraController),
+  guestRoute('GET', AUTH_PATHS.SIGNED_OUT, signedOutController),
+  providerRoute(
     ['GET', 'POST'],
     AUTH_PATHS.ENTRA_CALLBACK,
     entraCallbackController,
@@ -44,8 +91,7 @@ const routes = [
       }
     }
   ),
-  publicRoute('GET', AUTH_PATHS.SIGN_OUT, signOutController),
-  publicRoute(
+  providerRoute(
     'GET',
     AUTH_PATHS.FRONT_CHANNEL_LOGOUT,
     frontChannelLogoutController,
@@ -58,7 +104,26 @@ const routes = [
       }
     }
   ),
-  publicRoute('GET', AUTH_PATHS.SIGNED_OUT, signedOutController)
+  {
+    method: 'POST',
+    path: AUTH_PATHS.SIGN_OUT,
+    ...signOutController,
+    options: {
+      // Signing out is a state change, so it is a POST carrying a CSRF crumb.
+      // `try` rather than `required` because a user refused access by
+      // authorization has no session here but still needs to end the one Entra
+      // holds for them.
+      auth: { mode: 'try' }
+    }
+  },
+  {
+    method: 'GET',
+    path: AUTH_PATHS.NO_ACCESS,
+    ...noAccessController,
+    options: {
+      auth: { mode: 'try' }
+    }
+  }
 ]
 
 export const authRoutes = {

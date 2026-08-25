@@ -73,6 +73,53 @@ export async function getUserSessionIdByEntraSid(server, sid) {
   return record?.sessionId ?? null
 }
 
+/**
+ * Milliseconds of access token life remaining, or null when the expiry cannot
+ * be read.
+ */
+function getAccessTokenLifetimeRemaining(accessToken) {
+  const payload = accessToken?.split?.('.')[1]
+
+  if (!payload) {
+    return null
+  }
+
+  try {
+    const { exp } = JSON.parse(Buffer.from(payload, 'base64url').toString())
+
+    return typeof exp === 'number' ? exp * 1000 - Date.now() : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The OIDC client refreshes shortly before expiry, so a refresh can fail while
+ * the current token is still usable. Ending the session at that point would
+ * sign every user out over a brief Entra outage and lose any part-written
+ * report, so the current token is kept and the next request retries.
+ */
+async function refreshTokenWhenPossible(request, session) {
+  try {
+    return await request.ensureValidToken(session.token)
+  } catch (error) {
+    const remaining = getAccessTokenLifetimeRemaining(
+      session.token?.accessToken
+    )
+
+    if (remaining === null || remaining <= 0) {
+      throw error
+    }
+
+    request.logger?.warn?.(
+      { err: error },
+      'Keeping Entra session while token refresh is failing'
+    )
+
+    return { token: session.token, refreshed: false }
+  }
+}
+
 export async function validateUserSession(request, cookie) {
   const sessionId = cookie?.sessionId
 
@@ -83,7 +130,10 @@ export async function validateUserSession(request, cookie) {
       return { isValid: false }
     }
 
-    const { token, refreshed } = await request.ensureValidToken(session.token)
+    const { token, refreshed } = await refreshTokenWhenPossible(
+      request,
+      session
+    )
     const claims = token.claims ?? session.claims
 
     assertAllowedEntraGroups(

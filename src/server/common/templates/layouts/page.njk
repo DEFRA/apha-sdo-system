@@ -32,14 +32,22 @@
     useTudorCrown: true
   }) }}
 
+  {# Sign out changes state, so it is a form post carrying a CSRF crumb rather
+     than a link that any other site could trigger. #}
   {% if isAuthenticated %}
+    {% set signOutHtml %}
+      <li class="govuk-service-navigation__item">
+        <form method="post" action="/sign-out">
+          <input type="hidden" name="crumb" value="{{ crumb }}">
+          <button type="submit" class="govuk-service-navigation__link app-sign-out">Sign out</button>
+        </form>
+      </li>
+    {% endset %}
+
     {{ govukServiceNavigation({
-      navigation: [
-        {
-          text: "Sign out",
-          href: "/sign-out"
-        }
-      ]
+      slots: {
+        navigationStart: signOutHtml
+      }
     }) }}
   {% endif %}
 {% endblock %}

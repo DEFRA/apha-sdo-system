@@ -23,8 +23,82 @@ const SPREADSHEET_MIME_TYPES = [
   'text/csv'
 ].join(',')
 
+const REPORT_DATE_TITLE = 'Report date'
+
+const REPORT_DATE_GUIDANCE = 'Add the date you are submitting this report for'
+
+const FILES_UPLOAD_GUIDANCE =
+  'Drag and drop your files to upload them.\n' +
+  'You can upload multiple files at one time, or select a single file and upload it individually.'
+
+function createPages({ ids }) {
+  return [
+    {
+      id: ids.reportDatePage,
+      path: '/report-date',
+      title: 'Date of report',
+      components: [
+        {
+          id: ids.reportDateGuidance,
+          type: 'Markdown',
+          content: REPORT_DATE_GUIDANCE,
+          options: {},
+          schema: {}
+        },
+        {
+          id: ids.reportDateField,
+          type: 'MonthYearField',
+          name: 'reportDate',
+          title: REPORT_DATE_TITLE,
+          shortDescription: REPORT_DATE_TITLE,
+          options: {
+            required: true
+          },
+          schema: {}
+        }
+      ],
+      next: [{ path: '/files-upload' }]
+    },
+    {
+      id: ids.filesUploadPage,
+      path: '/files-upload',
+      title: 'Upload a report',
+      controller: 'FileUploadPageController',
+      components: [
+        {
+          id: ids.filesUploadGuidance,
+          type: 'Markdown',
+          content: FILES_UPLOAD_GUIDANCE,
+          options: {},
+          schema: {}
+        },
+        {
+          id: ids.filesUploadField,
+          type: 'FileUploadField',
+          name: 'supportingDocuments',
+          title: 'Files upload',
+          shortDescription: 'Supporting documents',
+          hint: 'Upload laboratory results spreadsheet. Only csv, xls and xlsx files are supported.',
+          options: {
+            required: true,
+            accept: SPREADSHEET_MIME_TYPES
+          },
+          schema: {}
+        }
+      ],
+      next: [{ path: '/summary' }]
+    },
+    {
+      id: ids.summaryPage,
+      path: '/summary',
+      title: 'Check your answers before submitting',
+      controller: 'SummaryPageWithConfirmationEmailController'
+    }
+  ]
+}
+
 export function createReportJourney(reportType) {
-  const { slug, title, reportDateHint, ids } = reportType
+  const { slug, title, ids } = reportType
 
   const metadata = {
     id: ids.form,
@@ -46,56 +120,7 @@ export function createReportJourney(reportType) {
     name: title,
     startPage: '/report-date',
     sections: [],
-    pages: [
-      {
-        id: ids.reportDatePage,
-        path: '/report-date',
-        title: 'Report date',
-        components: [
-          {
-            id: ids.reportDateField,
-            type: 'MonthYearField',
-            name: 'reportDate',
-            title: 'Report date',
-            shortDescription: 'Report date',
-            hint: reportDateHint,
-            options: {
-              required: true
-            },
-            schema: {}
-          }
-        ],
-        next: [{ path: '/files-upload' }]
-      },
-      {
-        id: ids.filesUploadPage,
-        path: '/files-upload',
-        title: 'Upload supporting documents',
-        controller: 'FileUploadPageController',
-        components: [
-          {
-            id: ids.filesUploadField,
-            type: 'FileUploadField',
-            name: 'supportingDocuments',
-            title: 'Files upload',
-            shortDescription: 'Supporting documents',
-            hint: 'Upload laboratory results spreadsheet. Only csv, xls and xlsx files are supported.',
-            options: {
-              required: true,
-              accept: SPREADSHEET_MIME_TYPES
-            },
-            schema: {}
-          }
-        ],
-        next: [{ path: '/summary' }]
-      },
-      {
-        id: ids.summaryPage,
-        path: '/summary',
-        title: 'Check your answers before submitting',
-        controller: 'SummaryPageWithConfirmationEmailController'
-      }
-    ],
+    pages: createPages(reportType),
     lists: [],
     conditions: []
   }
