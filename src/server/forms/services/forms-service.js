@@ -1,13 +1,15 @@
 import Boom from '@hapi/boom'
 
 import * as exampleApplication from '../definitions/example-application.js'
-import * as sdoTest from '../definitions/sdo-test.js'
+import { createReportJourney } from '../definitions/report-journey.js'
+import { reportTypes } from '../report-types.js'
 
 /**
- * Register new forms here. Each entry is a module exporting `metadata` and
- * `definition` (see src/server/forms/definitions/example-application.js).
+ * Register new forms here. Each entry exposes `metadata` and `definition`
+ * (see src/server/forms/definitions/example-application.js). The report
+ * submission journeys are generated from src/server/forms/report-types.js.
  */
-const forms = [exampleApplication, sdoTest]
+const forms = [exampleApplication, ...reportTypes.map(createReportJourney)]
 
 const formsBySlug = new Map(forms.map((form) => [form.metadata.slug, form]))
 const formsById = new Map(forms.map((form) => [form.metadata.id, form]))

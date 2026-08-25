@@ -30,15 +30,13 @@
         <input type="hidden" name="crumb" value="{{ crumb }}">
         {{ govukRadios({
           name: "submissionAction",
-          items: [
-            {
-              value: "submitReport",
-              text: "Submit report",
-              hint: {
-                text: "Upload a data file (CSV, XML, or XLSX)"
-              }
+          fieldset: {
+            legend: {
+              text: "What do you want to do?",
+              classes: "govuk-fieldset__legend--m"
             }
-          ],
+          },
+          items: submissionActionItems,
           errorMessage: errorMessage
         }) }}
         {{ govukButton({

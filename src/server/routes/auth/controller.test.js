@@ -254,7 +254,7 @@ describe('auth routes', () => {
     test('redirects an anonymous protected request to sign in', async () => {
       const [welcomeResponse, formResponse] = await Promise.all([
         server.inject('/submission-welcome'),
-        server.inject('/sdo-test')
+        server.inject('/bat-rabies')
       ])
 
       expect(welcomeResponse.statusCode).toBe(statusCodes.redirect)
