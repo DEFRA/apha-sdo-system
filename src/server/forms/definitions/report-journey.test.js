@@ -74,12 +74,30 @@ describe('#createReportJourney', () => {
   test('Should keep the field names consistent across journeys', () => {
     for (const { definition } of journeys) {
       const names = definition.pages.flatMap((page) =>
-        (page.components ?? []).map((component) => component.name)
+        (page.components ?? [])
+          .filter((component) => component.name)
+          .map((component) => component.name)
       )
 
       expect(names).toEqual(['reportDate', 'supportingDocuments'])
     }
   })
+
+  test.each(journeys)(
+    'Should introduce every question page of $metadata.slug with guidance',
+    ({ definition }) => {
+      const questionPages = definition.pages.filter((page) => page.components)
+
+      expect(questionPages).toHaveLength(2)
+
+      for (const page of questionPages) {
+        const [guidance] = page.components
+
+        expect(guidance.type).toBe('Markdown')
+        expect(guidance.content).toBeTruthy()
+      }
+    }
+  )
 
   test('Should not reuse an identifier across journeys', () => {
     const ids = journeys.flatMap(idsOf)

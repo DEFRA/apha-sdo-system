@@ -30,6 +30,17 @@ function createRequest(cache, ensureValidToken = vi.fn()) {
   }
 }
 
+function createAccessToken(expiresInSeconds) {
+  const encode = (value) =>
+    Buffer.from(JSON.stringify(value)).toString('base64url')
+
+  return [
+    encode({ alg: 'none', typ: 'JWT' }),
+    encode({ exp: Math.floor(Date.now() / 1000) + expiresInSeconds }),
+    ''
+  ].join('.')
+}
+
 const claims = {
   oid: 'user-id',
   name: 'A Person',
@@ -239,5 +250,40 @@ describe('validateUserSession', () => {
     ).resolves.toEqual({ isValid: false })
     expect(cache.drop).toHaveBeenCalledWith('session-id')
     expect(request.logger.warn).toHaveBeenCalled()
+  })
+
+  test('keeps a session alive when a refresh fails but the token has not expired', async () => {
+    const cache = createCache({
+      ...session,
+      token: { ...session.token, accessToken: createAccessToken(3600) }
+    })
+    const request = createRequest(
+      cache,
+      vi.fn().mockRejectedValue(new Error('Entra unreachable'))
+    )
+
+    const result = await validateUserSession(request, {
+      sessionId: 'session-id'
+    })
+
+    expect(result.isValid).toBe(true)
+    expect(cache.drop).not.toHaveBeenCalled()
+    expect(request.logger.warn).toHaveBeenCalled()
+  })
+
+  test('drops a session when a refresh fails and the token has expired', async () => {
+    const cache = createCache({
+      ...session,
+      token: { ...session.token, accessToken: createAccessToken(-60) }
+    })
+    const request = createRequest(
+      cache,
+      vi.fn().mockRejectedValue(new Error('Entra unreachable'))
+    )
+
+    await expect(
+      validateUserSession(request, { sessionId: 'session-id' })
+    ).resolves.toEqual({ isValid: false })
+    expect(cache.drop).toHaveBeenCalledWith('session-id')
   })
 })

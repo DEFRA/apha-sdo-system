@@ -1,0 +1,38 @@
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/button/macro.njk" import govukButton %}
+
+{% block content %}
+  <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+
+  {% if account %}
+    <p class="govuk-body">
+      You signed in as <strong>{{ account }}</strong>, which is not a member of
+      a group that can use this service.
+    </p>
+  {% else %}
+    <p class="govuk-body">
+      The account you signed in with is not a member of a group that can use
+      this service.
+    </p>
+  {% endif %}
+
+  <p class="govuk-body">
+    Ask your APHA administrator to request access for your account.
+  </p>
+
+  <h2 class="govuk-heading-m">If you have another account</h2>
+
+  <p class="govuk-body">
+    You are still signed in to Defra. Sign out first, then sign in with the
+    account that has access.
+  </p>
+
+  {# Sign out is a form post so it cannot be triggered from another site #}
+  <form method="post" action="/sign-out">
+    <input type="hidden" name="crumb" value="{{ crumb }}">
+    {{ govukButton({
+      text: "Sign out of Defra"
+    }) }}
+  </form>
+{% endblock %}

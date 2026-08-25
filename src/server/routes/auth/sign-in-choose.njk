@@ -20,6 +20,10 @@
 
   <form method="post" action="/sign-in-choose" novalidate>
     <input type="hidden" name="crumb" value="{{ crumb }}">
+    {% if returnTo %}
+      {# Keeps the page the user originally asked for attached to the journey #}
+      <input type="hidden" name="redirect" value="{{ returnTo }}">
+    {% endif %}
     {{ govukRadios({
       name: "authProvider",
       fieldset: {

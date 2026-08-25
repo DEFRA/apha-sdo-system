@@ -9,8 +9,12 @@ import {
 } from '#/server/auth/authorization.js'
 import {
   AUTH_PATHS,
+  POST_SIGN_IN_PATH,
+  RETURN_TO_COOKIE_NAME,
+  RETURN_TO_QUERY_PARAM,
   USER_SESSION_COOKIE_NAME
 } from '#/server/auth/auth-constants.js'
+import { getSafeRedirect } from '#/server/auth/safe-redirect.js'
 import {
   dropUserSession,
   getUserSession,
@@ -21,6 +25,50 @@ import { getEndSessionEndpoint } from '#/server/plugins/auth/open-id.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 
 const SIGN_IN_ERROR_FLASH_KEY = 'signInError'
+const NO_ACCESS_ACCOUNT_FLASH_KEY = 'noAccessAccount'
+
+/**
+ * Only used to build relative URLs. Never sent to the browser.
+ */
+const RETURN_TO_RESOLUTION_ORIGIN = 'https://redirect.invalid'
+
+/**
+ * A requested page, or null when it is just the default destination and does
+ * not need carrying through the sign-in URLs.
+ *
+ * Always re-checked rather than trusted, because the value starts life as a
+ * query parameter the user can edit.
+ */
+function normaliseReturnTo(requested) {
+  const returnTo = getSafeRedirect(requested)
+
+  return returnTo === POST_SIGN_IN_PATH ? null : returnTo
+}
+
+/**
+ * The page the user asked for before being sent to sign in, if any.
+ */
+function getReturnTo(request) {
+  return normaliseReturnTo(
+    request.query?.[RETURN_TO_QUERY_PARAM] ??
+      request.payload?.[RETURN_TO_QUERY_PARAM]
+  )
+}
+
+/**
+ * Keeps the requested page attached to a path within the sign-in journey, so it
+ * survives each hop up to the point it is stored in a cookie.
+ */
+function withReturnTo(path, returnTo) {
+  if (!returnTo) {
+    return path
+  }
+
+  const url = new URL(path, RETURN_TO_RESOLUTION_ORIGIN)
+  url.searchParams.set(RETURN_TO_QUERY_PARAM, returnTo)
+
+  return `${url.pathname}${url.search}`
+}
 
 /**
  * Internal users authenticate with Entra ID. External authentication remains
@@ -32,6 +80,7 @@ export const signInChooseGetController = {
 
     return h.view('auth/sign-in-choose', {
       pageTitle: 'How do you want to sign in?',
+      returnTo: getReturnTo(request),
       error
     })
   }
@@ -44,6 +93,7 @@ export const signInChoosePostController = {
       external: AUTH_PATHS.SIGN_IN_EXTERNAL
     }
     const redirectTo = providerRoutes[request.payload?.authProvider]
+    const returnTo = getReturnTo(request)
 
     if (!redirectTo) {
       request.yar.flash(
@@ -51,10 +101,10 @@ export const signInChoosePostController = {
         'Select how you want to sign in'
       )
 
-      return h.redirect(AUTH_PATHS.SIGN_IN_CHOOSE)
+      return h.redirect(withReturnTo(AUTH_PATHS.SIGN_IN_CHOOSE, returnTo))
     }
 
-    return h.redirect(redirectTo)
+    return h.redirect(withReturnTo(redirectTo, returnTo))
   }
 }
 
@@ -72,21 +122,32 @@ export const signInExternalController = {
 
 export const signInEntraController = {
   async handler(request, h) {
+    const returnTo = getReturnTo(request)
+
     try {
-      return await request.login(h)
+      const response = await request.login(h)
+
+      // A cookie is the only carrier that survives the round trip to Entra.
+      return returnTo
+        ? response.state(RETURN_TO_COOKIE_NAME, returnTo)
+        : response
     } catch (error) {
       request.logger.error({ err: error }, 'Entra sign-in could not be started')
       request.yar.flash(
         SIGN_IN_ERROR_FLASH_KEY,
         'Defra sign in is temporarily unavailable. Try again.'
       )
-      return h.redirect(AUTH_PATHS.SIGN_IN_CHOOSE)
+      return h.redirect(withReturnTo(AUTH_PATHS.SIGN_IN_CHOOSE, returnTo))
     }
   }
 }
 
 export const entraCallbackController = {
   async handler(request, h) {
+    // Read before the cookie is cleared, and before yar is reset below.
+    const returnTo = normaliseReturnTo(request.state[RETURN_TO_COOKIE_NAME])
+    h.unstate(RETURN_TO_COOKIE_NAME)
+
     let token
 
     try {
@@ -97,17 +158,31 @@ export const entraCallbackController = {
         SIGN_IN_ERROR_FLASH_KEY,
         'We could not sign you in. Try again.'
       )
-      return h.redirect(AUTH_PATHS.SIGN_IN_CHOOSE)
+      return h.redirect(withReturnTo(AUTH_PATHS.SIGN_IN_CHOOSE, returnTo))
     }
 
     const claims = token.claims ?? {}
-    assertAllowedEntraGroups(
-      claims,
-      getAllowedGroupIds(config.get('auth.entraId'))
-    )
+    const user = getUserProfile(claims)
+
+    try {
+      assertAllowedEntraGroups(
+        claims,
+        getAllowedGroupIds(config.get('auth.entraId'))
+      )
+    } catch (error) {
+      // The user signed in successfully but is not entitled to this service.
+      // A bare 403 leaves them stuck, because their Entra session is still
+      // live and signing in again silently repeats the same outcome.
+      request.logger.warn(
+        { userId: user.id, err: error },
+        'Entra user is not permitted to use this service'
+      )
+      request.yar.flash(NO_ACCESS_ACCOUNT_FLASH_KEY, user.email)
+
+      return h.redirect(AUTH_PATHS.NO_ACCESS)
+    }
 
     const sessionId = randomUUID()
-    const user = getUserProfile(claims)
 
     request.yar.reset()
     await setUserSession(request.server, sessionId, {
@@ -122,7 +197,20 @@ export const entraCallbackController = {
       'Entra user authenticated successfully'
     )
 
-    return h.redirect('/submission-welcome')
+    return h.redirect(returnTo ?? POST_SIGN_IN_PATH)
+  }
+}
+
+export const noAccessController = {
+  handler(request, h) {
+    const [account] = request.yar.flash(NO_ACCESS_ACCOUNT_FLASH_KEY)
+
+    return h
+      .view('auth/no-access', {
+        pageTitle: 'You do not have access to this service',
+        account
+      })
+      .code(statusCodes.forbidden)
   }
 }
 

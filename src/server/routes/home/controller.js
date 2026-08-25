@@ -1,9 +1,15 @@
+import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
+
 /**
- * A GDS styled example home page controller.
- * Provided as an example, remove or modify as required.
+ * The home page is the service's entry point for signed-out visitors. A signed
+ * in user has nothing to do here, so they go straight to their submissions.
  */
 export const homeController = {
-  handler(_request, h) {
+  handler(request, h) {
+    if (request.auth.isAuthenticated) {
+      return h.redirect(POST_SIGN_IN_PATH)
+    }
+
     return h.view('home/index', {
       pageTitle: 'Home',
       heading: 'Home'

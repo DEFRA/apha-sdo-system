@@ -8,6 +8,7 @@ import { router } from './plugins/router.js'
 import { config } from '#/config/config.js'
 import { pulse } from './plugins/pulse.js'
 import { catchAll } from './common/helpers/errors.js'
+import { setCacheControlHeaders } from './common/helpers/cache-control.js'
 import { nunjucksConfig } from '#/config/nunjucks/nunjucks.js'
 import { context } from '#/config/nunjucks/context/context.js'
 import { requestTracing } from './plugins/request-tracing.js'
@@ -115,6 +116,7 @@ export async function createServer() {
   })
 
   server.ext('onPreResponse', catchAll)
+  server.ext('onPreResponse', setCacheControlHeaders)
 
   return server
 }

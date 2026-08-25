@@ -45,6 +45,30 @@ public.
 Only a random session ID is stored in the browser. Tokens and identity claims
 are stored in the server-side cache: memory locally and Redis when deployed.
 
+### Session behaviour
+
+- Signing in returns the user to the page that sent them to sign in, rather
+  than always to `/submission-welcome`. The requested page is carried as a
+  `redirect` query parameter and, across the round trip to Entra, in a
+  short-lived `signInReturnTo` cookie. It is checked by `getSafeRedirect`
+  before use, so it can only ever point at a page within this service.
+- The sign-in pages and `/signed-out` send an already signed-in user on to
+  their destination instead of starting a second handshake.
+- Signing out is a `POST` carrying a CSRF crumb, so another site cannot end a
+  user's session by linking to it.
+- Pages are served `no-store`, so a signed-out user cannot use the browser's
+  back button to redisplay a previous user's name or report data.
+- The session cookie is `SameSite=Lax`. Only the OIDC state cookie is
+  `SameSite=None`, which it needs to survive Entra's cross-site `form_post`
+  callback on CDP.
+- `keepAlive` extends the cookie on each request, so the four hour lifetime
+  runs from the last request rather than from sign-in.
+- A user who authenticates but is not in an allowed group is sent to
+  `/no-access`, which names the account used and offers a sign-out so they can
+  try another one.
+- A failed token refresh only ends the session once the access token itself
+  has expired, so a brief Entra outage does not sign everyone out mid-report.
+
 ### Test authentication locally
 
 The local `.env` should use the values from `.env.example`. Do not put the DEV
