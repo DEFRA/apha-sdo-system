@@ -52,7 +52,7 @@ const submitArgs = (context, request) => [
   'someone@example.com',
   [{ name: 'field', title: 'Field', value: 'answer' }],
   {},
-  { slug: 'sdo-test' }
+  { slug: 'bat-rabies' }
 ]
 
 describe('#extractFileStates', () => {

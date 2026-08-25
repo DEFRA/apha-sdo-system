@@ -112,8 +112,10 @@ Do not put these values in source control, logs or tickets.
 2. Select **Defra Single Sign-on**.
 3. Sign in with a Defra or APHA account in the DefraDev tenant.
 4. Confirm you land on `/submission-welcome`.
-5. Open `/sdo-test` and confirm the protected form is available.
-6. In a private browser window, open `/sdo-test` directly and confirm it
+5. Select **Bat rabies report** and confirm the protected form at
+   `/bat-rabies` is available. Repeat for **Animal Health Regulations report**
+   at `/animal-health-regulations`.
+6. In a private browser window, open `/bat-rabies` directly and confirm it
    redirects to sign-in.
 7. Check the application logs. Cookies, authorization codes, secrets and
    tokens must not be present.
