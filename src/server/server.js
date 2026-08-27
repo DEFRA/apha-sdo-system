@@ -20,6 +20,8 @@ import { contentSecurityPolicy } from './plugins/content-security-policy.js'
 import { metrics } from '@defra/cdp-metrics'
 import { services } from './forms/services/index.js'
 import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
+import { ReportDatePageController } from './forms/controllers/report-date-page-controller.js'
+import { ReportFileUploadPageController } from './forms/controllers/report-file-upload-page-controller.js'
 import { openId } from './plugins/auth/open-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
 
@@ -76,8 +78,20 @@ export async function createServer() {
     router // Register all the controllers/routes defined in src/server/router.js
   ])
 
-  // Register the forms-engine-plugin, which serves the form journeys defined
-  // in src/server/forms/definitions at /{slug}
+  await registerFormsEngine(server)
+
+  server.ext('onPreResponse', catchAll)
+  server.ext('onPreResponse', setCacheControlHeaders)
+
+  return server
+}
+
+/**
+ * Serves the form journeys defined in src/server/forms/definitions at /{slug}.
+ * Custom page controllers are referenced by those definitions but not shipped
+ * with the plugin.
+ */
+async function registerFormsEngine(server) {
   await server.register({
     plugin: formsEnginePlugin,
     options: {
@@ -99,11 +113,9 @@ export async function createServer() {
        * submissions. See src/server/forms/services
        */
       services,
-      /**
-       * Custom page controllers referenced by form definitions but not
-       * shipped with the plugin
-       */
       controllers: {
+        ReportDatePageController,
+        ReportFileUploadPageController,
         SummaryPageWithConfirmationEmailController
       },
       /**
@@ -114,9 +126,4 @@ export async function createServer() {
       viewContext: context
     }
   })
-
-  server.ext('onPreResponse', catchAll)
-  server.ext('onPreResponse', setCacheControlHeaders)
-
-  return server
 }

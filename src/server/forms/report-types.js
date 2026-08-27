@@ -10,6 +10,8 @@
  * `title` is the report type's one label, used for the radio option, the form
  * title and the breadcrumb, so those cannot disagree with each other.
  *
+ * `kind` is the shorter name shown as "Submission kind" on check your answers.
+ *
  * IDs are hardcoded rather than generated so that form and page identifiers
  * stay stable across restarts and deployments.
  */
@@ -17,6 +19,7 @@ export const reportTypes = [
   {
     slug: 'bat-rabies',
     title: 'Bat rabies report',
+    kind: 'Bat rabies',
     optionHint: 'Upload a data file (CSV, XLS or XLSX)',
     ids: {
       form: 'b4c2d8e1-7f3a-4b96-9d05-8e6f1a2c3d40',
@@ -32,6 +35,7 @@ export const reportTypes = [
   {
     slug: 'animal-health-regulations',
     title: 'Animal Health Regulations report',
+    kind: 'Animal Health Regulation',
     optionHint: 'Upload a data file (CSV, XLS or XLSX)',
     ids: {
       form: '2f9a5c17-3b48-4e0d-9a61-c5d7e8f01234',

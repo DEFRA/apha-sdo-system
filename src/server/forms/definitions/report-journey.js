@@ -37,6 +37,7 @@ function createPages({ ids }) {
       id: ids.reportDatePage,
       path: '/report-date',
       title: 'Date of report',
+      controller: 'ReportDatePageController',
       components: [
         {
           id: ids.reportDateGuidance,
@@ -63,7 +64,7 @@ function createPages({ ids }) {
       id: ids.filesUploadPage,
       path: '/files-upload',
       title: 'Upload a report',
-      controller: 'FileUploadPageController',
+      controller: 'ReportFileUploadPageController',
       components: [
         {
           id: ids.filesUploadGuidance,
@@ -78,7 +79,7 @@ function createPages({ ids }) {
           name: 'supportingDocuments',
           title: 'Files upload',
           shortDescription: 'Supporting documents',
-          hint: 'Upload laboratory results spreadsheet. Only csv, xls and xlsx files are supported.',
+          hint: 'Only csv, xls and xlsx files are supported.',
           options: {
             required: true,
             accept: SPREADSHEET_MIME_TYPES

@@ -71,6 +71,31 @@ describe('#createReportJourney', () => {
     }
   )
 
+  test.each(journeys)(
+    'Should give $metadata.slug a submission kind for check your answers',
+    ({ reportType }) => {
+      expect(reportType.kind).toEqual(expect.any(String))
+      expect(reportType.kind.length).toBeGreaterThan(0)
+    }
+  )
+
+  test.each(journeys)(
+    'Should apply the report file name rule throughout $metadata.slug',
+    ({ definition }) => {
+      const controllers = new Map(
+        definition.pages.map((page) => [page.path, page.controller])
+      )
+
+      expect(controllers.get('/report-date')).toBe('ReportDatePageController')
+      expect(controllers.get('/files-upload')).toBe(
+        'ReportFileUploadPageController'
+      )
+      expect(controllers.get('/summary')).toBe(
+        'SummaryPageWithConfirmationEmailController'
+      )
+    }
+  )
+
   test('Should keep the field names consistent across journeys', () => {
     for (const { definition } of journeys) {
       const names = definition.pages.flatMap((page) =>
