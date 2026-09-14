@@ -97,5 +97,8 @@
     "vite": "8.0.16",
     "vitest": "4.1.8",
     "vitest-fetch-mock": "0.4.5"
+  },
+  "overrides": {
+    "maplibre-gl": "^6.4.1"
   }
 }
