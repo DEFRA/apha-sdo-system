@@ -23,8 +23,8 @@ import {
  * fields from their own claims, so nothing downstream depends on Entra.
  */
 
-const LAB_ROLE_PREFIX = 'Lab'
-const LAB_ROLE_SEPARATOR = '.'
+// Lab.<LAB>.<CODE>: exactly three dot-separated parts, none empty
+const LAB_ROLE_PATTERN = /^Lab\.([^.]+)\.([^.]+)$/
 
 /**
  * `Lab.<LAB>.<CODE>` split into its parts, or null when the value is not a
@@ -37,19 +37,15 @@ export function parseLabRole(role) {
     return null
   }
 
-  const parts = role.split(LAB_ROLE_SEPARATOR)
+  const match = LAB_ROLE_PATTERN.exec(role)
 
-  if (parts.length !== 3) {
+  if (!match) {
     return null
   }
 
-  const [prefix, lab, code] = parts
+  const [, lab, code] = match
 
-  if (prefix !== LAB_ROLE_PREFIX || !lab || !reportTypesByCode.has(code)) {
-    return null
-  }
-
-  return { lab, code }
+  return reportTypesByCode.has(code) ? { lab, code } : null
 }
 
 /**
