@@ -41,19 +41,49 @@ function buildFileState({
   }
 }
 
-function buildRequest() {
-  return { logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }
+const signedInUser = {
+  id: 'entra-oid',
+  name: 'A Person',
+  email: 'person@example.gov.uk',
+  organisationId: 'TestLab1',
+  journeys: ['BR']
 }
 
-const submitArgs = (context, request) => [
+function buildRequest({ user = signedInUser } = {}) {
+  return {
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    auth: user ? { credentials: { user } } : undefined
+  }
+}
+
+const reportDateAnswer = {
+  name: 'reportDate',
+  title: 'Report date',
+  value: 'March 2024'
+}
+
+const submitArgs = (
   context,
   request,
-  {},
-  'someone@example.com',
-  [{ name: 'field', title: 'Field', value: 'answer' }],
-  {},
-  { slug: 'bat-rabies' }
-]
+  {
+    items = [
+      reportDateAnswer,
+      { name: 'supportingDocuments', title: 'Files', value: 'Uploaded 1 file' }
+    ],
+    formMetadata = { slug: 'bat-rabies' }
+  } = {}
+) => [context, request, {}, 'someone@example.com', items, {}, formMetadata]
+
+/**
+ * The JSON written to {referenceNumber}/submission.json
+ */
+function uploadedSubmissionJson() {
+  const call = azureStorageService.uploadFile.mock.calls.find(
+    ([, , metadata]) => metadata.type === 'submission'
+  )
+
+  return JSON.parse(call[1].toString())
+}
 
 describe('#extractFileStates', () => {
   test('finds file states in top-level form state', () => {
@@ -160,6 +190,134 @@ describe('#outputService.submit', () => {
       'upload-1',
       expect.objectContaining({ status: 'transferred', fileId: 'file-1' })
     )
+  })
+
+  describe('submission.json contents', () => {
+    test('records who submitted what, for which lab, process and month', async () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: {
+          reportDate__month: 3,
+          reportDate__year: 2024,
+          supportingDocuments: [buildFileState({ filename: 'March2024.xlsx' })]
+        }
+      }
+      const request = buildRequest()
+
+      await outputService.submit(...submitArgs(context, request))
+
+      expect(uploadedSubmissionJson()).toEqual({
+        referenceNumber: 'REF-1',
+        form: 'bat-rabies',
+        processName: 'BR',
+        userId: 'entra-oid',
+        organisationId: 'TestLab1',
+        submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        fileName: 'March2024.xlsx',
+        fileNames: ['March2024.xlsx'],
+        reportMonthYear: 'March 2024',
+        notificationEmail: 'someone@example.com',
+        answers: [
+          reportDateAnswer,
+          {
+            name: 'supportingDocuments',
+            title: 'Files',
+            value: 'Uploaded 1 file'
+          }
+        ]
+      })
+    })
+
+    test('maps the journey slug to its process name', async () => {
+      const context = { referenceNumber: 'REF-1', relevantState: {} }
+
+      await outputService.submit(
+        ...submitArgs(context, buildRequest(), {
+          formMetadata: { slug: 'animal-health-regulations' }
+        })
+      )
+
+      expect(uploadedSubmissionJson()).toEqual(
+        expect.objectContaining({
+          form: 'animal-health-regulations',
+          processName: 'AHR'
+        })
+      )
+    })
+
+    test('lists every complete file and leaves fileName empty when there are several', async () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: {
+          supportingDocuments: [
+            buildFileState({
+              uploadId: 'upload-1',
+              filename: 'March2024-1.csv'
+            }),
+            buildFileState({
+              uploadId: 'upload-2',
+              fileId: 'file-2',
+              filename: 'March2024-2.csv'
+            }),
+            buildFileState({
+              uploadId: 'upload-3',
+              fileId: 'file-3',
+              filename: 'rejected.csv',
+              fileStatus: 'rejected'
+            })
+          ]
+        }
+      }
+
+      await outputService.submit(...submitArgs(context, buildRequest()))
+
+      expect(uploadedSubmissionJson()).toEqual(
+        expect.objectContaining({
+          fileName: null,
+          fileNames: ['March2024-1.csv', 'March2024-2.csv']
+        })
+      )
+    })
+
+    test('derives the report month from state when the answer is missing', async () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: { reportDate__month: '11', reportDate__year: '2023' }
+      }
+
+      await outputService.submit(
+        ...submitArgs(context, buildRequest(), { items: [] })
+      )
+
+      expect(uploadedSubmissionJson()).toEqual(
+        expect.objectContaining({
+          reportMonthYear: 'November 2023',
+          fileName: null,
+          fileNames: []
+        })
+      )
+    })
+
+    test('writes nulls rather than failing when identity or date are unavailable', async () => {
+      const context = { referenceNumber: 'REF-1', relevantState: {} }
+
+      await outputService.submit(
+        ...submitArgs(context, buildRequest({ user: null }), {
+          items: [],
+          formMetadata: null
+        })
+      )
+
+      expect(uploadedSubmissionJson()).toEqual(
+        expect.objectContaining({
+          form: null,
+          processName: null,
+          userId: null,
+          organisationId: null,
+          reportMonthYear: null
+        })
+      )
+    })
   })
 
   test("uses the S3 object's content type when the file state has none", async () => {

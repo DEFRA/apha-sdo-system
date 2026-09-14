@@ -12,16 +12,30 @@ function getCookieValue(response, name) {
   return cookie?.split(';')[0].split('=')[1]
 }
 
-describe('submission welcome routes', () => {
-  let server
-  const auth = {
+const NO_REPORT_TYPES_MESSAGE = 'not assigned to any report type'
+
+/**
+ * A signed-in session whose Entra roles grant the given journeys.
+ */
+function authWithJourneys(journeys) {
+  return {
     strategy: 'session',
     credentials: {
       sessionId: 'test-session',
-      user: { id: 'user-id', name: 'A Person' },
+      user: {
+        id: 'user-id',
+        name: 'A Person',
+        organisationId: 'TestLab1',
+        journeys
+      },
       claims: {}
     }
   }
+}
+
+describe('submission welcome routes', () => {
+  let server
+  const auth = authWithJourneys(['BR', 'AHR'])
 
   beforeAll(async () => {
     server = await createServer()
@@ -32,30 +46,30 @@ describe('submission welcome routes', () => {
     await server.stop({ timeout: 0 })
   })
 
-  async function postSubmissionWelcome(payload = {}) {
-    const getResponse = await server.inject({
+  function getSubmissionWelcome(authOverride = auth) {
+    return server.inject({
       method: 'GET',
       url: '/submission-welcome',
-      auth
+      auth: authOverride
     })
+  }
+
+  async function postSubmissionWelcome(payload = {}, authOverride = auth) {
+    const getResponse = await getSubmissionWelcome(authOverride)
     const crumb = getCookieValue(getResponse, 'crumb')
 
     return server.inject({
       method: 'POST',
       url: '/submission-welcome',
-      auth,
+      auth: authOverride,
       headers: { cookie: `crumb=${crumb}` },
       payload: { ...payload, crumb }
     })
   }
 
   describe('GET /submission-welcome', () => {
-    test('Should render a radio option for every report type', async () => {
-      const { result, statusCode } = await server.inject({
-        method: 'GET',
-        url: '/submission-welcome',
-        auth
-      })
+    test('Should render a radio option for every report type the user holds', async () => {
+      const { result, statusCode } = await getSubmissionWelcome()
 
       expect(statusCode).toBe(statusCodes.ok)
       expect(result).toEqual(expect.stringContaining('Submission Welcome'))
@@ -66,14 +80,54 @@ describe('submission welcome routes', () => {
           expect.stringContaining(`value="${reportType.slug}"`)
         )
       }
+
+      expect(result).not.toEqual(
+        expect.stringContaining(NO_REPORT_TYPES_MESSAGE)
+      )
+    })
+
+    test.each(reportTypes)(
+      'Should only offer $title to a user who holds just that journey',
+      async (allowed) => {
+        const { result, statusCode } = await getSubmissionWelcome(
+          authWithJourneys([allowed.code])
+        )
+
+        expect(statusCode).toBe(statusCodes.ok)
+        expect(result).toEqual(
+          expect.stringContaining(`value="${allowed.slug}"`)
+        )
+
+        for (const other of reportTypes.filter((r) => r !== allowed)) {
+          expect(result).not.toEqual(
+            expect.stringContaining(`value="${other.slug}"`)
+          )
+        }
+      }
+    )
+
+    test('Should explain when the user holds no report type', async () => {
+      const { result, statusCode } = await getSubmissionWelcome(
+        authWithJourneys([])
+      )
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(expect.stringContaining(NO_REPORT_TYPES_MESSAGE))
+
+      for (const reportType of reportTypes) {
+        expect(result).not.toEqual(
+          expect.stringContaining(`value="${reportType.slug}"`)
+        )
+      }
+
+      // The history option is not role-gated
+      expect(result).toEqual(
+        expect.stringContaining(`value="${VIEW_SUBMISSION_HISTORY}"`)
+      )
     })
 
     test('Should render the submission history option', async () => {
-      const { result, statusCode } = await server.inject({
-        method: 'GET',
-        url: '/submission-welcome',
-        auth
-      })
+      const { result, statusCode } = await getSubmissionWelcome()
 
       expect(statusCode).toBe(statusCodes.ok)
       expect(result).toEqual(
@@ -98,6 +152,16 @@ describe('submission welcome routes', () => {
         expect(headers.location).toBe(`/${slug}`)
       }
     )
+
+    test('Should redirect back when a report type the user does not hold is posted', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome(
+        { submissionAction: 'animal-health-regulations' },
+        authWithJourneys(['BR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
+    })
 
     test('Should do nothing when submission history is selected', async () => {
       const { statusCode, headers, result } = await postSubmissionWelcome({

@@ -36,7 +36,8 @@ authorization-code flow with PKCE.
 
 - Local development uses the OIDC stub on `http://localhost:5556`.
 - DEV uses the real `apha-sdo-system-dev` Entra registration.
-- External authentication is not implemented yet.
+- External authentication (Defra Customer Identity) is being built on a
+  separate branch and is not on `main` yet.
 
 Authentication is required for the form journeys. Health checks, static
 assets, the uploader callback, the home page and authentication routes remain
@@ -69,6 +70,75 @@ are stored in the server-side cache: memory locally and Redis when deployed.
 - A failed token refresh only ends the session once the access token itself
   has expired, so a brief Entra outage does not sign everyone out mid-report.
 
+### Report access (Entra app roles)
+
+Which lab a user belongs to and which report types they may submit come from
+Entra **app roles** on the app registration, named:
+
+```text
+Lab.<LAB>.<CODE>      e.g. Lab.TestLab1.BR, Lab.TestLab1.AHR
+```
+
+`<LAB>` is the lab code and `<CODE>` is a report type code from
+`src/server/forms/report-types.js` (`BR` for Bat rabies, `AHR` for Animal
+Health Regulations). One security group per lab per report type is assigned
+to the matching role, so a person who does both journeys for a lab is in two
+groups and receives two roles. Entra emits assigned app roles in the ID
+token's `roles` claim without any token-configuration change.
+
+On every request the session user is rebuilt from the token claims
+(`getUserProfile` in `src/server/auth/authorization.js`), which parses the
+roles into:
+
+- `organisationId`: the lab code (`TestLab1`)
+- `journeys`: the report type codes granted (`['BR']`, `['BR', 'AHR']` or `[]`)
+
+The same two fields will be filled from Defra Customer Identity claims for
+external users, so nothing downstream depends on the identity provider.
+
+What the user sees:
+
+- `/submission-welcome` only offers the report types in `journeys`. With none,
+  it explains that no report type is assigned to the account.
+- Opening a journey URL directly (`/bat-rabies`, `/animal-health-regulations`
+  and their pages) without the matching role is caught by an `onPostAuth`
+  extension (`restrictReportJourneys` in `src/server/auth/report-access.js`)
+  and lands on `/no-access`, naming the report type. The session stays valid.
+- Roles for more than one lab are refused (no lab, no journeys) and logged as a
+  warning at sign-in; choosing a lab is not supported yet.
+
+A group membership change takes effect at the next token refresh. The
+successful sign-in log line records `organisationId` and `journeys`, so a DEV
+sign-in confirms from the logs that the groups are wired to the right roles.
+
+Adding a report type means adding an entry with a new `code` to
+`report-types.js` and a matching `Lab.<LAB>.<CODE>` role per lab in Entra.
+Adding a lab means two app roles and two groups; no code or configuration
+change.
+
+#### DEV test setup
+
+The `apha-sdo-system-dev` registration defines `Lab.TestLab1.BR` and
+`Lab.TestLab1.AHR`, assigned from the groups `AG-APHA-SDO-DEV-TESTLAB1-BR` and
+`AG-APHA-SDO-DEV-TESTLAB1-AHR`. Real labs follow `AG-APHA-SDO-<LAB>-<BR|AHR>`
+without the environment in the name. Group members must be direct members;
+Entra does not honour nested groups for app assignment. "Assignment required"
+stays on, so anyone outside the groups is refused by Entra before reaching the
+service.
+
+#### Report access locally
+
+The OIDC stub signs its user in with the roles in `OIDC_STUB_ROLES` (default
+`Lab.LocalLab.BR,Lab.LocalLab.AHR`, both journeys). To see the other cases:
+
+```bash
+OIDC_STUB_ROLES=Lab.LocalLab.BR npm run auth:stub   # BR only
+OIDC_STUB_ROLES= npm run auth:stub                  # no report access
+```
+
+With `npm run docker:up`, set `OIDC_STUB_ROLES` in `.env` instead (Compose
+reads it) and recreate the `oidc-stub` service.
+
 ### Test authentication locally
 
 The local `.env` should use the values from `.env.example`. Do not put the DEV
@@ -95,10 +165,10 @@ The tenant, client ID and callback combination has been checked against Entra:
 - Callback:
   `https://apha-sdo-system.dev.cdp-int.defra.cloud/signin-entra-id`
 
-`Assignment required` is currently set to **No**. For the first smoke test we
-will deliberately allow any user authenticated by the fixed DefraDev tenant.
-This is temporary and must be replaced with group authorization before wider
-testing.
+`Assignment required` is set to **Yes** on the Enterprise Application, so only
+members of the groups assigned to it (the `AG-APHA-SDO-DEV-TESTLAB1-*` lab
+groups) can sign in. The service itself runs in `tenant-only` mode and does
+not check group membership again; report access comes from the app roles.
 
 The remaining checks before deployment are:
 
@@ -148,11 +218,15 @@ If sign-in fails, record the Entra `AADSTS` code, callback error and
 application correlation ID.
 
 After this first test succeeds, complete the logout, denied-user, token
-refresh and multi-instance Redis tests. Then change authorization to `groups`,
-set `AUTH_ENTRA_ID_ALLOWED_GROUP_IDS` to the approved group object IDs and
-configure Entra to include group claims in the ID token. Environment variables
-alone cannot provide group membership. DEV can move from a client secret to
-web identity once its federated credential is available.
+refresh and multi-instance Redis tests.
+
+Who may sign in is decided by Entra's "Assignment required" setting on the
+Enterprise Application, and what they may submit by the app roles described
+in [Report access](#report-access-entra-app-roles). Neither needs
+`AUTH_ENTRA_ID_AUTHORIZATION_MODE=groups` or a groups claim; `groups` mode
+remains available as an additional allow-list if ever needed. DEV can move
+from a client secret to web identity once its federated credential is
+available.
 
 ## Sessions and Redis
 
@@ -170,6 +244,45 @@ file, stores clean files in S3 and calls this service at `/file`.
 
 Local configuration is in `.env.example`. The local mock scanner rejects
 filenames containing `virus`.
+
+### Submission output
+
+On submit, `src/server/forms/services/output-service.js` copies each scanned
+file from S3 to the Azure container as `{referenceNumber}/{filename}` and
+writes `{referenceNumber}/submission.json` alongside:
+
+```json
+{
+  "referenceNumber": "AB12-CD34-EF56",
+  "form": "bat-rabies",
+  "processName": "BR",
+  "userId": "<Entra object ID>",
+  "organisationId": "TestLab1",
+  "submittedAt": "2026-09-09T10:30:00.000Z",
+  "fileName": "March2025.csv",
+  "fileNames": ["March2025.csv"],
+  "reportMonthYear": "March 2025",
+  "notificationEmail": "sdo@apha.gov.uk",
+  "answers": [
+    { "name": "reportDate", "title": "Report date", "value": "March 2025" },
+    {
+      "name": "supportingDocuments",
+      "title": "Supporting documents",
+      "value": "Uploaded 1 file"
+    }
+  ]
+}
+```
+
+- `processName` is the report type `code` for the journey slug in `form`.
+- `userId` and `organisationId` come from the signed-in user's session:
+  the Entra object ID and the lab code from the app roles. For external users
+  they will be the Defra Customer Identity contact ID and organisation ID.
+- `fileNames` lists every file the uploader completed; `fileName` is set only
+  when there is exactly one, otherwise `null`.
+- `reportMonthYear` is the report date exactly as shown on check your answers.
+
+Locally, Azurite receives the same blobs (see `AZURE_*` in `.env.example`).
 
 ## CDP proxy
 

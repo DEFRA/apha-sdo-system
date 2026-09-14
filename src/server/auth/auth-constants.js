@@ -32,3 +32,10 @@ export const RETURN_TO_COOKIE_NAME = 'signInReturnTo'
  * that triggered it.
  */
 export const RETURN_TO_QUERY_PARAM = 'redirect'
+
+/**
+ * Flash message set when a signed-in user opens a report journey their Entra
+ * roles do not grant, so /no-access can name the report type rather than the
+ * service as a whole.
+ */
+export const NO_ACCESS_REPORT_TYPE_FLASH_KEY = 'noAccessReportType'

@@ -5,21 +5,32 @@
 {% block content %}
   <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
 
-  {% if account %}
+  {% if reportType %}
     <p class="govuk-body">
-      You signed in as <strong>{{ account }}</strong>, which is not a member of
-      a group that can use this service.
+      Your account is not assigned to <strong>{{ reportType }}</strong>
+      submissions.
+    </p>
+    <p class="govuk-body">
+      Ask your APHA administrator to request access to this report type, or
+      <a href="/submission-welcome" class="govuk-link">go back to the report types you can submit</a>.
     </p>
   {% else %}
+    {% if account %}
+      <p class="govuk-body">
+        You signed in as <strong>{{ account }}</strong>, which is not a member of
+        a group that can use this service.
+      </p>
+    {% else %}
+      <p class="govuk-body">
+        The account you signed in with is not a member of a group that can use
+        this service.
+      </p>
+    {% endif %}
+
     <p class="govuk-body">
-      The account you signed in with is not a member of a group that can use
-      this service.
+      Ask your APHA administrator to request access for your account.
     </p>
   {% endif %}
-
-  <p class="govuk-body">
-    Ask your APHA administrator to request access for your account.
-  </p>
 
   <h2 class="govuk-heading-m">If you have another account</h2>
 

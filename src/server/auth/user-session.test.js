@@ -45,7 +45,8 @@ const claims = {
   oid: 'user-id',
   name: 'A Person',
   preferred_username: 'person@example.gov.uk',
-  groups: ['local-dev-group']
+  groups: ['local-dev-group'],
+  roles: ['Lab.TestLab1.BR']
 }
 
 const session = {
@@ -59,7 +60,10 @@ const session = {
     id: 'user-id',
     name: 'A Person',
     email: 'person@example.gov.uk',
-    groups: ['local-dev-group']
+    groups: ['local-dev-group'],
+    roles: ['Lab.TestLab1.BR'],
+    organisationId: 'TestLab1',
+    journeys: ['BR']
   }
 }
 

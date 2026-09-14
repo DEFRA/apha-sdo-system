@@ -49,6 +49,8 @@ services:
     command: node scripts/oidc-stub.js
     environment:
       OIDC_STUB_HOST: 0.0.0.0
+      # Entra app roles the stub user holds, e.g. Lab.LocalLab.BR for BR only
+      OIDC_STUB_ROLES: ${OIDC_STUB_ROLES-Lab.LocalLab.BR,Lab.LocalLab.AHR}
     ports:
       - '5556:5556'
     healthcheck:

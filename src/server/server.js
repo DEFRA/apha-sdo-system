@@ -24,6 +24,7 @@ import { ReportDatePageController } from './forms/controllers/report-date-page-c
 import { ReportFileUploadPageController } from './forms/controllers/report-file-upload-page-controller.js'
 import { openId } from './plugins/auth/open-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
+import { restrictReportJourneys } from './auth/report-access.js'
 
 export async function createServer() {
   const server = hapi.server({
@@ -80,6 +81,10 @@ export async function createServer() {
 
   await registerFormsEngine(server)
 
+  // Journeys are served by the forms-engine, so which report types a user may
+  // open is enforced here, once the session has been validated, rather than
+  // inside its routes.
+  server.ext('onPostAuth', restrictReportJourneys)
   server.ext('onPreResponse', catchAll)
   server.ext('onPreResponse', setCacheControlHeaders)
 

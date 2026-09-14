@@ -1,3 +1,5 @@
+import { vi } from 'vitest'
+
 import {
   assertAllowedEntraGroups,
   getAllowedGroupIds,
@@ -62,13 +64,17 @@ describe('getUserProfile', () => {
         oid: 'user-id',
         name: 'A Person',
         preferred_username: 'person@example.gov.uk',
-        groups: ['group-id']
+        groups: ['group-id'],
+        roles: ['Lab.TestLab1.BR']
       })
     ).toEqual({
       id: 'user-id',
       name: 'A Person',
       email: 'person@example.gov.uk',
-      groups: ['group-id']
+      groups: ['group-id'],
+      roles: ['Lab.TestLab1.BR'],
+      organisationId: 'TestLab1',
+      journeys: ['BR']
     })
   })
 
@@ -79,7 +85,26 @@ describe('getUserProfile', () => {
       id: 'subject',
       name: '',
       email: 'email@example.gov.uk',
-      groups: []
+      groups: [],
+      roles: [],
+      organisationId: null,
+      journeys: []
     })
+  })
+
+  test('reports roles spanning several labs through the given logger', () => {
+    const logger = { warn: vi.fn() }
+
+    const profile = getUserProfile(
+      { oid: 'user-id', roles: ['Lab.TestLab1.BR', 'Lab.TestLab2.AHR'] },
+      { logger }
+    )
+
+    expect(profile.organisationId).toBeNull()
+    expect(profile.journeys).toEqual([])
+    expect(logger.warn).toHaveBeenCalledWith(
+      { labs: ['TestLab1', 'TestLab2'] },
+      expect.stringContaining('more than one lab')
+    )
   })
 })
