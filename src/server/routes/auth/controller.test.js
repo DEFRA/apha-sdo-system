@@ -377,6 +377,62 @@ describe('auth routes', () => {
       expect(response.statusCode).toBe(statusCodes.forbidden)
       expect(response.result).toContain('not a member of a group')
     })
+
+    test('keeps a user out of a report journey their roles do not grant', async () => {
+      const { response, cookie } = await signIn({
+        roles: ['Lab.TestLab1.BR']
+      })
+      const cookies = [cookie, getCookiePair(response, 'session')].join('; ')
+
+      const allowedResponse = await server.inject({
+        url: '/bat-rabies',
+        headers: { cookie: cookies }
+      })
+
+      expect(allowedResponse.headers.location).not.toBe('/no-access')
+
+      const refusedResponse = await server.inject({
+        url: '/animal-health-regulations/report-date',
+        headers: { cookie: cookies }
+      })
+
+      expect(refusedResponse.statusCode).toBe(statusCodes.redirect)
+      expect(refusedResponse.headers.location).toBe('/no-access')
+
+      const noAccessResponse = await server.inject({
+        url: '/no-access',
+        headers: {
+          cookie: [
+            cookie,
+            getCookiePair(refusedResponse, 'session') ??
+              getCookiePair(response, 'session')
+          ].join('; ')
+        }
+      })
+
+      expect(noAccessResponse.statusCode).toBe(statusCodes.forbidden)
+      expect(noAccessResponse.result).toContain(
+        'You do not have access to this report type'
+      )
+      expect(noAccessResponse.result).toContain(
+        'Animal Health Regulations report'
+      )
+      // The session is intact: this is about one report type, not the service
+      expect(noAccessResponse.result).toContain('/submission-welcome')
+    })
+
+    test('tells a user without lab roles that no report type is assigned', async () => {
+      const { cookie } = await signIn({ roles: ['Viewer'] })
+
+      const response = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(response.statusCode).toBe(statusCodes.ok)
+      expect(response.result).toContain('not assigned to any report type')
+      expect(response.result).not.toContain('value="bat-rabies"')
+    })
   })
 
   describe('session protection and logout', () => {

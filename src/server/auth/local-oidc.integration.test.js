@@ -26,7 +26,8 @@ describe('local OIDC stub', () => {
         sub: 'local-user-id',
         name: 'Local Stub User',
         preferred_username: 'local.stub@defra.gov.uk',
-        groups: ['local-dev-group']
+        groups: ['local-dev-group'],
+        roles: ['Lab.LocalLab.BR']
       })
     })
     await oidcServer.start(port, 'localhost')
@@ -78,6 +79,11 @@ describe('local OIDC stub', () => {
 
     expect(protectedResponse.statusCode).toBe(200)
     expect(protectedResponse.result).toContain('Sign out')
+    // The roles claim in the signed token decides which journeys are offered
+    expect(protectedResponse.result).toContain('value="bat-rabies"')
+    expect(protectedResponse.result).not.toContain(
+      'value="animal-health-regulations"'
+    )
 
     const crumb = getCookieHeader(protectedResponse, 'crumb')?.split('=')[1]
     const signOutResponse = await appServer.inject({

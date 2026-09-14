@@ -43,13 +43,11 @@ export function reportDateFromState(state) {
 }
 
 /**
- * The month-year token a report file name must include, or undefined when the
- * date is missing or unusable. Callers treat undefined as "nothing to validate
- * against", which is what happens on preview URL direct access or if the
- * report date page has not been answered yet.
+ * The month name and year of a report date, or undefined when the date is
+ * missing or unusable.
  * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
  */
-export function expectedReportFileName(reportDate) {
+function reportDateParts(reportDate) {
   const month = Number(reportDate?.month)
   const year = Number(reportDate?.year)
 
@@ -61,7 +59,32 @@ export function expectedReportFileName(reportDate) {
     return undefined
   }
 
-  return `${MONTH_NAMES[month - 1]}${year}`
+  return { monthName: MONTH_NAMES[month - 1], year }
+}
+
+/**
+ * The month-year token a report file name must include, or undefined when the
+ * date is missing or unusable. Callers treat undefined as "nothing to validate
+ * against", which is what happens on preview URL direct access or if the
+ * report date page has not been answered yet.
+ * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
+ */
+export function expectedReportFileName(reportDate) {
+  const parts = reportDateParts(reportDate)
+
+  return parts && `${parts.monthName}${parts.year}`
+}
+
+/**
+ * The report date as the engine displays it on check your answers, e.g.
+ * "March 2024". Used for submission.json when the answer itself is not to
+ * hand.
+ * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
+ */
+export function reportMonthYearLabel(reportDate) {
+  const parts = reportDateParts(reportDate)
+
+  return parts && `${parts.monthName} ${parts.year}`
 }
 
 /**

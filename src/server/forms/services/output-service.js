@@ -2,6 +2,15 @@ import { config } from '#/config/config.js'
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
+import { reportTypesBySlug } from '../report-types.js'
+import {
+  reportDateFromState,
+  reportMonthYearLabel,
+  uploadedFileName
+} from '../validation/report-file-name.js'
+
+// Every report journey names its MonthYearField this (see report-journey.js)
+const REPORT_DATE_ANSWER_NAME = 'reportDate'
 
 // A FileUploadField value in form state is a FileState[]: each entry holds
 // the raw cdp-uploader status response, where status.form.file carries
@@ -128,19 +137,60 @@ async function transferFileToAzure(fileState, referenceNumber, logger) {
   }
 }
 
-async function uploadSubmissionJson(
+// Only files the uploader finished with are transferred, so only those are
+// named in submission.json.
+function isCompleteFile(fileState) {
+  return fileState.status.form?.file?.fileStatus === 'complete'
+}
+
+// "March 2024": the value shown for the report date on check your answers.
+// Taken from the answer itself so the two can never differ; state is only a
+// fallback for a journey that somehow reached submit without that answer.
+function reportMonthYearOf(answers, state) {
+  return (
+    answers.find((answer) => answer.name === REPORT_DATE_ANSWER_NAME)?.value ??
+    reportMonthYearLabel(reportDateFromState(state)) ??
+    null
+  )
+}
+
+/**
+ * The record written alongside the data files. Its top-level fields are the
+ * ones the downstream submissions table is built from: who (userId), for
+ * which lab (organisationId), which process (BR/AHR), for which month, and
+ * which files. `form` is the journey slug and predates `processName`.
+ */
+function buildSubmission({
   referenceNumber,
-  formSlug,
+  formMetadata,
+  user,
   answers,
+  fileStates,
+  state,
   emailAddress
-) {
-  const submission = {
+}) {
+  const fileNames = fileStates
+    .filter(isCompleteFile)
+    .map(uploadedFileName)
+    .filter(Boolean)
+
+  return {
     referenceNumber,
-    form: formSlug,
-    notificationEmail: emailAddress,
+    form: formMetadata?.slug ?? null,
+    processName: reportTypesBySlug.get(formMetadata?.slug)?.code ?? null,
+    userId: user?.id ?? null,
+    organisationId: user?.organisationId ?? null,
     submittedAt: new Date().toISOString(),
+    fileName: fileNames.length === 1 ? fileNames[0] : null,
+    fileNames,
+    reportMonthYear: reportMonthYearOf(answers, state),
+    notificationEmail: emailAddress,
     answers
   }
+}
+
+async function uploadSubmissionJson(submission) {
+  const { referenceNumber } = submission
 
   await azureStorageService.uploadFile(
     `${referenceNumber}-submission`,
@@ -162,7 +212,8 @@ async function uploadSubmissionJson(
  * When Azure Blob Storage is enabled, scanned files are copied from the S3
  * staging bucket (where the cdp-uploader delivered them) to the Azure
  * container under {referenceNumber}/{filename}, together with a
- * {referenceNumber}/submission.json holding the form answers.
+ * {referenceNumber}/submission.json holding the form answers and the
+ * submission metadata (see buildSubmission).
  */
 export const outputService = {
   async submit(
@@ -175,19 +226,33 @@ export const outputService = {
     formMetadata
   ) {
     const { referenceNumber } = context
+    const fileStates = extractFileStates(context.relevantState)
 
-    const answers = items.map((item) => ({
-      name: item.name,
-      title: item.title,
-      value: item.value
-    }))
+    const submission = buildSubmission({
+      referenceNumber,
+      formMetadata,
+      user: request.auth?.credentials?.user,
+      answers: items.map((item) => ({
+        name: item.name,
+        title: item.title,
+        value: item.value
+      })),
+      fileStates,
+      state: context.relevantState,
+      emailAddress
+    })
 
     request.logger.info(
       {
-        form: formMetadata?.slug,
+        form: submission.form,
+        processName: submission.processName,
         referenceNumber,
+        userId: submission.userId,
+        organisationId: submission.organisationId,
+        reportMonthYear: submission.reportMonthYear,
+        fileNames: submission.fileNames,
         notificationEmail: emailAddress,
-        answers
+        answers: submission.answers
       },
       'Form submission received'
     )
@@ -196,7 +261,6 @@ export const outputService = {
       return
     }
 
-    const fileStates = extractFileStates(context.relevantState)
     let transferredFiles = 0
 
     for (const fileState of fileStates) {
@@ -211,12 +275,7 @@ export const outputService = {
       }
     }
 
-    await uploadSubmissionJson(
-      referenceNumber,
-      formMetadata?.slug,
-      answers,
-      emailAddress
-    )
+    await uploadSubmissionJson(submission)
 
     request.logger.info(
       {

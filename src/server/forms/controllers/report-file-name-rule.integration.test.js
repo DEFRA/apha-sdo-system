@@ -79,7 +79,12 @@ describe('report file name rule (end to end)', () => {
     strategy: 'session',
     credentials: {
       sessionId: 'test-session',
-      user: { id: 'user-id', name: 'A Person' },
+      user: {
+        id: 'user-id',
+        name: 'A Person',
+        organisationId: 'TestLab1',
+        journeys: ['BR', 'AHR']
+      },
       claims: {}
     }
   }

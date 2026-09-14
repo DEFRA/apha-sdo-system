@@ -9,6 +9,7 @@ import {
 } from '#/server/auth/authorization.js'
 import {
   AUTH_PATHS,
+  NO_ACCESS_REPORT_TYPE_FLASH_KEY,
   POST_SIGN_IN_PATH,
   RETURN_TO_COOKIE_NAME,
   RETURN_TO_QUERY_PARAM,
@@ -162,7 +163,7 @@ export const entraCallbackController = {
     }
 
     const claims = token.claims ?? {}
-    const user = getUserProfile(claims)
+    const user = getUserProfile(claims, { logger: request.logger })
 
     try {
       assertAllowedEntraGroups(
@@ -192,8 +193,15 @@ export const entraCallbackController = {
       yarId: request.yar.id
     })
     request.cookieAuth.set({ sessionId })
+    // organisationId and journeys are the parsed app roles. Logging them is
+    // how a DEV sign-in confirms the Entra groups are wired to the right
+    // roles without anyone having to submit a report.
     request.logger.info(
-      { userId: user.id },
+      {
+        userId: user.id,
+        organisationId: user.organisationId,
+        journeys: user.journeys
+      },
       'Entra user authenticated successfully'
     )
 
@@ -201,14 +209,23 @@ export const entraCallbackController = {
   }
 }
 
+/**
+ * Two situations end here: an account outside the service's groups (set at
+ * sign-in, names the account) and a signed-in user opening a report journey
+ * their roles do not grant (set by restrictReportJourneys, names the report).
+ */
 export const noAccessController = {
   handler(request, h) {
     const [account] = request.yar.flash(NO_ACCESS_ACCOUNT_FLASH_KEY)
+    const [reportType] = request.yar.flash(NO_ACCESS_REPORT_TYPE_FLASH_KEY)
 
     return h
       .view('auth/no-access', {
-        pageTitle: 'You do not have access to this service',
-        account
+        pageTitle: reportType
+          ? 'You do not have access to this report type'
+          : 'You do not have access to this service',
+        account,
+        reportType
       })
       .code(statusCodes.forbidden)
   }

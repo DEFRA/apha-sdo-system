@@ -3,6 +3,7 @@
 {% from "govuk/components/radios/macro.njk" import govukRadios %}
 {% from "govuk/components/button/macro.njk" import govukButton %}
 {% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+{% from "govuk/components/inset-text/macro.njk" import govukInsetText %}
 
 {% block content %}
   {% if error %}
@@ -25,6 +26,12 @@
       <p class="govuk-body">
         Use this service to submit veterinary surveillance data to APHA.
       </p>
+
+      {% if not hasReportTypes %}
+        {{ govukInsetText({
+          text: "Your account is not assigned to any report type. Ask your APHA administrator to request access."
+        }) }}
+      {% endif %}
 
       <form method="post" action="/submission-welcome" novalidate>
         <input type="hidden" name="crumb" value="{{ crumb }}">

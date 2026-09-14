@@ -12,12 +12,18 @@
  *
  * `kind` is the shorter name shown as "Submission kind" on check your answers.
  *
+ * `code` is the report type's identifier outside this service: it is the
+ * suffix of the Entra app role that grants access to the journey
+ * (Lab.<LAB>.<code>, see src/server/auth/report-access.js) and the
+ * `processName` written to submission.json, so the two cannot drift.
+ *
  * IDs are hardcoded rather than generated so that form and page identifiers
  * stay stable across restarts and deployments.
  */
 export const reportTypes = [
   {
     slug: 'bat-rabies',
+    code: 'BR',
     title: 'Bat rabies report',
     kind: 'Bat rabies',
     optionHint: 'Upload a data file (CSV, XLS or XLSX)',
@@ -34,6 +40,7 @@ export const reportTypes = [
   },
   {
     slug: 'animal-health-regulations',
+    code: 'AHR',
     title: 'Animal Health Regulations report',
     kind: 'Animal Health Regulation',
     optionHint: 'Upload a data file (CSV, XLS or XLSX)',
@@ -52,4 +59,8 @@ export const reportTypes = [
 
 export const reportTypesBySlug = new Map(
   reportTypes.map((reportType) => [reportType.slug, reportType])
+)
+
+export const reportTypesByCode = new Map(
+  reportTypes.map((reportType) => [reportType.code, reportType])
 )
