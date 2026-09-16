@@ -124,6 +124,16 @@ describe('#createReportJourney', () => {
     }
   )
 
+  test.each(journeys)(
+    'Should show the reference number, and no feedback link, when $metadata.slug is submitted',
+    ({ definition }) => {
+      expect(definition.options).toEqual({
+        showReferenceNumber: true,
+        disableUserFeedback: true
+      })
+    }
+  )
+
   test('Should not reuse an identifier across journeys', () => {
     const ids = journeys.flatMap(idsOf)
 

@@ -1,3 +1,4 @@
+import { config } from '#/config/config.js'
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 
@@ -127,6 +128,10 @@ describe('report file name rule (end to end)', () => {
   }
 
   beforeAll(async () => {
+    // The forms engine loads the developer's .env on import, which may switch
+    // the Azure transfer on. Submitting here must not reach for S3 or Redis.
+    config.set('azure.storage.enabled', false)
+
     server = await createServer()
     await server.initialize()
   })
@@ -231,5 +236,38 @@ describe('report file name rule (end to end)', () => {
     expect(invalidatedPage.result).toContain(
       'The file name must include April2024, for example April2024.xlsx or April2024-1.xlsx<br>Only csv, xls and xlsx files are supported.'
     )
+  })
+
+  test('Should confirm the submission with its reference number', async () => {
+    uploader.nothingUploadedYet()
+
+    await post(`/${SLUG}/report-date`, {
+      reportDate__month: '5',
+      reportDate__year: '2024'
+    })
+
+    uploader.scannedFile('May2024.xlsx')
+    const uploadPage = await get(`/${SLUG}/files-upload`)
+    uploader.nothingUploadedYet()
+    expect(uploadPage.result).toContain('1 file uploaded')
+
+    const continued = await post(`/${SLUG}/files-upload`, {})
+    expect(continued.headers.location).toBe(`/${SLUG}/summary`)
+
+    const summaryPage = await get(`/${SLUG}/summary`)
+    expect(summaryPage.statusCode).toBe(statusCodes.ok)
+
+    const submitted = await post(`/${SLUG}/summary`, {})
+    expect(submitted.statusCode).toBe(statusCodes.seeOther)
+    expect(submitted.headers.location).toBe(`/${SLUG}/status`)
+
+    // The same confirmation as the web form: the reference to quote, and no
+    // link to the engine's feedback form, which this service does not serve
+    const statusPage = await get(`/${SLUG}/status`)
+    expect(statusPage.statusCode).toBe(statusCodes.ok)
+    expect(statusPage.result).toMatch(
+      /Your reference number<br><strong>[^<\s]+<\/strong>/
+    )
+    expect(statusPage.result).not.toContain('/form/feedback')
   })
 })

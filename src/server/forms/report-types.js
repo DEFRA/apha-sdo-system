@@ -17,6 +17,14 @@
  * (Lab.<LAB>.<code>, see src/server/auth/report-access.js) and the
  * `processName` written to submission.json, so the two cannot drift.
  *
+ * `webFormSlug`, when present, is a second journey for the same report type
+ * in which the data is typed into a web form instead of uploaded as a file
+ * (see src/server/forms/definitions/animal-health-regulations-web-form.js).
+ * Such a report type gets a "How would you like to report" screen at
+ * /{slug}/how-to-report before either journey starts. Both slugs resolve to
+ * the report type in `reportTypesBySlug`, so access control, breadcrumbs and
+ * the submission output treat the two journeys alike.
+ *
  * IDs are hardcoded rather than generated so that form and page identifiers
  * stay stable across restarts and deployments.
  */
@@ -40,10 +48,11 @@ export const reportTypes = [
   },
   {
     slug: 'animal-health-regulations',
+    webFormSlug: 'animal-health-regulations-web-form',
     code: 'AHR',
     title: 'Animal Health Regulations report',
     kind: 'Animal Health Regulation',
-    optionHint: 'Upload a data file (CSV, XLS or XLSX)',
+    optionHint: 'Upload a data file (CSV, XLS or XLSX) or complete a web form',
     ids: {
       form: '2f9a5c17-3b48-4e0d-9a61-c5d7e8f01234',
       reportDatePage: '5c1e7a92-8d34-4b6f-a0c8-1e2f3a4b5c6d',
@@ -57,8 +66,21 @@ export const reportTypes = [
   }
 ]
 
+/**
+ * The slugs a report type is served under: the upload journey and, when it
+ * offers one, the web form journey.
+ * @param {{ slug: string, webFormSlug?: string }} reportType - an entry of the registry
+ * @returns {string[]}
+ */
+export function journeySlugsOf(reportType) {
+  return [reportType.slug, reportType.webFormSlug].filter(Boolean)
+}
+
+// Every journey slug, upload or web form, resolves to its report type
 export const reportTypesBySlug = new Map(
-  reportTypes.map((reportType) => [reportType.slug, reportType])
+  reportTypes.flatMap((reportType) =>
+    journeySlugsOf(reportType).map((slug) => [slug, reportType])
+  )
 )
 
 export const reportTypesByCode = new Map(

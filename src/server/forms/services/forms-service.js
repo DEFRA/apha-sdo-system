@@ -1,5 +1,6 @@
 import Boom from '@hapi/boom'
 
+import * as animalHealthRegulationsWebForm from '../definitions/animal-health-regulations-web-form.js'
 import * as exampleApplication from '../definitions/example-application.js'
 import { createReportJourney } from '../definitions/report-journey.js'
 import { reportTypes } from '../report-types.js'
@@ -7,9 +8,15 @@ import { reportTypes } from '../report-types.js'
 /**
  * Register new forms here. Each entry exposes `metadata` and `definition`
  * (see src/server/forms/definitions/example-application.js). The report
- * submission journeys are generated from src/server/forms/report-types.js.
+ * upload journeys are generated from src/server/forms/report-types.js; the
+ * AHR web form is the alternative journey named by that report type's
+ * `webFormSlug`.
  */
-const forms = [exampleApplication, ...reportTypes.map(createReportJourney)]
+const forms = [
+  exampleApplication,
+  ...reportTypes.map(createReportJourney),
+  animalHealthRegulationsWebForm
+]
 
 const formsBySlug = new Map(forms.map((form) => [form.metadata.slug, form]))
 const formsById = new Map(forms.map((form) => [form.metadata.id, form]))

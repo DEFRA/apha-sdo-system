@@ -11,10 +11,31 @@ import {
   AUTH_PATHS,
   NO_ACCESS_REPORT_TYPE_FLASH_KEY
 } from './auth-constants.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  journeySlugsOf,
+  reportTypes,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 
 const batRabies = reportTypesBySlug.get('bat-rabies')
 const ahr = reportTypesBySlug.get('animal-health-regulations')
+
+describe('reportTypesBySlug', () => {
+  test('resolves the upload and the web form journey to the same report type', () => {
+    expect(ahr.webFormSlug).toBe('animal-health-regulations-web-form')
+    expect(reportTypesBySlug.get(ahr.webFormSlug)).toBe(ahr)
+    expect(journeySlugsOf(ahr)).toEqual([ahr.slug, ahr.webFormSlug])
+  })
+
+  test('has one entry per journey slug', () => {
+    const slugs = reportTypes.flatMap(journeySlugsOf)
+
+    expect(batRabies.webFormSlug).toBeUndefined()
+    expect(journeySlugsOf(batRabies)).toEqual([batRabies.slug])
+    expect(new Set(slugs).size).toBe(slugs.length)
+    expect([...reportTypesBySlug.keys()]).toEqual(slugs)
+  })
+})
 
 describe('parseLabRole', () => {
   test('splits a lab role into lab and report type code', () => {
@@ -191,6 +212,31 @@ describe('restrictReportJourneys', () => {
     const h = createToolkit()
 
     expect(restrictReportJourneys(request, h)).toBe(h.response)
+  })
+
+  test('guards the web form journey with the same role as the upload journey', () => {
+    const granted = createRequest({
+      slug: ahr.webFormSlug,
+      user: { id: 'user-id', journeys: ['AHR'] }
+    })
+    const refused = createRequest({
+      slug: ahr.webFormSlug,
+      user: { id: 'user-id', journeys: ['BR'] }
+    })
+
+    const grantedToolkit = createToolkit()
+
+    expect(restrictReportJourneys(granted, grantedToolkit)).toBe(
+      grantedToolkit.continue
+    )
+
+    const h = createToolkit()
+
+    expect(restrictReportJourneys(refused, h)).toBe(h.response)
+    expect(refused.yar.flash).toHaveBeenCalledWith(
+      NO_ACCESS_REPORT_TYPE_FLASH_KEY,
+      ahr.title
+    )
   })
 
   test('ignores routes that are not report journeys', () => {

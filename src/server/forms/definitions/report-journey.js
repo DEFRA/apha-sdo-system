@@ -123,7 +123,14 @@ export function createReportJourney(reportType) {
     sections: [],
     pages: createPages(reportType),
     lists: [],
-    conditions: []
+    conditions: [],
+    options: {
+      // The confirmation page names the reference so the user can quote it,
+      // the same as the web form journey. The engine's feedback link points
+      // at a route this service does not serve, so it is left out.
+      showReferenceNumber: true,
+      disableUserFeedback: true
+    }
   }
 
   return { metadata, definition }

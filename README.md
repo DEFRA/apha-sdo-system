@@ -100,10 +100,20 @@ What the user sees:
 
 - `/submission-welcome` only offers the report types in `journeys`. With none,
   it explains that no report type is assigned to the account.
-- Opening a journey URL directly (`/bat-rabies`, `/animal-health-regulations`
-  and their pages) without the matching role is caught by an `onPostAuth`
-  extension (`restrictReportJourneys` in `src/server/auth/report-access.js`)
-  and lands on `/no-access`, naming the report type. The session stays valid.
+- Bat rabies continues straight into its upload journey (`/bat-rabies`).
+  Animal Health Regulations can be submitted either as a data file or as a web
+  form, so it first asks "How would you like to report?" at
+  `/animal-health-regulations/how-to-report`, then continues into
+  `/animal-health-regulations` (upload) or
+  `/animal-health-regulations-web-form` (web form). A report type gets this
+  screen by naming a `webFormSlug` in `report-types.js`; the web form journey
+  itself is `src/server/forms/definitions/animal-health-regulations-web-form.js`.
+- Opening a journey URL directly (`/bat-rabies`, `/animal-health-regulations`,
+  `/animal-health-regulations-web-form`, the how-to-report screen and their
+  pages) without the matching role is caught by an `onPostAuth` extension
+  (`restrictReportJourneys` in `src/server/auth/report-access.js`) and lands
+  on `/no-access`, naming the report type. The session stays valid. Both AHR
+  journeys are guarded by the same `Lab.<LAB>.AHR` role.
 - Roles for more than one lab are refused (no lab, no journeys) and logged as a
   warning at sign-in; choosing a lab is not supported yet.
 
@@ -247,9 +257,11 @@ filenames containing `virus`.
 
 ### Submission output
 
-On submit, `src/server/forms/services/output-service.js` copies each scanned
-file from S3 to the Azure container as `{referenceNumber}/{filename}` and
-writes `{referenceNumber}/submission.json` alongside:
+On submit, the confirmation page shows the user their reference number (the
+`showReferenceNumber` option of every journey definition), and
+`src/server/forms/services/output-service.js` copies each scanned file from S3
+to the Azure container as `{referenceNumber}/{filename}` and writes
+`{referenceNumber}/submission.json` alongside:
 
 ```json
 {
@@ -281,6 +293,16 @@ writes `{referenceNumber}/submission.json` alongside:
 - `fileNames` lists every file the uploader completed; `fileName` is set only
   when there is exactly one, otherwise `null`.
 - `reportMonthYear` is the report date exactly as shown on check your answers.
+
+An Animal Health Regulations report entered as a web form goes through the
+same output service and produces the same record, so `userId`,
+`organisationId`, `processName` (`AHR`) and `reportMonthYear` are filled in
+the same way. What differs is that there is no data file: only
+`submission.json` is written, `fileName` is `null`, `fileNames` is `[]`,
+`form` is `animal-health-regulations-web-form`, and `answers` carries the
+report itself (`reportDate`, `pathogen`, `species`, `otherSpecies` when the
+species is "Other", `country`, `submissionsWithQualifyingTest`,
+`submissionsWithPositiveSamples` and `positiveSamples`).
 
 Locally, Azurite receives the same blobs (see `AZURE_*` in `.env.example`).
 
