@@ -141,9 +141,9 @@ describe('submission welcome routes', () => {
   })
 
   describe('POST /submission-welcome', () => {
-    test.each(reportTypes.map((reportType) => reportType.slug))(
-      'Should redirect to the %s journey when it is selected',
-      async (slug) => {
+    test.each(reportTypes.filter((reportType) => !reportType.webFormSlug))(
+      'Should redirect straight into the $slug journey, which is upload only',
+      async ({ slug }) => {
         const { statusCode, headers } = await postSubmissionWelcome({
           submissionAction: slug
         })
@@ -152,6 +152,32 @@ describe('submission welcome routes', () => {
         expect(headers.location).toBe(`/${slug}`)
       }
     )
+
+    test.each(reportTypes.filter((reportType) => reportType.webFormSlug))(
+      'Should ask how to report $slug, which can also be a web form',
+      async ({ slug }) => {
+        const { statusCode, headers } = await postSubmissionWelcome({
+          submissionAction: slug
+        })
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(`/${slug}/how-to-report`)
+      }
+    )
+
+    test('Should offer both report methods for animal health regulations', async () => {
+      // Guards the fixture: the registry must keep one of each kind for the
+      // two cases above to mean anything
+      expect(
+        reportTypes.map((reportType) => Boolean(reportType.webFormSlug))
+      ).toEqual([false, true])
+
+      const { headers } = await postSubmissionWelcome({
+        submissionAction: 'animal-health-regulations'
+      })
+
+      expect(headers.location).toBe('/animal-health-regulations/how-to-report')
+    })
 
     test('Should redirect back when a report type the user does not hold is posted', async () => {
       const { statusCode, headers } = await postSubmissionWelcome(

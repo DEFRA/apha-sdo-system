@@ -3,6 +3,7 @@ import {
   getAllowedReportTypes
 } from '#/server/auth/report-access.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import { howToReportPath } from '../report-method/controller.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
@@ -43,8 +44,10 @@ function renderWelcome(request, h, error) {
 
 /**
  * Post-sign-in welcome screen. Selecting a report type continues into that
- * form journey, e.g. /bat-rabies (report date page). A user whose roles grant
- * no report type is told so here rather than being turned away at sign-in.
+ * form journey, e.g. /bat-rabies (report date page), or, for a report type
+ * that can also be entered as a web form, to the screen asking which of the
+ * two the user wants. A user whose roles grant no report type is told so here
+ * rather than being turned away at sign-in.
  */
 export const submissionWelcomeGetController = {
   handler(request, h) {
@@ -62,7 +65,11 @@ export const submissionWelcomePostController = {
     // A report type the user's roles do not grant is treated like an unknown
     // value: it was never offered, so there is nothing more specific to say.
     if (canSubmitReportType(request.auth.credentials?.user, reportType)) {
-      return h.redirect(`/${reportType.slug}`)
+      return h.redirect(
+        reportType.webFormSlug
+          ? howToReportPath(reportType)
+          : `/${reportType.slug}`
+      )
     }
 
     // Submission history has no journey to send the user to yet, so Continue

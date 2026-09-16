@@ -245,6 +245,61 @@ describe('#outputService.submit', () => {
       )
     })
 
+    test('records a web form report the same way, with its answers and no files', async () => {
+      const webFormAnswers = [
+        { name: 'reportDate', title: 'Report Date', value: 'August 2026' },
+        { name: 'pathogen', title: 'Selected pathogen', value: 'Pathogen 1' },
+        {
+          name: 'species',
+          title: 'Species the report is for',
+          value: 'Cattle'
+        },
+        { name: 'country', title: 'Country', value: 'England' },
+        {
+          name: 'submissionsWithQualifyingTest',
+          title: 'Submissions with at least one qualifying test',
+          value: '12'
+        }
+      ]
+      const context = {
+        referenceNumber: 'REF-2',
+        relevantState: {
+          reportDate__month: 8,
+          reportDate__year: 2026,
+          pathogen: 'Pathogen 1',
+          species: 'Cattle',
+          country: 'England',
+          submissionsWithQualifyingTest: 12
+        }
+      }
+      const request = buildRequest({
+        user: { ...signedInUser, journeys: ['AHR'] }
+      })
+
+      await outputService.submit(
+        ...submitArgs(context, request, {
+          items: webFormAnswers,
+          formMetadata: { slug: 'animal-health-regulations-web-form' }
+        })
+      )
+
+      expect(downloadFromS3).not.toHaveBeenCalled()
+      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+      expect(uploadedSubmissionJson()).toEqual({
+        referenceNumber: 'REF-2',
+        form: 'animal-health-regulations-web-form',
+        processName: 'AHR',
+        userId: 'entra-oid',
+        organisationId: 'TestLab1',
+        submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        fileName: null,
+        fileNames: [],
+        reportMonthYear: 'August 2026',
+        notificationEmail: 'someone@example.com',
+        answers: webFormAnswers
+      })
+    })
+
     test('lists every complete file and leaves fileName empty when there are several', async () => {
       const context = {
         referenceNumber: 'REF-1',

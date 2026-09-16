@@ -38,6 +38,27 @@ describe('#buildBreadcrumbs', () => {
     }
   })
 
+  test('Should treat the how-to-report screen and the web form as the report type', () => {
+    const ahr = reportTypes.find((reportType) => reportType.webFormSlug)
+    const expected = [
+      { text: 'Home', href: '/' },
+      { text: 'Submission Welcome', href: '/submission-welcome' },
+      { text: ahr.title }
+    ]
+
+    expect(
+      buildBreadcrumbs(mockRequest({ path: `/${ahr.slug}/how-to-report` }))
+    ).toEqual(expected)
+    expect(
+      buildBreadcrumbs(
+        mockRequest({ path: `/${ahr.webFormSlug}/which-pathogen-was-tested` })
+      )
+    ).toEqual(expected)
+    expect(
+      buildBreadcrumbs(mockRequest({ path: `/${ahr.webFormSlug}` }))
+    ).toEqual(expected)
+  })
+
   test('Should not link the current page', () => {
     const trail = buildBreadcrumbs(mockRequest({ path: '/submission-welcome' }))
 
