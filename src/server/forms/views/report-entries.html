@@ -1,0 +1,55 @@
+{#
+  The report entries page of the Animal Health Regulations web form, rendered
+  by ReportEntriesPageController: one summary card per entry added so far,
+  then "Add another entry to the report" and "Continue". Follows the engine's
+  own repeat-list-summary template so it sits in the journey like any other
+  page.
+#}
+{% extends baseLayoutPath %}
+
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/summary-list/macro.njk" import govukSummaryList %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-full">
+      {% if errors | length %}
+        {{ govukErrorSummary({
+          titleText: t('errors.title'),
+          errorList: errors
+        }) }}
+      {% endif %}
+
+      {% include "partials/heading.html" %}
+
+      {% for entry in entryCards %}
+        {{ govukSummaryList({
+          card: entry.card,
+          rows: entry.rows
+        }) }}
+      {% endfor %}
+
+      <form method="post" action="#" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        <div class="govuk-button-group">
+          {{ govukButton({
+            text: continueText,
+            name: "action",
+            value: "continue",
+            preventDoubleClick: true
+          }) }}
+
+          {{ govukButton({
+            text: addAnotherText,
+            name: "action",
+            value: "add-another",
+            classes: "govuk-button--secondary",
+            preventDoubleClick: true
+          }) }}
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

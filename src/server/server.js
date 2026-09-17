@@ -22,9 +22,12 @@ import { services } from './forms/services/index.js'
 import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
 import { ReportDatePageController } from './forms/controllers/report-date-page-controller.js'
 import { ReportFileUploadPageController } from './forms/controllers/report-file-upload-page-controller.js'
+import { ReportEntryPageController } from './forms/controllers/report-entry-page-controller.js'
+import { ReportEntriesPageController } from './forms/controllers/report-entries-page-controller.js'
 import { openId } from './plugins/auth/open-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
 import { restrictReportJourneys } from './auth/report-access.js'
+import { stripUnsafeReturnUrl } from './common/helpers/return-url.js'
 
 export async function createServer() {
   const server = hapi.server({
@@ -85,6 +88,9 @@ export async function createServer() {
   // open is enforced here, once the session has been validated, rather than
   // inside its routes.
   server.ext('onPostAuth', restrictReportJourneys)
+  // The engine redirects to a change link's returnUrl without checking it
+  // stays within the service, so that is checked before it can act on it
+  server.ext('onPreHandler', stripUnsafeReturnUrl)
   server.ext('onPreResponse', catchAll)
   server.ext('onPreResponse', setCacheControlHeaders)
 
@@ -104,13 +110,15 @@ async function registerFormsEngine(server) {
       cache: config.get('session.cache.name'),
       /**
        * Options the forms-engine-plugin uses to render Nunjucks templates.
-       * The base layout is shared with the rest of the service.
+       * The base layout is shared with the rest of the service, and
+       * src/server/forms/views holds the pages the custom controllers render.
        */
       nunjucks: {
         baseLayoutPath: 'layouts/page.njk',
         paths: [
           path.resolve(config.get('root'), 'src/server/common/templates'),
-          path.resolve(config.get('root'), 'src/server/common/components')
+          path.resolve(config.get('root'), 'src/server/common/components'),
+          path.resolve(config.get('root'), 'src/server/forms/views')
         ]
       },
       /**
@@ -121,6 +129,8 @@ async function registerFormsEngine(server) {
       controllers: {
         ReportDatePageController,
         ReportFileUploadPageController,
+        ReportEntryPageController,
+        ReportEntriesPageController,
         SummaryPageWithConfirmationEmailController
       },
       /**

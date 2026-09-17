@@ -224,7 +224,8 @@ describe('#outputService.submit', () => {
             title: 'Files',
             value: 'Uploaded 1 file'
           }
-        ]
+        ],
+        entries: []
       })
     })
 
@@ -245,31 +246,60 @@ describe('#outputService.submit', () => {
       )
     })
 
-    test('records a web form report the same way, with its answers and no files', async () => {
-      const webFormAnswers = [
-        { name: 'reportDate', title: 'Report Date', value: 'August 2026' },
-        { name: 'pathogen', title: 'Selected pathogen', value: 'Pathogen 1' },
-        {
-          name: 'species',
-          title: 'Species the report is for',
-          value: 'Cattle'
-        },
-        { name: 'country', title: 'Country', value: 'England' },
-        {
-          name: 'submissionsWithQualifyingTest',
-          title: 'Submissions with at least one qualifying test',
-          value: '12'
-        }
-      ]
+    test('records a web form report the same way, with its entries and no files', async () => {
+      const reportDate = {
+        name: 'reportDate',
+        title: 'Report Date',
+        value: 'August 2026'
+      }
+
+      // The summary page hands over the entries as the engine's repeated
+      // items: one list of answers per entry, only the questions asked of it,
+      // each with the answer as shown (value, HTML) and as given (data)
+      const entryAnswers = (values) =>
+        Object.entries(values).map(([name, value]) => ({
+          name,
+          title: name,
+          value: `<span>${value}</span>`,
+          data: value,
+          field: {},
+          state: values
+        }))
+
+      const entries = {
+        name: 'entries',
+        title: 'Entries',
+        value: '2 entries',
+        subItems: [
+          entryAnswers({
+            pathogen: 'Tritrichomonas foetus',
+            species: 'Other',
+            otherSpecies: 'Alpaca',
+            country: 'England',
+            submissionsWithQualifyingTest: '12',
+            submissionsWithPositiveSamples: '3',
+            positiveSamples: '5'
+          }),
+          entryAnswers({
+            pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+            species: 'Domestic cattle',
+            country: 'Wales',
+            submissionsWithQualifyingTest: '1',
+            submissionsWithPositiveSamples: '1',
+            positiveSamples: '0'
+          })
+        ]
+      }
+
       const context = {
         referenceNumber: 'REF-2',
         relevantState: {
           reportDate__month: 8,
           reportDate__year: 2026,
-          pathogen: 'Pathogen 1',
-          species: 'Cattle',
-          country: 'England',
-          submissionsWithQualifyingTest: 12
+          entries: entries.subItems.map((answers, index) => ({
+            itemId: `entry-${index}`,
+            ...answers[0].state
+          }))
         }
       }
       const request = buildRequest({
@@ -278,7 +308,7 @@ describe('#outputService.submit', () => {
 
       await outputService.submit(
         ...submitArgs(context, request, {
-          items: webFormAnswers,
+          items: [reportDate, entries],
           formMetadata: { slug: 'animal-health-regulations-web-form' }
         })
       )
@@ -296,8 +326,32 @@ describe('#outputService.submit', () => {
         fileNames: [],
         reportMonthYear: 'August 2026',
         notificationEmail: 'someone@example.com',
-        answers: webFormAnswers
+        // The repeated item itself is not an answer
+        answers: [reportDate],
+        entries: [
+          {
+            pathogen: 'Tritrichomonas foetus',
+            species: 'Other',
+            otherSpecies: 'Alpaca',
+            country: 'England',
+            submissionsWithQualifyingTest: '12',
+            submissionsWithPositiveSamples: '3',
+            positiveSamples: '5'
+          },
+          {
+            pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+            species: 'Domestic cattle',
+            country: 'Wales',
+            submissionsWithQualifyingTest: '1',
+            submissionsWithPositiveSamples: '1',
+            positiveSamples: '0'
+          }
+        ]
       })
+      expect(request.logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ entries: 2 }),
+        'Form submission received'
+      )
     })
 
     test('lists every complete file and leaves fileName empty when there are several', async () => {

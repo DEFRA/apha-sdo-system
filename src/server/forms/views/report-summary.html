@@ -1,0 +1,63 @@
+{#
+  Check your answers for the Animal Health Regulations web form, rendered by
+  SummaryPageWithConfirmationEmailController. The engine's summary page
+  (summary.html) at the full page width, like the entry pages, with the
+  entries shown as summary cards rather than spaced-out sections. Payment,
+  declarations and preview are not used by this service and are left out.
+#}
+{% extends baseLayoutPath %}
+
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+{% from "govuk/components/summary-list/macro.njk" import govukSummaryList %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-full">
+      {% if errors %}
+        {{ govukErrorSummary({
+          titleText: t('errors.title'),
+          errorList: checkErrorTemplates(errors)
+        }) }}
+      {% endif %}
+
+      {% if hasMissingNotificationEmail %}
+        {% include "partials/warn-missing-notification-email.html" %}
+      {% endif %}
+
+      <h1 class="govuk-heading-l">
+        {{ pageTitle }}
+      </h1>
+
+      {% for section in checkAnswers %}
+        {% if section.title.text %}
+          <h2 class="govuk-heading-m">
+            {{ section.title.text }}
+          </h2>
+          {{ govukSummaryList(section.summaryList) }}
+        {% elif section.summaryList.card %}
+          {{ govukSummaryList(section.summaryList) }}
+        {% else %}
+          <div class="{% if not loop.first %}govuk-!-margin-top-9 govuk-!-padding-top-4{% endif %}">
+            {{ govukSummaryList(section.summaryList) }}
+          </div>
+        {% endif %}
+      {% endfor %}
+
+      <form method="post" action="#" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        <div class="govuk-button-group">
+          {# As the engine's summary: prevent-multiple-clicks is wired up by
+             its debounce-click.js rather than preventDoubleClick #}
+          {{ govukButton({
+            text: t('pages.summary.submit'),
+            name: "action",
+            value: "send",
+            preventDoubleClick: false
+          }) }}
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

@@ -154,17 +154,54 @@ function reportMonthYearOf(answers, state) {
   )
 }
 
+// A repeated item from the summary details carries its repetitions in
+// subItems, each a list of the answers of one repetition
+function isRepeatedItem(item) {
+  return Array.isArray(item.subItems)
+}
+
+// The answers given once, as shown on check your answers
+function answersOf(items) {
+  return items
+    .filter((item) => !isRepeatedItem(item))
+    .map((item) => ({
+      name: item.name,
+      title: item.title,
+      value: item.value
+    }))
+}
+
+// The entries of a web-form report: one object per entry, keyed by answer
+// name and holding the answer as given (its `data`, falling back to the
+// value shown on check your answers). An answer only appears when its
+// question was asked of that entry (otherSpecies is only present when the
+// species is "Other").
+function entriesOf(items) {
+  return items
+    .filter(isRepeatedItem)
+    .flatMap((item) =>
+      item.subItems.map((answers) =>
+        Object.fromEntries(
+          answers.map((answer) => [answer.name, answer.data ?? answer.value])
+        )
+      )
+    )
+}
+
 /**
  * The record written alongside the data files. Its top-level fields are the
  * ones the downstream submissions table is built from: who (userId), for
  * which lab (organisationId), which process (BR/AHR), for which month, and
  * which files. `form` is the journey slug and predates `processName`.
+ * `entries` carries the entries of a web-form report and is empty for an
+ * uploaded one, so the record has the same shape for every journey.
  */
 function buildSubmission({
   referenceNumber,
   formMetadata,
   user,
   answers,
+  entries,
   fileStates,
   state,
   emailAddress
@@ -185,7 +222,8 @@ function buildSubmission({
     fileNames,
     reportMonthYear: reportMonthYearOf(answers, state),
     notificationEmail: emailAddress,
-    answers
+    answers,
+    entries
   }
 }
 
@@ -232,11 +270,8 @@ export const outputService = {
       referenceNumber,
       formMetadata,
       user: request.auth?.credentials?.user,
-      answers: items.map((item) => ({
-        name: item.name,
-        title: item.title,
-        value: item.value
-      })),
+      answers: answersOf(items),
+      entries: entriesOf(items),
       fileStates,
       state: context.relevantState,
       emailAddress
@@ -252,7 +287,8 @@ export const outputService = {
         reportMonthYear: submission.reportMonthYear,
         fileNames: submission.fileNames,
         notificationEmail: emailAddress,
-        answers: submission.answers
+        answers: submission.answers,
+        entries: submission.entries.length
       },
       'Form submission received'
     )

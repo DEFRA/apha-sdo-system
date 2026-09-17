@@ -2,17 +2,32 @@ import { definition, metadata } from './animal-health-regulations-web-form.js'
 import { createReportJourney } from './report-journey.js'
 import { reportTypes, reportTypesBySlug } from '../report-types.js'
 import { formsService } from '../services/forms-service.js'
+import {
+  ENTRIES_KEY,
+  ENTRIES_PAGE_CONTROLLER,
+  ENTRY_PAGE_CONTROLLER
+} from '../controllers/report-entries.js'
 
 const ahr = reportTypesBySlug.get('animal-health-regulations')
 
 const SUMMARY_PATH = '/summary'
 const OTHER_SPECIES_PATH = '/enter-other-species'
+const REPORT_ENTRIES_PATH = '/report-entries'
 
-// Every identifier a form definition carries: form, pages, components, lists,
-// list items and their hints, conditions and their items.
+const ENTRY_PAGE_PATHS = [
+  '/which-pathogen-was-tested',
+  '/which-species-was-tested',
+  OTHER_SPECIES_PATH,
+  '/which-country-were-the-samples-collected-in',
+  '/number-of-submissions-of-diagnostic-tests'
+]
+
+// Every identifier a form definition carries: form, sections, pages,
+// components, lists, list items and their hints, conditions and their items.
 function idsOf({ metadata, definition }) {
   return [
     metadata.id,
+    ...(definition.sections ?? []).map((section) => section.id),
     ...definition.pages.flatMap((page) => [
       page.id,
       ...(page.components ?? []).map((component) => component.id)
@@ -61,19 +76,50 @@ describe('animal health regulations web form', () => {
     expect(definition.schema).toBe(2)
   })
 
-  test('Should ask the designed questions in order, then check answers', () => {
+  test('Should ask the designed questions in order, list the entries, then check answers', () => {
     const paths = definition.pages.map((page) => page.path)
 
     expect(paths).toEqual([
       '/what-month-does-your-report-cover',
-      '/which-pathogen-was-tested',
-      '/which-species-was-tested',
-      OTHER_SPECIES_PATH,
-      '/which-country-were-the-samples-collected-in',
-      '/number-of-submissions-of-diagnostic-tests',
+      ...ENTRY_PAGE_PATHS,
+      REPORT_ENTRIES_PATH,
       SUMMARY_PATH
     ])
     expect(definition.startPage).toBe(paths[0])
+  })
+
+  test('Should answer the pages from pathogen to counts once per entry', () => {
+    const entryPages = definition.pages.filter(
+      (page) => page.controller === ENTRY_PAGE_CONTROLLER
+    )
+    const [section] = definition.sections
+
+    expect(entryPages.map((page) => page.path)).toEqual(ENTRY_PAGE_PATHS)
+
+    // The section names an entry on its pages and on the summaries
+    expect(section).toEqual(
+      expect.objectContaining({ name: ENTRIES_KEY, title: 'Entry' })
+    )
+
+    for (const page of entryPages) {
+      expect(page.section).toBe(section.id)
+    }
+
+    // The report date is answered once, for the whole report
+    const [reportDatePage] = definition.pages
+
+    expect(reportDatePage.controller).toBeUndefined()
+    expect(reportDatePage.section).toBeUndefined()
+  })
+
+  test('Should list the entries after the last entry page and before check answers', () => {
+    expect(findPage(REPORT_ENTRIES_PATH)).toEqual({
+      id: expect.any(String),
+      path: REPORT_ENTRIES_PATH,
+      title: 'Report entries',
+      controller: ENTRIES_PAGE_CONTROLLER,
+      components: []
+    })
   })
 
   test('Should name the report date answer as the upload journey does', () => {
@@ -107,6 +153,19 @@ describe('animal health regulations web form', () => {
   test('Should require every answer', () => {
     for (const component of questionComponents()) {
       expect(component.options.required).toBe(true)
+      expect(component.title).not.toContain('(optional)')
+    }
+  })
+
+  test('Should only accept whole, non-negative counts', () => {
+    const counts = questionComponents().filter(
+      (component) => component.type === 'NumberField'
+    )
+
+    expect(counts).toHaveLength(3)
+
+    for (const count of counts) {
+      expect(count.schema).toEqual({ min: 0, precision: 0 })
     }
   })
 
@@ -123,6 +182,97 @@ describe('animal health regulations web form', () => {
     }
   })
 
+  test('Should offer the designed pathogens', () => {
+    const pathogenField = questionComponents().find(
+      (component) => component.name === 'pathogen'
+    )
+    const pathogens = definition.lists.find(
+      (list) => list.id === pathogenField.list
+    )
+
+    expect(pathogens.items.map((item) => item.text)).toEqual([
+      'Mycoplasma gallisepticum / M. meleagridis',
+      'Campylobacter fetus subsp. venerealis',
+      'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+      'Bovine Herpes Virus 1 (BHV-1)',
+      'Mycobacterium avium subsp. paratuberculosis (Map)',
+      'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+      'Tritrichomonas foetus'
+    ])
+
+    // Submitted as shown
+    for (const item of pathogens.items) {
+      expect(item.value).toBe(item.text)
+    }
+  })
+
+  test('Should offer each species for the pathogens it is reported for', () => {
+    const speciesField = questionComponents().find(
+      (component) => component.name === 'species'
+    )
+    const pathogenField = questionComponents().find(
+      (component) => component.name === 'pathogen'
+    )
+    const speciesList = definition.lists.find(
+      (list) => list.id === speciesField.list
+    )
+    const pathogens = definition.lists.find(
+      (list) => list.id === pathogenField.list
+    )
+
+    // The pathogens a species item's condition names
+    const pathogensFor = (item) => {
+      if (!item.condition) {
+        return 'all'
+      }
+
+      const condition = definition.conditions.find(
+        ({ id }) => id === item.condition
+      )
+      const [ref] = condition.items
+
+      expect(ref).toEqual(
+        expect.objectContaining({
+          componentId: pathogenField.id,
+          operator: 'is',
+          type: 'ListItemRef',
+          value: expect.objectContaining({ listId: pathogens.id })
+        })
+      )
+
+      return ref.value.itemId
+        .map((itemId) => pathogens.items.find((p) => p.id === itemId).text)
+        .map((text) => text.split(' ')[0])
+    }
+
+    const bovine = [
+      'Campylobacter',
+      'Bovine',
+      'Bovine',
+      'Mycobacterium',
+      'Tritrichomonas'
+    ]
+
+    expect(
+      Object.fromEntries(
+        speciesList.items.map((item) => [item.text, pathogensFor(item)])
+      )
+    ).toEqual({
+      Chicken: ['Mycoplasma'],
+      Turkey: ['Mycoplasma'],
+      'Domestic cattle': bovine,
+      Sheep: ['Mycobacterium'],
+      Goat: ['Mycobacterium'],
+      Deer: ['Mycobacterium'],
+      Camelid: ['Mycobacterium'],
+      Bison: bovine,
+      Buffalo: bovine,
+      'Domestic pig': ['Porcine'],
+      'Wild boar': ['Porcine'],
+      'Other (please specify on the next page)': 'all'
+    })
+  })
+
   test('Should only ask for another species when Other is selected', () => {
     const otherSpeciesPage = findPage(OTHER_SPECIES_PATH)
     const condition = definition.conditions.find(
@@ -134,7 +284,7 @@ describe('animal health regulations web form', () => {
     const speciesList = definition.lists.find(
       (list) => list.id === speciesField.list
     )
-    const otherItem = speciesList.items.find((item) => item.text === 'Other')
+    const otherItem = speciesList.items.find((item) => item.value === 'Other')
 
     expect(condition).toBeDefined()
     expect(condition.items).toEqual([
@@ -153,16 +303,30 @@ describe('animal health regulations web form', () => {
   })
 
   test('Should introduce every question page with guidance', () => {
-    const questionPages = definition.pages.filter((page) => page.components)
+    const questionPages = definition.pages.filter(
+      (page) => page.components?.length
+    )
 
     expect(questionPages).toHaveLength(6)
 
     for (const page of questionPages) {
       const [guidance] = page.components
 
-      expect(guidance.type).toBe('Markdown')
+      expect(['Markdown', 'NotificationBanner']).toContain(guidance.type)
       expect(guidance.content).toBeTruthy()
     }
+  })
+
+  test('Should flag what not to include as an Important notification banner', () => {
+    const [banner] = findPage('/which-pathogen-was-tested').components
+
+    expect(banner).toEqual(
+      expect.objectContaining({
+        type: 'NotificationBanner',
+        title: 'Important',
+        content: expect.stringContaining('Do not include PRRSV-2 or BVDV-2')
+      })
+    )
   })
 
   test('Should check answers with the report summary controller', () => {

@@ -1,0 +1,95 @@
+{#
+  An entry page of the Animal Health Regulations web form, rendered by
+  ReportEntryPageController. The engine's question page (index.html) with:
+
+  - any notification banner of the page above everything else, where GOV.UK
+    places them
+  - the answers given so far (the report date and the entry's earlier
+    answers), each with a Change link that returns here
+  - a caption saying which entry is being added or edited
+  - Save and exit beside Continue, and while adding an entry, a link-styled
+    button to abort it
+#}
+{% extends baseLayoutPath %}
+
+{% from "govuk/components/back-link/macro.njk" import govukBackLink %}
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+{% from "govuk/components/summary-list/macro.njk" import govukSummaryList %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "partials/components.html" import componentList with context %}
+
+{# Back to the previous page of the entry, below the service's breadcrumbs #}
+{% block beforeContent %}
+  {{ super() }}
+  {% if backLink %}
+    {{ govukBackLink({
+      text: backLink.text,
+      href: backLink.href
+    }) }}
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-full">
+      {% if errors | length %}
+        {{ govukErrorSummary({
+          titleText: t('errors.title'),
+          errorList: checkErrorTemplates(errors)
+        }) }}
+      {% endif %}
+
+      {% if banners | length %}
+        <div class="app-notification-banner-full-width">
+          {{ componentList(banners) }}
+        </div>
+      {% endif %}
+
+      {% if answersSoFar.rows | length %}
+        {{ govukSummaryList({
+          classes: "app-answers-so-far govuk-!-margin-bottom-8",
+          rows: answersSoFar.rows
+        }) }}
+      {% endif %}
+
+      {# The caption sits inside the heading so it is read out with it #}
+      {% if showTitle %}
+        <h1 class="govuk-heading-l">
+          {% if entryCaption %}
+            <span class="govuk-caption-m">{{ entryCaption }}</span>
+          {% endif %}
+          {{ evaluate(pageTitle) }}
+        </h1>
+      {% elif entryCaption %}
+        <span class="govuk-caption-m">{{ entryCaption }}</span>
+      {% endif %}
+
+      <form method="post" action="#" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        {{ componentList(components) }}
+
+        <div class="govuk-button-group">
+          {{ govukButton({
+            text: t('common.continue'),
+            preventDoubleClick: true
+          }) }}
+
+          {{ govukButton({
+            text: saveAndExitText,
+            classes: "govuk-button--secondary",
+            name: "action",
+            value: "save-and-exit",
+            preventDoubleClick: true
+          }) }}
+
+          {# Posts the form, so another site cannot trigger it, but reads as
+             a link beside the buttons #}
+          {% if canAbort %}
+            <button type="submit" name="action" value="delete" class="govuk-link app-link-button">{{ abortText }}</button>
+          {% endif %}
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}
