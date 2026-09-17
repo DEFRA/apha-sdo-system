@@ -3,9 +3,25 @@ import { SummaryPageController } from '@defra/forms-engine-plugin/controllers/Su
 import { ReportFileUploadPageController } from '#/server/forms/controllers/report-file-upload-page-controller.js'
 import { SummaryPageWithConfirmationEmailController } from '#/server/forms/controllers/summary-page-with-confirmation-email-controller.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import {
+  ENTRIES_PATH,
+  ENTRY_PATHS,
+  FIRST_ENTRY_ID,
+  WEB_FORM_SLUG,
+  buildEntry,
+  buildOtherSpeciesEntry,
+  buildRequest,
+  buildState,
+  buildWebFormModel,
+  pageOf
+} from '#/test-helpers/web-form-model.js'
 
 const UPLOAD_HREF = '/bat-rabies/files-upload'
 const SUBMITTED_RESPONSE = { submitted: true }
+
+const WEB_FORM_SUMMARY_HREF = `/${WEB_FORM_SLUG}/summary`
+const WEB_FORM_ENTRIES_HREF = `/${WEB_FORM_SLUG}${ENTRIES_PATH}`
+const ENTRIES_CHANGE_HREF = `${WEB_FORM_ENTRIES_HREF}?returnUrl=${encodeURIComponent(WEB_FORM_SUMMARY_HREF)}`
 
 function buildUploadPage(rejected = []) {
   const page = Object.create(ReportFileUploadPageController.prototype)
@@ -256,5 +272,268 @@ describe('#handleFormSubmit', () => {
 
     expect(submit).toHaveBeenCalled()
     expect(response).toBe(SUBMITTED_RESPONSE)
+  })
+})
+
+/**
+ * The web form report, whose entries the summary shows and guards. The model
+ * is the real one so the entries are read from the real pages; the engine's
+ * own summary view model is stubbed with what it builds for that form: a
+ * group for the entries section (the first entry page's field, "Not
+ * provided" since the answers are never at the top level of state) and a
+ * group for the report date.
+ */
+describe('web form report entries', () => {
+  const model = buildWebFormModel()
+  const summaryPage = pageOf(model, '/summary')
+  const translator = model.createTranslator()
+  const request = buildRequest()
+
+  function buildEngineViewModel() {
+    return {
+      details: [
+        {
+          name: 'entries',
+          title: 'Entry',
+          items: [{ name: 'pathogen', title: 'Selected pathogen', value: '' }]
+        },
+        {
+          name: undefined,
+          items: [
+            { name: 'reportDate', title: 'Report Date', value: 'August 2026' }
+          ]
+        }
+      ],
+      checkAnswers: [
+        {
+          title: { text: 'Entry' },
+          summaryList: {
+            rows: [
+              {
+                key: { text: 'Selected pathogen' },
+                value: { html: 'Not provided' }
+              }
+            ]
+          }
+        },
+        {
+          summaryList: {
+            rows: [
+              {
+                key: { text: 'Report Date' },
+                value: { html: 'August 2026' }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  }
+
+  function summaryViewModelFor(entries) {
+    vi.spyOn(
+      SummaryPageController.prototype,
+      'getSummaryViewModel'
+    ).mockReturnValue(buildEngineViewModel())
+
+    return summaryPage.getSummaryViewModel(
+      request,
+      { state: buildState(entries) },
+      translator
+    )
+  }
+
+  test('Should render its own, full-width, check your answers page', () => {
+    expect(summaryPage.viewName).toBe('report-summary')
+  })
+
+  test("Should leave an upload journey with the engine's check your answers page", () => {
+    const uploadSummary = new SummaryPageWithConfirmationEmailController(
+      {
+        def: { name: 'x', options: {} },
+        pages: [],
+        getSection: () => undefined
+      },
+      { path: '/summary', title: 'Check your answers' }
+    )
+
+    expect(uploadSummary.viewName).toBe('summary')
+  })
+
+  describe('#getSummaryViewModel', () => {
+    test('Should replace the engine group for the entries section with a count of the entries', () => {
+      const viewModel = summaryViewModelFor([
+        buildEntry(),
+        buildOtherSpeciesEntry()
+      ])
+      const [main] = viewModel.checkAnswers
+
+      expect(main.title).toBeUndefined()
+      expect(main.summaryList.rows.map((row) => row.key.text)).toEqual([
+        'Submission kind',
+        'Report Date',
+        'Entries'
+      ])
+      expect(main.summaryList.rows[2]).toEqual({
+        key: { text: 'Entries' },
+        value: { classes: 'app-prose-scope', text: '2 entries' },
+        actions: {
+          items: [
+            {
+              href: ENTRIES_CHANGE_HREF,
+              text: 'Change',
+              classes: 'govuk-link--no-visited-state',
+              visuallyHiddenText: 'entries'
+            }
+          ]
+        }
+      })
+      expect(JSON.stringify(viewModel.checkAnswers)).not.toContain(
+        'Not provided'
+      )
+    })
+
+    test('Should show a card per entry with a change link back here on every answer', () => {
+      const viewModel = summaryViewModelFor([
+        buildEntry(),
+        buildOtherSpeciesEntry()
+      ])
+      const [, ...cards] = viewModel.checkAnswers
+
+      expect(cards.map((card) => card.summaryList.card.title.text)).toEqual([
+        'Entry 1',
+        'Entry 2'
+      ])
+      expect(cards[0].summaryList.card.actions).toBeUndefined()
+      expect(cards[0].summaryList.rows).toHaveLength(6)
+      expect(cards[1].summaryList.rows).toHaveLength(7)
+      expect(cards[0].summaryList.rows[0].actions.items[0].href).toBe(
+        `/${WEB_FORM_SLUG}${ENTRY_PATHS.pathogen}/${FIRST_ENTRY_ID}?returnUrl=${encodeURIComponent(WEB_FORM_SUMMARY_HREF)}`
+      )
+    })
+
+    test('Should hand the entries to the output service as a repeated item', () => {
+      const viewModel = summaryViewModelFor([
+        buildEntry(),
+        buildOtherSpeciesEntry()
+      ])
+
+      expect(viewModel.details.map((detail) => detail.name)).toEqual([
+        undefined,
+        'entries'
+      ])
+
+      const [entriesItem] = viewModel.details[1].items
+
+      expect(entriesItem).toEqual(
+        expect.objectContaining({
+          name: 'entries',
+          title: 'Entries',
+          value: '2 entries',
+          href: ENTRIES_CHANGE_HREF,
+          page: pageOf(model, ENTRIES_PATH)
+        })
+      )
+      // Each answer as submitted (data) and as shown (value)
+      expect(
+        entriesItem.subItems.map((answers) =>
+          answers.map(({ name, data }) => [name, data])
+        )
+      ).toEqual([
+        [
+          ['pathogen', 'Tritrichomonas foetus'],
+          ['species', 'Domestic cattle'],
+          ['country', 'England'],
+          ['submissionsWithQualifyingTest', '12'],
+          ['submissionsWithPositiveSamples', '3'],
+          ['positiveSamples', '5']
+        ],
+        [
+          ['pathogen', 'Tritrichomonas foetus'],
+          ['species', 'Other'],
+          ['otherSpecies', 'Alpaca'],
+          ['country', 'England'],
+          ['submissionsWithQualifyingTest', '12'],
+          ['submissionsWithPositiveSamples', '3'],
+          ['positiveSamples', '5']
+        ]
+      ])
+      expect(entriesItem.subItems[1][1].value).toBe(
+        'Other (please specify on the next page)'
+      )
+    })
+
+    test('Should count no entries and show no cards for a report without any', () => {
+      const viewModel = summaryViewModelFor([])
+
+      expect(viewModel.checkAnswers).toHaveLength(1)
+      expect(viewModel.checkAnswers[0].summaryList.rows[2].value.text).toBe(
+        '0 entries'
+      )
+      expect(viewModel.details[1].items[0].subItems).toEqual([])
+    })
+
+    test('Should cope with an engine view model that lists nothing', () => {
+      vi.spyOn(
+        SummaryPageController.prototype,
+        'getSummaryViewModel'
+      ).mockReturnValue({})
+
+      const viewModel = summaryPage.getSummaryViewModel(
+        request,
+        { state: buildState([buildEntry()]) },
+        translator
+      )
+
+      expect(
+        viewModel.checkAnswers[0].summaryList.rows.map((row) => row.key.text)
+      ).toEqual(['Submission kind', 'Entries'])
+      expect(viewModel.checkAnswers).toHaveLength(2)
+      expect(viewModel.details).toHaveLength(1)
+    })
+  })
+
+  describe('#handleFormSubmit', () => {
+    test('Should submit a report whose entries are complete', async () => {
+      const submit = stubSubmit()
+      const context = { state: buildState([buildEntry()]) }
+      const h = buildToolkit()
+
+      const response = await summaryPage.handleFormSubmit(request, context, h)
+
+      expect(submit).toHaveBeenCalledWith(request, context, h)
+      expect(response).toBe(SUBMITTED_RESPONSE)
+    })
+
+    test('Should send a report without entries back to the entries page', async () => {
+      const submit = stubSubmit()
+      const h = buildToolkit()
+
+      const response = await summaryPage.handleFormSubmit(
+        request,
+        { state: buildState([]) },
+        h
+      )
+
+      expect(submit).not.toHaveBeenCalled()
+      expect(response).toEqual({
+        path: WEB_FORM_ENTRIES_HREF,
+        code: statusCodes.seeOther
+      })
+    })
+
+    test('Should send a report with an incomplete entry back to the entries page', async () => {
+      const submit = stubSubmit()
+      const h = buildToolkit()
+
+      await summaryPage.handleFormSubmit(
+        request,
+        { state: buildState([buildEntry({ country: undefined })]) },
+        h
+      )
+
+      expect(submit).not.toHaveBeenCalled()
+      expect(h.redirect).toHaveBeenCalledWith(WEB_FORM_ENTRIES_HREF)
+    })
   })
 })

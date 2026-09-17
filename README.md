@@ -282,7 +282,8 @@ to the Azure container as `{referenceNumber}/{filename}` and writes
       "title": "Supporting documents",
       "value": "Uploaded 1 file"
     }
-  ]
+  ],
+  "entries": []
 }
 ```
 
@@ -293,16 +294,79 @@ to the Azure container as `{referenceNumber}/{filename}` and writes
 - `fileNames` lists every file the uploader completed; `fileName` is set only
   when there is exactly one, otherwise `null`.
 - `reportMonthYear` is the report date exactly as shown on check your answers.
+- `entries` carries the entries of a web-form report (below) and is empty for
+  an uploaded one, so the record has the same shape for every journey.
 
 An Animal Health Regulations report entered as a web form goes through the
 same output service and produces the same record, so `userId`,
 `organisationId`, `processName` (`AHR`) and `reportMonthYear` are filled in
 the same way. What differs is that there is no data file: only
 `submission.json` is written, `fileName` is `null`, `fileNames` is `[]`,
-`form` is `animal-health-regulations-web-form`, and `answers` carries the
-report itself (`reportDate`, `pathogen`, `species`, `otherSpecies` when the
-species is "Other", `country`, `submissionsWithQualifyingTest`,
-`submissionsWithPositiveSamples` and `positiveSamples`).
+`form` is `animal-health-regulations-web-form`, `answers` holds only the
+`reportDate`, and the report itself is in `entries`.
+
+A web-form report covers one month but any number of entries, one per
+pathogen, species and country. After the report date, the user answers the
+pathogen, species, country and count pages for an entry, then reaches the
+report entries page (`/animal-health-regulations-web-form/report-entries`),
+which lists the entries added so far and offers **Add another entry to the
+report** or **Continue**. Entries can be changed and removed there and from
+check your answers. The species offered depend on the pathogen chosen (the
+conditions on the species list items in the definition), and the counts must
+be whole numbers that are not negative. Each entry page lists the answers
+given so far (the report date and the entry's earlier answers) above its
+question, each with a Change link, and has a back link to the entry's
+previous page; changing an earlier answer drops the answers that followed it
+in that entry, so those questions are asked again. The page's caption says
+whether the entry is being added ("Adding entry 2") or, once it has been
+completed before, edited ("Editing entry 2/3"). Beside **Continue**, **Save
+and exit** returns to Submission Welcome without saving the page being left
+(earlier pages are already saved), and while adding, **Abort new entry**
+(a form post, so it cannot be triggered from another site) drops the entry
+and returns to the report entries page; when it was the only one the whole
+report is abandoned, report date included, and the user returns to
+Submission Welcome. Each entry is one object in
+`entries`, keyed by answer name and holding the value shown on check your
+answers; `otherSpecies` is only present when that entry's species is "Other":
+
+```json
+{
+  "form": "animal-health-regulations-web-form",
+  "processName": "AHR",
+  "fileName": null,
+  "fileNames": [],
+  "reportMonthYear": "August 2026",
+  "answers": [
+    { "name": "reportDate", "title": "Report Date", "value": "August 2026" }
+  ],
+  "entries": [
+    {
+      "pathogen": "Tritrichomonas foetus",
+      "species": "Other",
+      "otherSpecies": "Alpaca",
+      "country": "England",
+      "submissionsWithQualifyingTest": "12",
+      "submissionsWithPositiveSamples": "3",
+      "positiveSamples": "5"
+    },
+    {
+      "pathogen": "Bovine Herpes Virus 1 (BHV-1)",
+      "species": "Cattle",
+      "country": "Wales",
+      "submissionsWithQualifyingTest": "1",
+      "submissionsWithPositiveSamples": "1",
+      "positiveSamples": "0"
+    }
+  ]
+}
+```
+
+The forms engine only repeats single pages, so the entry pages are served by
+`ReportEntryPageController` and the report entries page by
+`ReportEntriesPageController` (see `src/server/forms/controllers/report-entries.js`
+for how entries are kept in form state and validated). A report needs at least
+one entry and every entry complete before it can continue or be submitted;
+`MAX_ENTRIES` in that module caps how many can be added.
 
 Locally, Azurite receives the same blobs (see `AZURE_*` in `.env.example`).
 

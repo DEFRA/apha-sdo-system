@@ -1,0 +1,53 @@
+@use "govuk-frontend" as *;
+
+// The entry pages of the Animal Health Regulations web form
+// (src/server/forms/views/report-entry.html) use the full page width.
+
+// GOV.UK wraps a notification banner's text at the width of a two-thirds
+// column, for shorter line lengths, even when the banner itself is wider.
+.app-notification-banner-full-width .govuk-notification-banner__content > * {
+  max-width: none;
+}
+
+// "Abort new entry" posts the form, so it cannot be triggered from another
+// site, but sits among the buttons as a link, like Sign out does in the
+// header. The govuk-link class gives it the underline and focus style, but
+// its colours come from :link and :visited, which only apply to anchors, so
+// they are set here to match a Change link (govuk-link--no-visited-state).
+.app-link-button {
+  background: none;
+  border: 0;
+  color: $govuk-link-colour;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+
+  &:hover {
+    color: $govuk-link-hover-colour;
+  }
+
+  &:active {
+    color: $govuk-link-active-colour;
+  }
+
+  // Keeps GOV.UK's black-on-yellow focus text when hovered as well
+  &:focus {
+    color: $govuk-focus-text-colour;
+  }
+}
+
+// The answers so far, listed above the question: the keys are short and the
+// Change links narrow, so the answers themselves get most of the width.
+@include govuk-media-query($from: tablet) {
+  .app-answers-so-far {
+    .govuk-summary-list__key {
+      width: 20%;
+    }
+
+    .govuk-summary-list__actions {
+      width: 15%;
+    }
+  }
+}
