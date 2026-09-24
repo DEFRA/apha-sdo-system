@@ -96,6 +96,24 @@ describe('#createReportJourney', () => {
     }
   )
 
+  test.each(journeys)(
+    'Should take a single required file on the upload page of $metadata.slug',
+    ({ definition }) => {
+      const uploadPage = definition.pages.find(
+        (page) => page.path === '/files-upload'
+      )
+      const [guidance, fileUpload] = uploadPage.components
+
+      expect(fileUpload.type).toBe('FileUploadField')
+      expect(fileUpload.options.required).toBe(true)
+      // max 1 makes the engine's picker single-file and stops it offering a
+      // second upload once one file is attached
+      expect(fileUpload.schema).toEqual({ max: 1 })
+      expect(guidance.content).not.toMatch(/multiple/i)
+      expect(guidance.content).toMatch(/single file/)
+    }
+  )
+
   test('Should keep the field names consistent across journeys', () => {
     for (const { definition } of journeys) {
       const names = definition.pages.flatMap((page) =>

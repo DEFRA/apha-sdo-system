@@ -46,7 +46,7 @@ export class SummaryPageWithConfirmationEmailController extends SummaryPageContr
   getSummaryViewModel(request, context, translator) {
     const viewModel = super.getSummaryViewModel(request, context, translator)
 
-    showUploadedFileNames(viewModel)
+    showUploadedFileName(viewModel)
     showReportEntries(viewModel, this, context, translator)
     showSubmissionKind(viewModel, this.model)
 
@@ -216,13 +216,13 @@ function showSubmissionKind(viewModel, model) {
 
 /**
  * The engine summarises a FileUploadField as "Uploaded 1 file". Replace that
- * with the actual names so check-your-answers shows what was attached.
+ * with the file's name so check-your-answers shows what was attached.
  * @param {{ details?: object[], checkAnswers?: object[] }} viewModel - the summary view model
  */
-function showUploadedFileNames(viewModel) {
+function showUploadedFileName(viewModel) {
   for (const [sectionIndex, detail] of (viewModel.details ?? []).entries()) {
     for (const [itemIndex, item] of (detail.items ?? []).entries()) {
-      showUploadedFileName(viewModel, sectionIndex, itemIndex, item)
+      showUploadedFileNameOfItem(viewModel, sectionIndex, itemIndex, item)
     }
   }
 }
@@ -233,12 +233,12 @@ function showUploadedFileNames(viewModel) {
  * @param {number} itemIndex - index into that section's rows
  * @param {{ field?: { type?: string, getFormValueFromState?: Function }, state?: object }} item - a summary detail item
  */
-function showUploadedFileName(viewModel, sectionIndex, itemIndex, item) {
+function showUploadedFileNameOfItem(viewModel, sectionIndex, itemIndex, item) {
   if (item.field?.type !== FILE_UPLOAD_FIELD) {
     return
   }
 
-  const html = uploadedFilesSummaryHtml(
+  const html = uploadedFileSummaryHtml(
     item.field.getFormValueFromState(item.state)
   )
   const row =
@@ -250,10 +250,12 @@ function showUploadedFileName(viewModel, sectionIndex, itemIndex, item) {
 }
 
 /**
+ * The name of the uploaded file, escaped for the summary. A report takes a
+ * single file (see report-journey.js), so the value holds at most one.
  * @param {object[]} [files] - a FileUploadField value from form state
  */
-function uploadedFilesSummaryHtml(files) {
-  const names = (files ?? []).map(uploadedFileName).filter(Boolean)
+function uploadedFileSummaryHtml(files) {
+  const name = (files ?? []).map(uploadedFileName).find(Boolean)
 
-  return names.map((name) => escapeHtml(name)).join('<br>')
+  return name ? escapeHtml(name) : ''
 }

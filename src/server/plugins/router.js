@@ -4,6 +4,7 @@ import { home } from '../routes/home/index.js'
 import { authRoutes } from '../routes/auth/index.js'
 import { submissionWelcome } from '../routes/submission-welcome/index.js'
 import { reportMethod } from '../routes/report-method/index.js'
+import { diagnosticTests } from '../routes/diagnostic-tests/index.js'
 import { health } from '../routes/health/index.js'
 import { fileCallback } from '../routes/file-callback/index.js'
 import { serveFormAssets } from './serve-form-assets.js'
@@ -31,6 +32,9 @@ export const router = {
 
       // File upload or web form choice for report types offering both
       await server.register([reportMethod])
+
+      // The qualifying tests a lab uses and their accreditation
+      await server.register([diagnosticTests])
 
       // cdp-uploader scan-completion callback
       await server.register([fileCallback])

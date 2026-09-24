@@ -1,7 +1,11 @@
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { reportTypes } from '#/server/forms/report-types.js'
-import { VIEW_SUBMISSION_HISTORY } from './controller.js'
+import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
+import {
+  UPDATE_DIAGNOSTIC_TESTS,
+  VIEW_SUBMISSION_HISTORY
+} from './controller.js'
 
 function getCookieValue(response, name) {
   const setCookieHeaders = [response.headers['set-cookie']].flat()
@@ -120,10 +124,41 @@ describe('submission welcome routes', () => {
         )
       }
 
-      // The history option is not role-gated
+      // The diagnostic tests and history options are not role-gated
+      expect(result).toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
       expect(result).toEqual(
         expect.stringContaining(`value="${VIEW_SUBMISSION_HISTORY}"`)
       )
+    })
+
+    test('Should render the update diagnostic tests option', async () => {
+      const { result, statusCode } = await getSubmissionWelcome()
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
+      expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Define or update the qualifying tests your lab uses and their UKAS accreditation'
+        )
+      )
+    })
+
+    test('Should list the report types, then diagnostic tests, then history', async () => {
+      const { result } = await getSubmissionWelcome()
+
+      const positions = [
+        ...reportTypes.map((reportType) => `value="${reportType.slug}"`),
+        `value="${UPDATE_DIAGNOSTIC_TESTS}"`,
+        `value="${VIEW_SUBMISSION_HISTORY}"`
+      ].map((value) => result.indexOf(value))
+
+      expect(positions.every((position) => position >= 0)).toBe(true)
+      expect(positions).toEqual([...positions].sort((a, b) => a - b))
     })
 
     test('Should render the submission history option', async () => {
@@ -187,6 +222,25 @@ describe('submission welcome routes', () => {
 
       expect(statusCode).toBe(statusCodes.redirect)
       expect(headers.location).toBe('/submission-welcome')
+    })
+
+    test('Should open the diagnostic tests page when update diagnostic tests is selected', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome({
+        submissionAction: UPDATE_DIAGNOSTIC_TESTS
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+    })
+
+    test('Should open the diagnostic tests page for a user who holds no report type', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome(
+        { submissionAction: UPDATE_DIAGNOSTIC_TESTS },
+        authWithJourneys([])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
     })
 
     test('Should do nothing when submission history is selected', async () => {

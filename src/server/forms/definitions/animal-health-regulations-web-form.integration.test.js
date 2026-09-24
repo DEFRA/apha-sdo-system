@@ -785,9 +785,7 @@ describe('animal health regulations web form (end to end)', () => {
       organisationId: 'TestLab1',
       submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       fileName: null,
-      fileNames: [],
       reportMonthYear: 'August 2026',
-      notificationEmail: 'sdo@apha.gov.uk',
       answers: [
         expect.objectContaining({ name: 'reportDate', value: 'August 2026' })
       ],

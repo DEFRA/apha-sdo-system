@@ -2,7 +2,8 @@
  * Builds a report submission journey (engine V2) from a report type defined in
  * src/server/forms/report-types.js. Every report type gets the same pages in
  * the same order — report date, file upload, check your answers — so the only
- * differences are the slug, the copy and the identifiers.
+ * differences are the slug, the copy and the identifiers. A report is one
+ * data file, so the upload page takes a single file.
  *
  * Served at /{slug} by the forms-engine-plugin, e.g. /bat-rabies/report-date.
  */
@@ -27,9 +28,9 @@ const REPORT_DATE_TITLE = 'Report date'
 
 const REPORT_DATE_GUIDANCE = 'Add the date you are submitting this report for'
 
-const FILES_UPLOAD_GUIDANCE =
-  'Drag and drop your files to upload them.\n' +
-  'You can upload multiple files at one time, or select a single file and upload it individually.'
+const FILE_UPLOAD_GUIDANCE =
+  'Drag and drop your file to upload it, or choose it from your device.\n' +
+  'A report is a single file. To replace the file you have uploaded, remove it first.'
 
 function createPages({ ids }) {
   return [
@@ -69,7 +70,7 @@ function createPages({ ids }) {
         {
           id: ids.filesUploadGuidance,
           type: 'Markdown',
-          content: FILES_UPLOAD_GUIDANCE,
+          content: FILE_UPLOAD_GUIDANCE,
           options: {},
           schema: {}
         },
@@ -77,14 +78,18 @@ function createPages({ ids }) {
           id: ids.filesUploadField,
           type: 'FileUploadField',
           name: 'supportingDocuments',
-          title: 'Files upload',
+          title: 'File upload',
           shortDescription: 'Supporting documents',
           hint: 'Only csv, xls and xlsx files are supported.',
           options: {
             required: true,
             accept: SPREADSHEET_MIME_TYPES
           },
-          schema: {}
+          // One file per report: the file picker takes a single file and the
+          // engine stops offering an upload once one is attached
+          schema: {
+            max: 1
+          }
         }
       ],
       next: [{ path: '/summary' }]
