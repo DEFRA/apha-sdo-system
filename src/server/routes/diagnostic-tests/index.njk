@@ -1,0 +1,120 @@
+{#
+  "Define your qualifying tests in use", rendered by the diagnostic-tests
+  controller: one accordion section per pathogen, each test a checkbox that
+  reveals an "Accreditation" select when ticked (GOV.UK checkboxes with
+  conditionally revealed content). Sections start collapsed; the controller
+  expands those holding a ticked test or an error.
+#}
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/accordion/macro.njk" import govukAccordion %}
+{% from "govuk/components/checkboxes/macro.njk" import govukCheckboxes %}
+{% from "govuk/components/select/macro.njk" import govukSelect %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    {# Full width, like the report entry and summary pages: the pathogen and
+       test names are long #}
+    <div class="govuk-grid-column-full">
+      {% if errors | length %}
+        {{ govukErrorSummary({
+          titleText: "There is a problem",
+          errorList: errors
+        }) }}
+      {% endif %}
+
+      <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+
+      <p class="govuk-body">Only use this service if you are:</p>
+      <ul class="govuk-list govuk-list--bullet">
+        <li>setting up your Qualifying tests for the first time</li>
+        <li>updating your tests and UK Accreditation Service (<strong>UKAS</strong>) since your last report month</li>
+      </ul>
+
+      <form method="post" action="{{ diagnosticTestsPath }}" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        {# The accordion items are built here because each section's content is
+           the rendered HTML of its checkboxes, and each checkbox's conditional
+           content is the rendered HTML of its select #}
+        {% set accordionItems = [] %}
+        {% for section in sections %}
+          {% set checkboxItems = [] %}
+          {% for item in section.items %}
+            {% set accreditationHtml %}
+              {{ govukSelect({
+                id: item.accreditation.id,
+                name: item.accreditation.name,
+                label: {
+                  text: "Accreditation"
+                },
+                items: item.accreditation.items,
+                errorMessage: { text: item.accreditation.errorMessage } if item.accreditation.errorMessage
+              }) }}
+            {% endset %}
+            {% set checkboxItems = (checkboxItems.push({
+              id: item.id,
+              value: item.value,
+              text: item.text,
+              checked: item.checked,
+              conditional: {
+                html: accreditationHtml
+              }
+            }), checkboxItems) %}
+          {% endfor %}
+
+          {% set sectionHtml %}
+            {{ govukCheckboxes({
+              idPrefix: testsField + "-" + section.key,
+              name: testsField,
+              fieldset: {
+                legend: {
+                  text: "Qualifying tests for " + section.heading,
+                  classes: "govuk-visually-hidden"
+                }
+              },
+              items: checkboxItems
+            }) }}
+          {% endset %}
+
+          {% set accordionItems = (accordionItems.push({
+            heading: {
+              text: section.heading
+            },
+            content: {
+              html: sectionHtml
+            },
+            expanded: section.expanded
+          }), accordionItems) %}
+        {% endfor %}
+
+        {# The whole set of sections is one group, so the "no test ticked"
+           error is shown above them and marks them all #}
+        <div class="govuk-form-group{% if testsError %} govuk-form-group--error{% endif %}" id="{{ testsGroupId }}">
+          {% if testsError %}
+            <p class="govuk-error-message" id="{{ testsGroupId }}-error">
+              <span class="govuk-visually-hidden">Error:</span> {{ testsError }}
+            </p>
+          {% endif %}
+
+          {{ govukAccordion({
+            id: "qualifying-tests",
+            rememberExpanded: false,
+            items: accordionItems
+          }) }}
+        </div>
+
+        <div class="govuk-button-group">
+          {{ govukButton({
+            type: "submit",
+            text: "Continue",
+            preventDoubleClick: true
+          }) }}
+          <a class="govuk-link" href="/submission-welcome">Go back</a>
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

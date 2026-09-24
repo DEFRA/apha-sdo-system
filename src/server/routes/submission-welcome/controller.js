@@ -4,10 +4,22 @@ import {
 } from '#/server/auth/report-access.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 import { howToReportPath } from '../report-method/controller.js'
+import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
+export const UPDATE_DIAGNOSTIC_TESTS = 'update-diagnostic-tests'
 export const VIEW_SUBMISSION_HISTORY = 'view-submission-history'
+
+// Not role-gated for now: defining the qualifying tests is something every
+// lab does before its first report, so every signed-in user is offered it
+const updateDiagnosticTestsItem = {
+  value: UPDATE_DIAGNOSTIC_TESTS,
+  text: 'Update diagnostic tests',
+  hint: {
+    text: 'Define or update the qualifying tests your lab uses and their UKAS accreditation'
+  }
+}
 
 const viewSubmissionHistoryItem = {
   value: VIEW_SUBMISSION_HISTORY,
@@ -17,7 +29,8 @@ const viewSubmissionHistoryItem = {
 
 /**
  * The radios a user sees: only the report types their roles grant, then the
- * history option. Built per request because it depends on who is signed in.
+ * diagnostic tests and history options. Built per request because it depends
+ * on who is signed in.
  */
 function buildSubmissionActionItems(user) {
   return [
@@ -26,6 +39,7 @@ function buildSubmissionActionItems(user) {
       text: reportType.title,
       hint: { text: reportType.optionHint }
     })),
+    updateDiagnosticTestsItem,
     viewSubmissionHistoryItem
   ]
 }
@@ -46,8 +60,9 @@ function renderWelcome(request, h, error) {
  * Post-sign-in welcome screen. Selecting a report type continues into that
  * form journey, e.g. /bat-rabies (report date page), or, for a report type
  * that can also be entered as a web form, to the screen asking which of the
- * two the user wants. A user whose roles grant no report type is told so here
- * rather than being turned away at sign-in.
+ * two the user wants. "Update diagnostic tests" opens the page where a lab
+ * defines the qualifying tests it uses. A user whose roles grant no report
+ * type is told so here rather than being turned away at sign-in.
  */
 export const submissionWelcomeGetController = {
   handler(request, h) {
@@ -70,6 +85,10 @@ export const submissionWelcomePostController = {
           ? howToReportPath(reportType)
           : `/${reportType.slug}`
       )
+    }
+
+    if (submissionAction === UPDATE_DIAGNOSTIC_TESTS) {
+      return h.redirect(DIAGNOSTIC_TESTS_PATH)
     }
 
     // Submission history has no journey to send the user to yet, so Continue

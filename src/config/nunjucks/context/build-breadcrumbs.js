@@ -7,7 +7,15 @@ const SUBMISSION_WELCOME_TEXT = 'Submission Welcome'
 // Trails for the service's own pages. The report journeys are derived from the
 // report type registry, so they do not need an entry here.
 const trailsByPath = new Map([
-  [SUBMISSION_WELCOME_PATH, [HOME, { text: SUBMISSION_WELCOME_TEXT }]]
+  [SUBMISSION_WELCOME_PATH, [HOME, { text: SUBMISSION_WELCOME_TEXT }]],
+  [
+    '/diagnostic-tests',
+    [
+      HOME,
+      { text: SUBMISSION_WELCOME_TEXT, href: SUBMISSION_WELCOME_PATH },
+      { text: 'Update diagnostic tests' }
+    ]
+  ]
 ])
 
 /**

@@ -108,7 +108,7 @@ afterEach(() => {
 })
 
 describe('#getSummaryViewModel', () => {
-  test('Should list the uploaded file names instead of a file count', () => {
+  test('Should show the uploaded file name instead of a file count', () => {
     const viewModel = buildViewModel({
       files: [buildFile('March2025.xlsx')]
     })
@@ -123,10 +123,9 @@ describe('#getSummaryViewModel', () => {
     expect(filesRow(result).value.html).toBe('March2025.xlsx')
   })
 
-  test('Should list every uploaded file on its own line', () => {
+  test('Should skip files that carry no name', () => {
     const viewModel = buildViewModel({
-      files: [buildFile('March2025.xlsx'), buildFile('notes.csv')],
-      value: 'Uploaded 2 files'
+      files: [{ uploadId: 'upload-x', status: {} }, buildFile('March2025.xlsx')]
     })
 
     vi.spyOn(
@@ -136,7 +135,7 @@ describe('#getSummaryViewModel', () => {
 
     const result = buildController([]).getSummaryViewModel({}, {}, {})
 
-    expect(filesRow(result).value.html).toBe('March2025.xlsx<br>notes.csv')
+    expect(filesRow(result).value.html).toBe('March2025.xlsx')
   })
 
   test('Should escape file names so they cannot break the summary HTML', () => {

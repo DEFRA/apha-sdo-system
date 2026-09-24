@@ -188,11 +188,21 @@ function entriesOf(items) {
     )
 }
 
+// The name of the one data file of an uploaded report, or null when there is
+// none (a web-form report). A report journey accepts a single file (see
+// report-journey.js), so at most one complete file is ever in state.
+function fileNameOf(fileStates) {
+  return (
+    fileStates.filter(isCompleteFile).map(uploadedFileName).find(Boolean) ??
+    null
+  )
+}
+
 /**
- * The record written alongside the data files. Its top-level fields are the
+ * The record written alongside the data file. Its top-level fields are the
  * ones the downstream submissions table is built from: who (userId), for
  * which lab (organisationId), which process (BR/AHR), for which month, and
- * which files. `form` is the journey slug and predates `processName`.
+ * which file. `form` is the journey slug and predates `processName`.
  * `entries` carries the entries of a web-form report and is empty for an
  * uploaded one, so the record has the same shape for every journey.
  */
@@ -203,14 +213,8 @@ function buildSubmission({
   answers,
   entries,
   fileStates,
-  state,
-  emailAddress
+  state
 }) {
-  const fileNames = fileStates
-    .filter(isCompleteFile)
-    .map(uploadedFileName)
-    .filter(Boolean)
-
   return {
     referenceNumber,
     form: formMetadata?.slug ?? null,
@@ -218,16 +222,20 @@ function buildSubmission({
     userId: user?.id ?? null,
     organisationId: user?.organisationId ?? null,
     submittedAt: new Date().toISOString(),
-    fileName: fileNames.length === 1 ? fileNames[0] : null,
-    fileNames,
+    fileName: fileNameOf(fileStates),
     reportMonthYear: reportMonthYearOf(answers, state),
-    notificationEmail: emailAddress,
     answers,
     entries
   }
 }
 
-async function uploadSubmissionJson(submission) {
+/**
+ * Writes the record as {referenceNumber}/submission.json in the Azure
+ * container. Shared with the diagnostic tests page, whose record is delivered
+ * the same way (see src/server/routes/diagnostic-tests/diagnostic-tests-output.js).
+ * @param {{ referenceNumber: string }} submission - the record to write
+ */
+export async function uploadSubmissionJson(submission) {
   const { referenceNumber } = submission
 
   await azureStorageService.uploadFile(
@@ -247,18 +255,21 @@ async function uploadSubmissionJson(submission) {
  * Output service used by @defra/forms-engine-plugin to deliver the completed
  * submission to its final destination.
  *
- * When Azure Blob Storage is enabled, scanned files are copied from the S3
- * staging bucket (where the cdp-uploader delivered them) to the Azure
+ * When Azure Blob Storage is enabled, the scanned file is copied from the S3
+ * staging bucket (where the cdp-uploader delivered it) to the Azure
  * container under {referenceNumber}/{filename}, together with a
  * {referenceNumber}/submission.json holding the form answers and the
  * submission metadata (see buildSubmission).
+ *
+ * The engine passes the form's notification email as well; no email is sent
+ * and it is not recorded, so it is not used here.
  */
 export const outputService = {
   async submit(
     context,
     request,
     model,
-    emailAddress,
+    _emailAddress,
     items,
     submitResponse,
     formMetadata
@@ -273,8 +284,7 @@ export const outputService = {
       answers: answersOf(items),
       entries: entriesOf(items),
       fileStates,
-      state: context.relevantState,
-      emailAddress
+      state: context.relevantState
     })
 
     request.logger.info(
@@ -285,8 +295,7 @@ export const outputService = {
         userId: submission.userId,
         organisationId: submission.organisationId,
         reportMonthYear: submission.reportMonthYear,
-        fileNames: submission.fileNames,
-        notificationEmail: emailAddress,
+        fileName: submission.fileName,
         answers: submission.answers,
         entries: submission.entries.length
       },

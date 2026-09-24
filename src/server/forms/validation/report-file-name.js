@@ -135,8 +135,8 @@ export function partitionFilesByName(files, reportDate) {
 /**
  * Error message shown for a rejected file, worded to match the file upload
  * errors the forms engine raises itself ("The selected file must be smaller
- * than 100MB"). Several files can be uploaded at once, so name the offending
- * one whenever we know it.
+ * than 100MB"). Names the file whenever we know it, so the user can see
+ * which name fell short of the rule.
  * @param {string} [filename] - the rejected file name
  * @param {string} expected - the month-year token the report date requires
  */

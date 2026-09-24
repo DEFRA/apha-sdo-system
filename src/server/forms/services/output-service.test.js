@@ -214,9 +214,7 @@ describe('#outputService.submit', () => {
         organisationId: 'TestLab1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         fileName: 'March2024.xlsx',
-        fileNames: ['March2024.xlsx'],
         reportMonthYear: 'March 2024',
-        notificationEmail: 'someone@example.com',
         answers: [
           reportDateAnswer,
           {
@@ -323,9 +321,7 @@ describe('#outputService.submit', () => {
         organisationId: 'TestLab1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         fileName: null,
-        fileNames: [],
         reportMonthYear: 'August 2026',
-        notificationEmail: 'someone@example.com',
         // The repeated item itself is not an answer
         answers: [reportDate],
         entries: [
@@ -354,25 +350,20 @@ describe('#outputService.submit', () => {
       )
     })
 
-    test('lists every complete file and leaves fileName empty when there are several', async () => {
+    test('names only the file the uploader completed', async () => {
       const context = {
         referenceNumber: 'REF-1',
         relevantState: {
           supportingDocuments: [
             buildFileState({
               uploadId: 'upload-1',
-              filename: 'March2024-1.csv'
+              filename: 'rejected.csv',
+              fileStatus: 'rejected'
             }),
             buildFileState({
               uploadId: 'upload-2',
               fileId: 'file-2',
-              filename: 'March2024-2.csv'
-            }),
-            buildFileState({
-              uploadId: 'upload-3',
-              fileId: 'file-3',
-              filename: 'rejected.csv',
-              fileStatus: 'rejected'
+              filename: 'March2024.csv'
             })
           ]
         }
@@ -380,11 +371,42 @@ describe('#outputService.submit', () => {
 
       await outputService.submit(...submitArgs(context, buildRequest()))
 
-      expect(uploadedSubmissionJson()).toEqual(
-        expect.objectContaining({
-          fileName: null,
-          fileNames: ['March2024-1.csv', 'March2024-2.csv']
-        })
+      const submission = uploadedSubmissionJson()
+
+      expect(submission.fileName).toBe('March2024.csv')
+      expect(submission).not.toHaveProperty('fileNames')
+    })
+
+    test('records neither a notification email nor a list of files', async () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: { supportingDocuments: [buildFileState()] }
+      }
+      const request = buildRequest()
+
+      await outputService.submit(...submitArgs(context, request))
+
+      const submission = uploadedSubmissionJson()
+
+      expect(Object.keys(submission)).toEqual([
+        'referenceNumber',
+        'form',
+        'processName',
+        'userId',
+        'organisationId',
+        'submittedAt',
+        'fileName',
+        'reportMonthYear',
+        'answers',
+        'entries'
+      ])
+      expect(request.logger.info).toHaveBeenCalledWith(
+        expect.not.objectContaining({ notificationEmail: expect.anything() }),
+        'Form submission received'
+      )
+      expect(request.logger.info).toHaveBeenCalledWith(
+        expect.objectContaining({ fileName: 'data.xlsx' }),
+        'Form submission received'
       )
     })
 
@@ -401,8 +423,7 @@ describe('#outputService.submit', () => {
       expect(uploadedSubmissionJson()).toEqual(
         expect.objectContaining({
           reportMonthYear: 'November 2023',
-          fileName: null,
-          fileNames: []
+          fileName: null
         })
       )
     })
