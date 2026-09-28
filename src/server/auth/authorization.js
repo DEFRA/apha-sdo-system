@@ -31,6 +31,26 @@ function claimText(value) {
   return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : ''
 }
 
+// Directory display names often end with a tag such as "(Other)", the
+// placeholder Entra uses when company or department is not set. That is not
+// part of the person's name.
+function withoutDirectorySuffix(value) {
+  const trimmed = value.trim()
+  const open = trimmed.lastIndexOf('(')
+
+  if (!trimmed.endsWith(')') || open === -1) {
+    return trimmed
+  }
+
+  const inside = trimmed.slice(open + 1, -1)
+
+  if (inside.includes(')')) {
+    return trimmed
+  }
+
+  return trimmed.slice(0, open).trimEnd()
+}
+
 /**
  * The person's name as "Given Surname", for example "George Surname".
  *
@@ -50,10 +70,10 @@ export function formatPersonName(claims = {}) {
   const familyName = claimText(claims.family_name)
 
   if (givenName && familyName) {
-    return `${givenName} ${familyName}`
+    return withoutDirectorySuffix(`${givenName} ${familyName}`)
   }
 
-  const name = claimText(claims.name)
+  const name = withoutDirectorySuffix(claimText(claims.name))
   const comma = name.indexOf(',')
 
   if (comma > 0 && comma < name.length - 1) {
@@ -61,7 +81,7 @@ export function formatPersonName(claims = {}) {
     const givenFromName = name.slice(comma + 1).trim()
 
     if (familyFromName && givenFromName) {
-      return `${givenFromName} ${familyFromName}`
+      return withoutDirectorySuffix(`${givenFromName} ${familyFromName}`)
     }
   }
 
