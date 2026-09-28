@@ -24,9 +24,14 @@ const SPREADSHEET_MIME_TYPES = [
   'text/csv'
 ].join(',')
 
-const REPORT_DATE_TITLE = 'Report date'
+const REPORT_DATE_PAGE_TITLE = 'What month does your submission cover?'
 
-const REPORT_DATE_GUIDANCE = 'Add the date you are submitting this report for'
+const REPORT_DATE_GUIDANCE =
+  'Submit your report within 30 days after the end of the reporting month.'
+
+const REPORT_DATE_TITLE = 'Reporting period'
+
+const REPORT_DATE_HINT = 'Add the report month and year'
 
 const FILE_UPLOAD_GUIDANCE =
   'Drag and drop your file to upload it, or choose it from your device.\n' +
@@ -37,7 +42,7 @@ function createPages({ ids }) {
     {
       id: ids.reportDatePage,
       path: '/report-date',
-      title: 'Date of report',
+      title: REPORT_DATE_PAGE_TITLE,
       controller: 'ReportDatePageController',
       components: [
         {
@@ -53,6 +58,7 @@ function createPages({ ids }) {
           name: 'reportDate',
           title: REPORT_DATE_TITLE,
           shortDescription: REPORT_DATE_TITLE,
+          hint: REPORT_DATE_HINT,
           options: {
             required: true
           },

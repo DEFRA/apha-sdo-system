@@ -797,7 +797,7 @@ describe('ReportEntryPageController', () => {
 
       expect(answersSoFar.rows.map((row) => row.key.text)).toEqual([
         'Report Date',
-        'Selected pathogen',
+        'Pathogen, disease and diagnostic tests',
         'Species the report is for'
       ])
       expect(answersSoFar.rows[2].actions.items[0].href).toBe(

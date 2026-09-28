@@ -1,5 +1,6 @@
 import {
   canSubmitReportType,
+  canUpdateDiagnosticTests,
   getAllowedReportTypes
 } from '#/server/auth/report-access.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
@@ -8,39 +9,63 @@ import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
+export const SUBMISSION_WELCOME_HEADING = 'What would you like to do?'
+
 export const UPDATE_DIAGNOSTIC_TESTS = 'update-diagnostic-tests'
 export const VIEW_SUBMISSION_HISTORY = 'view-submission-history'
 
-// Not role-gated for now: defining the qualifying tests is something every
-// lab does before its first report, so every signed-in user is offered it
+// The Design System's default radio label is regular weight. This service
+// bolds the options, as on the sign-in page, so each choice reads as an action.
+const optionLabel = { classes: 'govuk-!-font-weight-bold' }
+
+// Only a user who can submit Animal Health Regulations is offered this.
+// The hint is the diagnostic tests page's warning, as one sentence: a radio
+// hint is not the place for the bullet list that page shows in full.
 const updateDiagnosticTestsItem = {
   value: UPDATE_DIAGNOSTIC_TESTS,
-  text: 'Update diagnostic tests',
+  text: 'Update your diagnostic tests in use',
+  label: optionLabel,
   hint: {
-    text: 'Define or update the qualifying tests your lab uses and their UKAS accreditation'
+    text: 'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
   }
 }
 
+// Placeholder until submission history has a store to read the real last
+// report from. Continue still re-renders this page.
 const viewSubmissionHistoryItem = {
   value: VIEW_SUBMISSION_HISTORY,
-  text: 'View submission history',
-  hint: { text: 'Check your previous reports/submissions' }
+  text: 'View your laboratory submission history',
+  label: optionLabel,
+  hint: { text: 'Last report submitted: 2026-02 BR.xls' }
 }
 
 /**
- * The radios a user sees: only the report types their roles grant, then the
- * diagnostic tests and history options. Built per request because it depends
- * on who is signed in.
+ * "Submit an Animal Health Regulations report", "Submit a Bat rabies report".
+ * @param {string} title - the report type's label
+ */
+function submitReportText(title) {
+  const article = /^[aeiou]/i.test(title) ? 'an' : 'a'
+
+  return `Submit ${article} ${title}`
+}
+
+/**
+ * The radios a user sees: only the report types their roles grant, then
+ * submission history, then diagnostic tests when they hold Animal Health
+ * Regulations. Built per request because it depends on who is signed in.
  */
 function buildSubmissionActionItems(user) {
   return [
     ...getAllowedReportTypes(user).map((reportType) => ({
       value: reportType.slug,
-      text: reportType.title,
-      hint: { text: reportType.optionHint }
+      text: submitReportText(reportType.title),
+      label: optionLabel,
+      ...(reportType.welcomeHint
+        ? { hint: { text: reportType.welcomeHint } }
+        : {})
     })),
-    updateDiagnosticTestsItem,
-    viewSubmissionHistoryItem
+    viewSubmissionHistoryItem,
+    ...(canUpdateDiagnosticTests(user) ? [updateDiagnosticTestsItem] : [])
   ]
 }
 
@@ -49,7 +74,8 @@ function renderWelcome(request, h, error) {
   const allowedReportTypes = getAllowedReportTypes(user)
 
   return h.view('submission-welcome/index', {
-    pageTitle: 'Submission Welcome',
+    pageTitle: SUBMISSION_WELCOME_HEADING,
+    heading: SUBMISSION_WELCOME_HEADING,
     submissionActionItems: buildSubmissionActionItems(user),
     hasReportTypes: allowedReportTypes.length > 0,
     error
@@ -60,8 +86,8 @@ function renderWelcome(request, h, error) {
  * Post-sign-in welcome screen. Selecting a report type continues into that
  * form journey, e.g. /bat-rabies (report date page), or, for a report type
  * that can also be entered as a web form, to the screen asking which of the
- * two the user wants. "Update diagnostic tests" opens the page where a lab
- * defines the qualifying tests it uses. A user whose roles grant no report
+ * two the user wants. "Update your diagnostic tests in use" opens the page
+ * where a lab defines the qualifying tests it uses. A user whose roles grant no report
  * type is told so here rather than being turned away at sign-in.
  */
 export const submissionWelcomeGetController = {
@@ -87,7 +113,10 @@ export const submissionWelcomePostController = {
       )
     }
 
-    if (submissionAction === UPDATE_DIAGNOSTIC_TESTS) {
+    if (
+      submissionAction === UPDATE_DIAGNOSTIC_TESTS &&
+      canUpdateDiagnosticTests(request.auth.credentials?.user)
+    ) {
       return h.redirect(DIAGNOSTIC_TESTS_PATH)
     }
 

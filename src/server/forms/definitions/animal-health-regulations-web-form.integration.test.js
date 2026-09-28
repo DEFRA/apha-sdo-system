@@ -1,6 +1,7 @@
 import { config } from '#/config/config.js'
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { pathogenSummaryHtml } from '#/server/forms/controllers/report-entries.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 
@@ -104,13 +105,16 @@ function errorSummaryLinks(html) {
 }
 
 /**
- * The answers so far listed above the question of an entry page: the first
- * summary list on the page, as [key, value, change href] rows
+ * The answers so far listed above the question of an entry page, as
+ * [key, value, change href] rows. The laboratory summary at the top of every
+ * page has no Change links, so it is skipped.
  */
 function answersSoFar(html) {
-  const list = /<dl class="govuk-summary-list[^"]*">([\s\S]*?)<\/dl>/.exec(
-    html
-  )?.[1]
+  const list = [
+    ...html.matchAll(/<dl class="govuk-summary-list[^"]*">([\s\S]*?)<\/dl>/g)
+  ]
+    .map((match) => match[1])
+    .find((body) => body.includes('>Change<'))
 
   return [
     ...(list ?? '').matchAll(
@@ -230,6 +234,9 @@ describe('animal health regulations web form (end to end)', () => {
     )
     // Sits under the report type, like the upload journey
     expect(reportDatePage.result).toContain('href="/submission-welcome"')
+    expect(reportDatePage.result).toContain(
+      'href="/animal-health-regulations/how-to-report" class="govuk-back-link"'
+    )
     expect(reportDatePage.result).toContain(ahr.title)
 
     await answer(
@@ -425,8 +432,8 @@ describe('animal health regulations web form (end to end)', () => {
     expect(answersSoFar(numbersPage.result)).toEqual([
       ['Report Date', 'August 2026', withReturnUrl(PAGES.reportDate, backHere)],
       [
-        'Selected pathogen',
-        'Tritrichomonas foetus',
+        'Pathogen, disease and diagnostic tests',
+        pathogenSummaryHtml('Tritrichomonas foetus'),
         withReturnUrl(entryPage(PAGES.pathogen, first), backHere)
       ],
       [
@@ -465,7 +472,10 @@ describe('animal health regulations web form (end to end)', () => {
       answersSoFar(countryAgain.result).map(([key, value]) => [key, value])
     ).toEqual([
       ['Report Date', 'August 2026'],
-      ['Selected pathogen', 'Tritrichomonas foetus'],
+      [
+        'Pathogen, disease and diagnostic tests',
+        pathogenSummaryHtml('Tritrichomonas foetus')
+      ],
       ['Species the report is for', 'Other (please specify on the next page)'],
       ['Other species', 'Llama']
     ])
@@ -513,7 +523,7 @@ describe('animal health regulations web form (end to end)', () => {
       {
         title: 'Entry 1',
         values: [
-          'Tritrichomonas foetus',
+          pathogenSummaryHtml('Tritrichomonas foetus'),
           'Other (please specify on the next page)',
           'Llama',
           'England',
@@ -623,7 +633,7 @@ describe('animal health regulations web form (end to end)', () => {
     expect(summaryCards(afterChanges.result)[0]).toEqual({
       title: 'Entry 1',
       values: [
-        'Tritrichomonas foetus',
+        pathogenSummaryHtml('Tritrichomonas foetus'),
         'Domestic cattle',
         'England',
         '12',
@@ -704,11 +714,20 @@ describe('animal health regulations web form (end to end)', () => {
     const summaryPage = await get(PAGES.summary)
     expect(summaryPage.statusCode).toBe(statusCodes.ok)
     expect(summaryPage.result).toContain('govuk-grid-column-full')
+    expect(summaryPage.result).toContain('Confirm diagnostic test status')
+    expect(summaryPage.result).toContain(
+      'Change my diagnostic tests and UKAS Accreditation my laboratory provides'
+    )
+    expect(summaryPage.result).toContain('href="/diagnostic-tests"')
     expect(summaryPage.result).not.toContain('govuk-grid-column-two-thirds')
 
-    const answers = /<dl class="govuk-summary-list[\s\S]*?<\/dl>/.exec(
-      summaryPage.result
-    )?.[0]
+    const answers = [
+      ...summaryPage.result.matchAll(
+        /<dl class="govuk-summary-list[\s\S]*?<\/dl>/g
+      )
+    ]
+      .map((match) => match[0])
+      .find((list) => list.includes('Submission kind'))
 
     expect(answers).toMatch(/Submission kind/)
     expect(answers).toMatch(new RegExp(ahr.kind))
@@ -726,7 +745,7 @@ describe('animal health regulations web form (end to end)', () => {
       {
         title: 'Entry 1',
         values: [
-          'Tritrichomonas foetus',
+          pathogenSummaryHtml('Tritrichomonas foetus'),
           'Domestic cattle',
           'England',
           '12',
@@ -737,7 +756,7 @@ describe('animal health regulations web form (end to end)', () => {
       {
         title: 'Entry 2',
         values: [
-          'Bovine Herpes Virus 1 (BHV-1)',
+          pathogenSummaryHtml('Bovine Herpes Virus 1 (BHV-1)'),
           'Domestic cattle',
           'Wales',
           '1',
@@ -746,7 +765,7 @@ describe('animal health regulations web form (end to end)', () => {
         ]
       }
     ])
-    expect(summaryPage.result).toContain(
+    expect(summaryPage.result).not.toContain(
       `href="${withReturnUrl(entryPage(PAGES.country, second), PAGES.summary)}"`
     )
     expect(summaryPage.result).not.toContain('Uploaded')
@@ -769,7 +788,9 @@ describe('animal health regulations web form (end to end)', () => {
     )
 
     // Submitting delivers submission.json, and nothing else, to Azure
-    const submitted = await post(PAGES.summary, {})
+    const submitted = await post(PAGES.summary, {
+      qualifyingTestsConfirmed: 'confirmed'
+    })
     expect(submitted.statusCode).toBe(statusCodes.seeOther)
     expect(submitted.headers.location).toBe(PAGES.status)
 
@@ -792,6 +813,11 @@ describe('animal health regulations web form (end to end)', () => {
       entries: [
         {
           pathogen: 'Tritrichomonas foetus',
+          disease: 'Tritrichomonosis',
+          diagnosticTests: [
+            'Culture & microscopy of Tritrichomonas foetus',
+            'PCR'
+          ],
           species: 'Domestic cattle',
           country: 'England',
           submissionsWithQualifyingTest: '12',
@@ -800,6 +826,15 @@ describe('animal health regulations web form (end to end)', () => {
         },
         {
           pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+          disease:
+            'Infectious bovine rhinotracheitis (IBR) / Infectious pustular vulvovaginitis / Infectious balanoposthitis',
+          diagnosticTests: [
+            'PCR (including gE PCR)',
+            'Virus isolation',
+            'Immunohistochemistry',
+            'FAT',
+            'gE ELISA (used for cattle vaccinated with marker live vaccine)'
+          ],
           species: 'Domestic cattle',
           country: 'Scotland',
           submissionsWithQualifyingTest: '2',

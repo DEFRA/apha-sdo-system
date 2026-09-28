@@ -1,5 +1,6 @@
 import Boom from '@hapi/boom'
 
+import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 
 const REPORT_METHOD_ERROR_FLASH_KEY = 'reportMethodError'
@@ -9,15 +10,20 @@ export const REPORT_METHOD = {
   WEB_FORM: 'web-form'
 }
 
+// Same bold option labels as Submission Welcome and sign-in.
+const optionLabel = { classes: 'govuk-!-font-weight-bold' }
+
 const reportMethodItems = [
   {
     value: REPORT_METHOD.FILE_UPLOAD,
     text: 'Upload a file',
+    label: optionLabel,
     hint: { text: 'Upload a data file (CSV, XLS or XLSX)' }
   },
   {
     value: REPORT_METHOD.WEB_FORM,
     text: 'Complete a web form',
+    label: optionLabel,
     hint: { text: 'Enter the figures for the report on screen' }
   }
 ]
@@ -62,6 +68,7 @@ export const reportMethodGetController = {
       pageTitle: 'How would you like to report?',
       formAction: howToReportPath(reportType),
       reportMethodItems,
+      backLink: { text: 'Back', href: POST_SIGN_IN_PATH },
       error
     })
   }

@@ -147,6 +147,26 @@ describe('report file name rule (end to end)', () => {
     // Enter report date 03/2024
     const reportDatePage = await get(`/${SLUG}/report-date`)
     expect(reportDatePage.statusCode).toBe(statusCodes.ok)
+    expect(reportDatePage.result).toContain(
+      'What month does your submission cover?'
+    )
+    expect(reportDatePage.result).toContain(
+      'Submit your report within 30 days after the end of the reporting month.'
+    )
+    expect(reportDatePage.result).toContain('Reporting period')
+    expect(reportDatePage.result).toContain('Add the report month and year')
+    expect(reportDatePage.result).toContain(
+      'href="/submission-welcome" class="govuk-back-link"'
+    )
+    expect(reportDatePage.result).toContain(
+      '<span class="govuk-!-font-weight-bold">Laboratory name:</span>'
+    )
+    expect(reportDatePage.result).not.toContain(
+      'govuk-summary-list__key">\n      Laboratory name'
+    )
+    expect(reportDatePage.result).toContain('TestLab1')
+    expect(reportDatePage.result).toContain('Reporting person')
+    expect(reportDatePage.result).toContain('A Person')
 
     const dateSaved = await post(`/${SLUG}/report-date`, {
       reportDate__month: '3',
@@ -158,6 +178,9 @@ describe('report file name rule (end to end)', () => {
     // The upload page tells the user the required name before they upload
     const uploadPage = await get(`/${SLUG}/files-upload`)
     expect(uploadPage.statusCode).toBe(statusCodes.ok)
+    expect(uploadPage.result).toContain(
+      `href="/${SLUG}/report-date" class="govuk-back-link"`
+    )
     expect(uploadPage.result).toContain(
       'The file name must include March2024, for example March2024.xlsx or March2024-1.xlsx<br>Only csv, xls and xlsx files are supported.'
     )
@@ -200,17 +223,24 @@ describe('report file name rule (end to end)', () => {
 
     const summaryPage = await get(`/${SLUG}/summary`)
     expect(summaryPage.statusCode).toBe(statusCodes.ok)
+    expect(summaryPage.result).toContain(
+      `href="/${SLUG}/files-upload" class="govuk-back-link"`
+    )
     expect(summaryPage.result).toContain('March2024-part2.xlsx')
     expect(summaryPage.result).not.toContain('Uploaded 1 file')
 
-    const answers = /<dl class="govuk-summary-list[\s\S]*?<\/dl>/.exec(
-      summaryPage.result
-    )?.[0]
+    const answers = [
+      ...summaryPage.result.matchAll(
+        /<dl class="govuk-summary-list[\s\S]*?<\/dl>/g
+      )
+    ]
+      .map((match) => match[0])
+      .find((list) => list.includes('Submission kind'))
 
     expect(answers).toMatch(/Submission kind/)
     expect(answers).toMatch(/Bat rabies/)
     expect(answers.indexOf('Submission kind')).toBeLessThan(
-      answers.indexOf('Report date')
+      answers.indexOf('Reporting period')
     )
 
     // Changing the report date from check-your-answers invalidates the stored
@@ -256,6 +286,7 @@ describe('report file name rule (end to end)', () => {
 
     const summaryPage = await get(`/${SLUG}/summary`)
     expect(summaryPage.statusCode).toBe(statusCodes.ok)
+    expect(summaryPage.result).not.toContain('Confirm diagnostic test status')
 
     const submitted = await post(`/${SLUG}/summary`, {})
     expect(submitted.statusCode).toBe(statusCodes.seeOther)

@@ -47,6 +47,10 @@
       <form method="post" action="#" novalidate>
         <input type="hidden" name="crumb" value="{{ crumb }}">
 
+        {% if showQualifyingTestsConfirmation %}
+          {% include "qualifying-tests-confirmation.html" %}
+        {% endif %}
+
         <div class="govuk-button-group">
           {# As the engine's summary: prevent-multiple-clicks is wired up by
              its debounce-click.js rather than preventDoubleClick #}

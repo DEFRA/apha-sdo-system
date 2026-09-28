@@ -5,6 +5,7 @@
 import { ENTRIES_KEY } from '#/server/forms/controllers/report-entries.js'
 import { FormModel } from '@defra/forms-engine-plugin/engine/models/FormModel.js'
 
+import { ReportDatePageController } from '#/server/forms/controllers/report-date-page-controller.js'
 import { ReportEntriesPageController } from '#/server/forms/controllers/report-entries-page-controller.js'
 import { ReportEntryPageController } from '#/server/forms/controllers/report-entry-page-controller.js'
 import { SummaryPageWithConfirmationEmailController } from '#/server/forms/controllers/summary-page-with-confirmation-email-controller.js'
@@ -36,6 +37,7 @@ export const UNKNOWN_ENTRY_ID = '99999999-9999-4999-8999-999999999999'
  */
 export function buildWebFormModel() {
   return new FormModel(definition, { basePath: WEB_FORM_SLUG }, undefined, {
+    ReportDatePageController,
     ReportEntryPageController,
     ReportEntriesPageController,
     SummaryPageWithConfirmationEmailController

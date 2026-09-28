@@ -30,7 +30,10 @@
  */
 
 import { randomUUID } from 'node:crypto'
+import escapeHtml from 'lodash/escape.js'
 import isEqual from 'lodash/isEqual.js'
+
+import { pathogensByName } from '#/server/routes/diagnostic-tests/qualifying-tests.js'
 import {
   getAnswer,
   hasListFormField
@@ -48,6 +51,8 @@ export const ENTRIES_PAGE_CONTROLLER = 'ReportEntriesPageController'
 
 export const ADD_ANOTHER_ENTRY_TEXT = 'Add another entry to the report'
 export const CONTINUE_TEXT = 'Continue'
+export const PATHOGEN_SUMMARY_LABEL = 'Pathogen, disease and diagnostic tests'
+
 export const CHANGE_TEXT = 'Change'
 export const REMOVE_TEXT = 'Remove'
 export const SAVE_AND_EXIT_TEXT = 'Save and exit'
@@ -450,6 +455,88 @@ export function answerData(field, state, translator) {
 }
 
 /**
+ * The disease and diagnostic tests recognised for a selected pathogen, or
+ * null when the name is not in the catalogue.
+ * @param {string} pathogenName
+ */
+export function recognitionOf(pathogenName) {
+  const pathogen = pathogensByName.get(pathogenName)
+
+  if (!pathogen?.disease) {
+    return null
+  }
+
+  return {
+    disease: pathogen.disease,
+    diagnosticTests: pathogen.tests.map((test) => test.name)
+  }
+}
+
+/**
+ * The pathogen row on a summary: the pathogen, then its disease, then its
+ * diagnostic tests separated by commas.
+ * @param {string} pathogenName
+ */
+export function pathogenSummaryHtml(pathogenName) {
+  const recognition = recognitionOf(pathogenName)
+  const name = escapeHtml(pathogenName)
+
+  if (!recognition) {
+    return name
+  }
+
+  const tests = escapeHtml(recognition.diagnosticTests.join(', '))
+
+  return [
+    `<p class="govuk-body govuk-!-margin-bottom-2">${name}</p>`,
+    '<p class="govuk-body govuk-!-margin-bottom-1 govuk-!-font-weight-bold">Disease</p>',
+    `<p class="govuk-body govuk-!-margin-bottom-2">${escapeHtml(recognition.disease)}</p>`,
+    '<p class="govuk-body govuk-!-margin-bottom-1 govuk-!-font-weight-bold">Diagnostic tests</p>',
+    `<p class="govuk-body govuk-!-margin-bottom-0">${tests}</p>`
+  ].join('')
+}
+
+function withPathogenRecognition(items) {
+  return items.flatMap((item) => {
+    const recognition =
+      item.name === 'pathogen' && item.data ? recognitionOf(item.data) : null
+
+    if (!recognition) {
+      return [item]
+    }
+
+    const recognised = (name, title, value, data) => ({
+      ...item,
+      name,
+      label: title,
+      title,
+      value,
+      data
+    })
+
+    return [
+      {
+        ...item,
+        title: PATHOGEN_SUMMARY_LABEL,
+        value: pathogenSummaryHtml(item.data)
+      },
+      recognised(
+        'disease',
+        'Disease',
+        recognition.disease,
+        recognition.disease
+      ),
+      recognised(
+        'diagnosticTests',
+        'Diagnostic tests',
+        recognition.diagnosticTests.join(', '),
+        recognition.diagnosticTests
+      )
+    ]
+  })
+}
+
+/**
  * Summary detail items for an entry, one per field of its relevant pages, in
  * the shape of the engine's own detail items so the check your answers page,
  * the engine's submission records and the output service can all read them.
@@ -461,20 +548,22 @@ export function answerData(field, state, translator) {
  * @returns {object[]}
  */
 export function entryDetailItems(model, entry, translator, options = {}) {
-  return relevantEntryPages(model, entry).flatMap((page) =>
-    page.collection.fields.map((field) => ({
-      name: field.name,
-      label: field.title,
-      title: field.label,
-      value: answerHtml(field, entry, translator),
-      data: answerData(field, entry, translator),
-      href: entryPageHref(page, entry.itemId, {
-        returnUrl: options.returnUrl
-      }),
-      state: entry,
-      page,
-      field
-    }))
+  return withPathogenRecognition(
+    relevantEntryPages(model, entry).flatMap((page) =>
+      page.collection.fields.map((field) => ({
+        name: field.name,
+        label: field.title,
+        title: field.label,
+        value: answerHtml(field, entry, translator),
+        data: answerData(field, entry, translator),
+        href: entryPageHref(page, entry.itemId, {
+          returnUrl: options.returnUrl
+        }),
+        state: entry,
+        page,
+        field
+      }))
+    )
   )
 }
 
@@ -515,23 +604,33 @@ export function answersSoFar(model, page, entry, state, translator) {
   ]
 
   const rows = answers
-    .map(({ field, state: answerState, href }) => ({
-      key: { text: field.label },
-      value: {
-        classes: 'app-prose-scope',
-        html: answerHtml(field, answerState, translator)
-      },
-      actions: {
-        items: [
-          {
-            href,
-            text: CHANGE_TEXT,
-            classes: LINK_CLASSES,
-            visuallyHiddenText: field.label.toLowerCase()
-          }
-        ]
+    .map(({ field, state: answerState, href }) => {
+      const shown = answerHtml(field, answerState, translator)
+      const recognised =
+        field.name === 'pathogen' &&
+        recognitionOf(answerData(field, answerState, translator))
+      const label = recognised ? PATHOGEN_SUMMARY_LABEL : field.label
+
+      return {
+        key: { text: label },
+        value: {
+          classes: 'app-prose-scope',
+          html: recognised
+            ? pathogenSummaryHtml(answerData(field, answerState, translator))
+            : shown
+        },
+        actions: {
+          items: [
+            {
+              href,
+              text: CHANGE_TEXT,
+              classes: LINK_CLASSES,
+              visuallyHiddenText: label.toLowerCase()
+            }
+          ]
+        }
       }
-    }))
+    })
     .filter((row) => row.value.html)
 
   return { rows }
@@ -545,29 +644,40 @@ export function answersSoFar(model, page, entry, state, translator) {
  * @param {object} entry - the entry
  * @param {number} index - position of the entry in the list, from 0
  * @param {object} translator - the engine translator for the request
- * @param {{ returnUrl?: string, removeHref?: string }} [options] - where a
- *   Change link returns to, and the Remove link when removal is offered
+ * @param {{ returnUrl?: string, removeHref?: string, showChange?: boolean }} [options]
+ *   where a Change link returns to, the Remove link when removal is offered,
+ *   and whether each answer has a Change link. Check your answers turns that
+ *   off; the entries list keeps it.
  */
 export function entryCard(model, entry, index, translator, options = {}) {
-  const rows = entryDetailItems(model, entry, translator, options).map(
-    (item) => ({
-      key: { text: item.title },
-      value: {
-        classes: 'app-prose-scope',
-        html: item.value || translator.t('pages.summary.notProvided')
-      },
-      actions: {
-        items: [
-          {
-            href: item.href,
-            text: CHANGE_TEXT,
-            classes: LINK_CLASSES,
-            visuallyHiddenText: item.title.toLowerCase()
-          }
-        ]
+  const rows = entryDetailItems(model, entry, translator, options)
+    .filter(
+      (item) => item.name !== 'disease' && item.name !== 'diagnosticTests'
+    )
+    .map((item) => {
+      const row = {
+        key: { text: item.title },
+        value: {
+          classes: 'app-prose-scope',
+          html: item.value || translator.t('pages.summary.notProvided')
+        }
       }
+
+      if (options.showChange !== false) {
+        row.actions = {
+          items: [
+            {
+              href: item.href,
+              text: CHANGE_TEXT,
+              classes: LINK_CLASSES,
+              visuallyHiddenText: item.title.toLowerCase()
+            }
+          ]
+        }
+      }
+
+      return row
     })
-  )
 
   const card = { title: { text: entryName(model, index) } }
 

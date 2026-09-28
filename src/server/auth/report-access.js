@@ -108,6 +108,18 @@ export function canSubmitReportType(user, reportType) {
 }
 
 /**
+ * Qualifying tests belong to Animal Health Regulations. A user who holds that
+ * journey, alone or with others, may update them.
+ * @param {{ journeys?: string[] }} [user] - the session user profile
+ */
+export function canUpdateDiagnosticTests(user) {
+  return canSubmitReportType(
+    user,
+    reportTypes.find((reportType) => reportType.code === 'AHR')
+  )
+}
+
+/**
  * onPostAuth extension: a signed-in user who opens a report journey their
  * roles do not grant is sent to /no-access, which names the report type.
  *

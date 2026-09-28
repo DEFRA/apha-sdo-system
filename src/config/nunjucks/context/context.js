@@ -2,6 +2,7 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 
 import { config } from '#/config/config.js'
+import { identityRows } from '#/server/common/helpers/identity-rows.js'
 import { buildBreadcrumbs } from './build-breadcrumbs.js'
 import { createLogger } from '#/server/common/helpers/logging/logger.js'
 
@@ -29,6 +30,7 @@ export function context(request) {
     serviceUrl: '/',
     isAuthenticated: request?.auth?.isAuthenticated ?? false,
     signedInUser: request?.auth?.credentials?.user ?? null,
+    identityRows: identityRows(request?.auth?.credentials?.user),
     breadcrumbs: buildBreadcrumbs(request),
     getAssetPath(asset) {
       if (!config.get('isProduction')) {

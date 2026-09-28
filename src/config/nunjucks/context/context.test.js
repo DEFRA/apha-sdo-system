@@ -62,7 +62,8 @@ describe('context and cache', () => {
           isAuthenticated: false,
           serviceName: 'apha-sdo-system',
           serviceUrl: '/',
-          signedInUser: null
+          signedInUser: null,
+          identityRows: []
         })
       })
 
@@ -154,7 +155,8 @@ describe('context and cache', () => {
           isAuthenticated: false,
           serviceName: 'apha-sdo-system',
           serviceUrl: '/',
-          signedInUser: null
+          signedInUser: null,
+          identityRows: []
         })
       })
     })

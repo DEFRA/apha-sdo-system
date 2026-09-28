@@ -1,0 +1,31 @@
+{#
+  Required confirmation on Animal Health Regulations check your answers.
+  The change link sits under the checkbox label and opens the diagnostic
+  tests page. The error is set when Submit is used without the box ticked.
+#}
+{% from "govuk/components/checkboxes/macro.njk" import govukCheckboxes %}
+
+{% set changeLink %}
+  <a class="govuk-link" href="{{ qualifyingTestsChangeHref }}">Change my diagnostic tests and UKAS Accreditation my laboratory provides</a>
+{% endset %}
+
+{{ govukCheckboxes({
+  idPrefix: "qualifying-tests",
+  name: "qualifyingTestsConfirmed",
+  fieldset: {
+    legend: {
+      text: "Confirm diagnostic test status",
+      classes: "govuk-fieldset__legend--s"
+    }
+  },
+  items: [
+    {
+      value: "confirmed",
+      text: "I confirm that the diagnostic tests and UKAS Accreditation selected, are the ones our laboratory provide and have used this reporting month",
+      hint: {
+        html: changeLink
+      }
+    }
+  ],
+  errorMessage: { text: qualifyingTestsError } if qualifyingTestsError
+}) }}

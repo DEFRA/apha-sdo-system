@@ -46,8 +46,8 @@ const user = {
 }
 
 /**
- * A signed-in session. The page is not role-gated, so the journeys granted
- * make no difference to it.
+ * A signed-in session. The page is open to a user who can submit Animal
+ * Health Regulations.
  */
 function authWithJourneys(journeys = user.journeys) {
   return {
@@ -487,10 +487,19 @@ describe('diagnostic tests routes', () => {
       expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
     })
 
-    test('Should be open to a signed-in user who holds no report type', async () => {
-      const { statusCode } = await getDiagnosticTests(authWithJourneys([]))
+    test('Should be open to a user who holds only Animal Health Regulations', async () => {
+      const { statusCode } = await getDiagnosticTests(authWithJourneys(['AHR']))
 
       expect(statusCode).toBe(statusCodes.ok)
+    })
+
+    test('Should send a user without Animal Health Regulations back to Submission Welcome', async () => {
+      const { statusCode, headers } = await getDiagnosticTests(
+        authWithJourneys(['BR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
     })
 
     test('Should send a signed-out user to sign in', async () => {
@@ -507,6 +516,16 @@ describe('diagnostic tests routes', () => {
   })
 
   describe(`POST ${DIAGNOSTIC_TESTS_PATH}`, () => {
+    test('Should send a user without Animal Health Regulations back to Submission Welcome', async () => {
+      const { statusCode, headers } = await postDiagnosticTests(
+        {},
+        authWithJourneys(['BR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
+    })
+
     test('Should ask for at least one test when none is ticked', async () => {
       const { result, statusCode, headers } = await postDiagnosticTests()
 

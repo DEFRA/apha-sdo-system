@@ -24,9 +24,11 @@ describe('qualifying tests catalogue', () => {
     expect(pathogens.map((pathogen) => pathogen.name)).toEqual(ahrPathogenNames)
   })
 
-  test('Should give every pathogen at least one test', () => {
+  test('Should give every pathogen at least one test and its disease', () => {
     for (const pathogen of pathogens) {
       expect(pathogen.tests.length).toBeGreaterThan(0)
+      expect(pathogen.disease).toEqual(expect.any(String))
+      expect(pathogen.disease.length).toBeGreaterThan(0)
     }
   })
 
@@ -114,7 +116,12 @@ describe('qualifying tests catalogue', () => {
       key: 'bhv-fat',
       name: 'FAT',
       xlsRow: 18,
-      pathogen: { key: 'bhv', name: 'Bovine Herpes Virus 1 (BHV-1)' }
+      pathogen: {
+        key: 'bhv',
+        name: 'Bovine Herpes Virus 1 (BHV-1)',
+        disease:
+          'Infectious bovine rhinotracheitis (IBR) / Infectious pustular vulvovaginitis / Infectious balanoposthitis'
+      }
     })
     expect(testsByKey.get('not-a-test')).toBeUndefined()
   })

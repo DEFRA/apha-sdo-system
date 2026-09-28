@@ -76,7 +76,13 @@ describe('submission welcome routes', () => {
       const { result, statusCode } = await getSubmissionWelcome()
 
       expect(statusCode).toBe(statusCodes.ok)
-      expect(result).toEqual(expect.stringContaining('Submission Welcome'))
+      expect(result).toEqual(
+        expect.stringContaining('What would you like to do?')
+      )
+      expect(result).toEqual(expect.stringContaining('Laboratory name'))
+      expect(result).toEqual(expect.stringContaining('TestLab1'))
+      expect(result).toEqual(expect.stringContaining('Reporting person'))
+      expect(result).toEqual(expect.stringContaining('A Person'))
 
       for (const reportType of reportTypes) {
         expect(result).toEqual(expect.stringContaining(reportType.title))
@@ -124,8 +130,8 @@ describe('submission welcome routes', () => {
         )
       }
 
-      // The diagnostic tests and history options are not role-gated
-      expect(result).toEqual(
+      // History stays available. Diagnostic tests need Animal Health Regulations.
+      expect(result).not.toEqual(
         expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
       )
       expect(result).toEqual(
@@ -140,21 +146,23 @@ describe('submission welcome routes', () => {
       expect(result).toEqual(
         expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
       )
-      expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
+      expect(result).toEqual(
+        expect.stringContaining('Update your diagnostic tests in use')
+      )
       expect(result).toEqual(
         expect.stringContaining(
-          'Define or update the qualifying tests your lab uses and their UKAS accreditation'
+          'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
         )
       )
     })
 
-    test('Should list the report types, then diagnostic tests, then history', async () => {
+    test('Should list the report types, then history, then diagnostic tests', async () => {
       const { result } = await getSubmissionWelcome()
 
       const positions = [
         ...reportTypes.map((reportType) => `value="${reportType.slug}"`),
-        `value="${UPDATE_DIAGNOSTIC_TESTS}"`,
-        `value="${VIEW_SUBMISSION_HISTORY}"`
+        `value="${VIEW_SUBMISSION_HISTORY}"`,
+        `value="${UPDATE_DIAGNOSTIC_TESTS}"`
       ].map((value) => result.indexOf(value))
 
       expect(positions.every((position) => position >= 0)).toBe(true)
@@ -168,10 +176,47 @@ describe('submission welcome routes', () => {
       expect(result).toEqual(
         expect.stringContaining(`value="${VIEW_SUBMISSION_HISTORY}"`)
       )
-      expect(result).toEqual(expect.stringContaining('View submission history'))
       expect(result).toEqual(
-        expect.stringContaining('Check your previous reports/submissions')
+        expect.stringContaining('View your laboratory submission history')
       )
+      expect(result).toEqual(
+        expect.stringContaining('Last report submitted: 2026-02 BR.xls')
+      )
+    })
+
+    test('Should offer each report type as submit a report', async () => {
+      const { result } = await getSubmissionWelcome()
+
+      expect(result).toEqual(
+        expect.stringContaining('Submit a Bat rabies report')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Use this service to submit your monthly bat rabies reports. The information you provide helps monitor and manage health threats and disease in bat populations across the UK and the British Isles.'
+        )
+      )
+      expect(result).toEqual(
+        expect.stringContaining('Submit an Animal Health Regulations report')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across the UK.'
+        )
+      )
+    })
+
+    test('Should leave out a blank laboratory or reporting person', async () => {
+      const { result } = await getSubmissionWelcome({
+        strategy: 'session',
+        credentials: {
+          sessionId: 'test-session',
+          user: { id: 'user-id', name: '', organisationId: null, journeys: [] },
+          claims: {}
+        }
+      })
+
+      expect(result).not.toEqual(expect.stringContaining('Laboratory name'))
+      expect(result).not.toEqual(expect.stringContaining('Reporting person'))
     })
   })
 
@@ -233,14 +278,36 @@ describe('submission welcome routes', () => {
       expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
     })
 
-    test('Should open the diagnostic tests page for a user who holds no report type', async () => {
+    test('Should offer diagnostic tests only when the user can submit Animal Health Regulations', async () => {
+      const withAhr = await getSubmissionWelcome(authWithJourneys(['AHR']))
+      const batOnly = await getSubmissionWelcome(authWithJourneys(['BR']))
+
+      expect(withAhr.result).toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
+      expect(batOnly.result).not.toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
+    })
+
+    test('Should not open diagnostic tests for a user who holds no report type', async () => {
       const { statusCode, headers } = await postSubmissionWelcome(
         { submissionAction: UPDATE_DIAGNOSTIC_TESTS },
         authWithJourneys([])
       )
 
       expect(statusCode).toBe(statusCodes.redirect)
-      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+      expect(headers.location).toBe('/submission-welcome')
+    })
+
+    test('Should not open diagnostic tests for a user who holds only Bat rabies', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome(
+        { submissionAction: UPDATE_DIAGNOSTIC_TESTS },
+        authWithJourneys(['BR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
     })
 
     test('Should do nothing when submission history is selected', async () => {
@@ -250,7 +317,9 @@ describe('submission welcome routes', () => {
 
       expect(statusCode).toBe(statusCodes.ok)
       expect(headers.location).toBeUndefined()
-      expect(result).toEqual(expect.stringContaining('Submission Welcome'))
+      expect(result).toEqual(
+        expect.stringContaining('What would you like to do?')
+      )
       expect(result).not.toEqual(expect.stringContaining('There is a problem'))
       expect(result).not.toEqual(
         expect.stringContaining('govuk-notification-banner')

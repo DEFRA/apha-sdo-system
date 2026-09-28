@@ -3,6 +3,7 @@ import { SummaryPageController } from '@defra/forms-engine-plugin/controllers/Su
 import { redirectPath } from '@defra/forms-engine-plugin/engine/helpers.js'
 
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { DIAGNOSTIC_TESTS_PATH } from '#/server/routes/diagnostic-tests/controller.js'
 import { reportTypesBySlug } from '../report-types.js'
 import { uploadedFileName } from '../validation/report-file-name.js'
 import { findReportFileUploadPage } from './report-file-upload-page-controller.js'
@@ -23,6 +24,13 @@ const FILE_UPLOAD_FIELD = 'FileUploadField'
 const SUBMISSION_KIND_KEY = 'Submission kind'
 const ENTRIES_KEY_TEXT = 'Entries'
 
+export const QUALIFYING_TESTS_FIELD = 'qualifyingTestsConfirmed'
+export const QUALIFYING_TESTS_CONFIRMATION = 'confirmed'
+export const QUALIFYING_TESTS_ERROR =
+  'Confirm that the diagnostic tests and UKAS accreditation selected are the ones your laboratory used this reporting month'
+
+const QUALIFYING_TESTS_ERROR_HREF = '#qualifying-tests'
+
 // Standard designer page type the plugin doesn't ship a controller for.
 // Behaves as a plain summary page; no confirmation email is sent yet.
 //
@@ -35,12 +43,12 @@ export class SummaryPageWithConfirmationEmailController extends SummaryPageContr
   constructor(model, pageDef) {
     super(model, pageDef)
 
-    // The web form's pages use the full width, so its check your answers
-    // does too (see src/server/forms/views/report-summary.html). The upload
-    // journeys keep the engine's summary page, as narrow as their pages.
-    if (isReportWithEntries(model)) {
-      this.viewName = 'report-summary'
-    }
+    // Animal Health Regulations, upload and web form, uses the full-width
+    // check your answers. Bat rabies keeps the engine's narrower summary.
+    this.viewName =
+      isAnimalHealthRegulations(model) || isReportWithEntries(model)
+        ? 'report-summary'
+        : 'upload-summary'
   }
 
   getSummaryViewModel(request, context, translator) {
@@ -49,6 +57,13 @@ export class SummaryPageWithConfirmationEmailController extends SummaryPageContr
     showUploadedFileName(viewModel)
     showReportEntries(viewModel, this, context, translator)
     showSubmissionKind(viewModel, this.model)
+
+    // Bat rabies has no qualifying tests. Both Animal Health Regulations
+    // journeys, upload and web form, ask the laboratory to confirm them.
+    if (isAnimalHealthRegulations(this.model)) {
+      viewModel.showQualifyingTestsConfirmation = true
+      viewModel.qualifyingTestsChangeHref = DIAGNOSTIC_TESTS_PATH
+    }
 
     return viewModel
   }
@@ -76,8 +91,45 @@ export class SummaryPageWithConfirmationEmailController extends SummaryPageContr
       return h.redirect(entriesPage.href).code(statusCodes.seeOther)
     }
 
+    if (
+      isAnimalHealthRegulations(this.model) &&
+      !isQualifyingTestsConfirmed(request.payload)
+    ) {
+      return this.showUnconfirmedQualifyingTests(request, context, h)
+    }
+
     return super.handleFormSubmit(request, context, h)
   }
+
+  /**
+   * The confirmation was not ticked. The summary is shown again with the
+   * error, and nothing is submitted.
+   */
+  async showUnconfirmedQualifyingTests(request, context, h) {
+    const translator = this.getTranslator(request)
+    const viewModel = this.getSummaryViewModel(request, context, translator)
+
+    viewModel.hasMissingNotificationEmail =
+      await this.hasMissingNotificationEmail(request, context)
+    viewModel.t = translator.t
+    viewModel.qualifyingTestsError = QUALIFYING_TESTS_ERROR
+    viewModel.errors = [
+      ...(viewModel.errors ?? []),
+      { text: QUALIFYING_TESTS_ERROR, href: QUALIFYING_TESTS_ERROR_HREF }
+    ]
+
+    return h.view(this.viewName, viewModel)
+  }
+}
+
+function isAnimalHealthRegulations(model) {
+  return reportTypesBySlug.get(model?.basePath)?.code === 'AHR'
+}
+
+function isQualifyingTestsConfirmed(payload) {
+  const value = payload?.[QUALIFYING_TESTS_FIELD]
+
+  return [value].flat().includes(QUALIFYING_TESTS_CONFIRMATION)
 }
 
 /**
@@ -139,7 +191,10 @@ function showReportEntries(viewModel, summaryPage, context, translator) {
 
   for (const [index, entry] of entries.entries()) {
     viewModel.checkAnswers.push({
-      summaryList: entryCard(model, entry, index, translator, { returnUrl })
+      summaryList: entryCard(model, entry, index, translator, {
+        returnUrl,
+        showChange: false
+      })
     })
   }
 
@@ -183,7 +238,7 @@ function removeEntriesSectionGroup(viewModel, sectionName) {
 }
 
 /**
- * Puts Submission kind first on check your answers, before Report date. It is
+ * Puts Submission kind first on check your answers, before Reporting period. It is
  * not a question in the journey — the user already chose it on Submission
  * Welcome — so the row has no Change link.
  * @param {{ checkAnswers?: object[] }} viewModel - the summary view model
