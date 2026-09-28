@@ -76,6 +76,17 @@ describe('formatPersonName', () => {
     )
   })
 
+  test('drops a trailing directory tag such as "(Other)"', () => {
+    expect(formatPersonName({ name: 'Brais Gil (Other)' })).toBe('Brais Gil')
+    expect(formatPersonName({ name: 'Gil, Brais (Other)' })).toBe('Brais Gil')
+    expect(formatPersonName({ name: 'Brais (Other) Gil' })).toBe(
+      'Brais (Other) Gil'
+    )
+    expect(
+      formatPersonName({ given_name: 'Brais', family_name: 'Gil (Other)' })
+    ).toBe('Brais Gil')
+  })
+
   test('keeps a display name that is already "Given Surname"', () => {
     expect(formatPersonName({ name: 'George Surname' })).toBe('George Surname')
     expect(formatPersonName({ name: 'A Person' })).toBe('A Person')

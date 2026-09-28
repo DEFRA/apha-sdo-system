@@ -6,6 +6,9 @@ export default defineConfig({
     environment: 'node',
     clearMocks: true,
     hookTimeout: 60000,
+    // The Animal Health Regulations walk injects the whole journey. Under a
+    // full parallel run that exceeds the 5s default.
+    testTimeout: 20000,
     env: {
       APP_BASE_URL: 'http://localhost:3000',
       AUTH_ENTRA_ID_CREDENTIAL_MODE: 'mock',
