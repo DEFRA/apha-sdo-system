@@ -1,7 +1,6 @@
 import { definition } from '#/server/forms/definitions/animal-health-regulations-web-form.js'
 import {
   ACCREDITATION_OPTIONS,
-  FIRST_XLS_ROW,
   pathogens,
   tests,
   testsByKey
@@ -16,7 +15,7 @@ describe('qualifying tests catalogue', () => {
     expect(ACCREDITATION_OPTIONS).toEqual(['Yes', 'No', 'Unknown'])
   })
 
-  test('Should not offer "Not applicable", which the workbook reserves for tests not in use', () => {
+  test('Should not offer "Not applicable": a test not in use is not ticked', () => {
     expect(ACCREDITATION_OPTIONS).not.toContain('Not applicable')
   })
 
@@ -30,7 +29,7 @@ describe('qualifying tests catalogue', () => {
     }
   })
 
-  test('Should carry the tests of the workbook, in its order', () => {
+  test("Should carry APHA's qualifying tests, in its order", () => {
     expect(tests).toHaveLength(26)
     expect(
       pathogens.map((pathogen) => [
@@ -101,19 +100,10 @@ describe('qualifying tests catalogue', () => {
     }
   })
 
-  test('Should place the tests on consecutive workbook rows from the first test row', () => {
-    expect(FIRST_XLS_ROW).toBe(6)
-    expect(tests.map((test) => test.xlsRow)).toEqual(
-      tests.map((_test, index) => FIRST_XLS_ROW + index)
-    )
-    expect(tests.at(-1).xlsRow).toBe(31)
-  })
-
-  test('Should resolve a key to its test, pathogen and row', () => {
+  test('Should resolve a key to its test and pathogen', () => {
     expect(testsByKey.get('bhv-fat')).toEqual({
       key: 'bhv-fat',
       name: 'FAT',
-      xlsRow: 18,
       pathogen: { key: 'bhv', name: 'Bovine Herpes Virus 1 (BHV-1)' }
     })
     expect(testsByKey.get('not-a-test')).toBeUndefined()

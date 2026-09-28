@@ -6,10 +6,6 @@ import {
   tests,
   testsByKey
 } from './qualifying-tests.js'
-import {
-  DIAGNOSTIC_TESTS_FILE_NAME,
-  buildDiagnosticTestsWorkbook
-} from './diagnostic-tests-workbook.js'
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
 
 export const DIAGNOSTIC_TESTS_PATH = '/diagnostic-tests'
@@ -103,14 +99,16 @@ export function validateDiagnosticTests(selections) {
 /**
  * The record of a lab's qualifying tests, shaped like the submission.json of
  * a report (see src/server/forms/services/output-service.js) with only the
- * fields that apply: no report month and no notification email. The tests
- * themselves are not in the record; they are in the workbook it names, the
- * one file of the submission (see diagnostic-tests-workbook.js).
+ * fields that apply: no report month and no file. The tests are one row
+ * each, in catalogue order, so they can be written out as lines of a
+ * spreadsheet downstream.
  * @param {{ id?: string, organisationId?: string }} [user] - the session user
+ * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {{ referenceNumber?: string, now?: Date }} [options] - fixed for tests
  */
 export function buildDiagnosticTestsSubmission(
   user,
+  selections,
   { referenceNumber = generateUniqueReference(), now = new Date() } = {}
 ) {
   return {
@@ -120,7 +118,11 @@ export function buildDiagnosticTestsSubmission(
     userId: user?.id ?? null,
     organisationId: user?.organisationId ?? null,
     submittedAt: now.toISOString(),
-    fileName: DIAGNOSTIC_TESTS_FILE_NAME
+    diagnosticTestsData: selections.map(({ test, accreditation }) => ({
+      pathogen: test.pathogen.name,
+      test: test.name,
+      accreditation
+    }))
   }
 }
 
@@ -207,11 +209,11 @@ export const diagnosticTestsGetController = {
 }
 
 /**
- * Continue: the ticked tests are validated and, once they pass, written into
- * APHA's workbook and delivered with the record to the Azure container under
- * the reference number, as a report is. The page is then shown again with
- * the answers still in place. A failed delivery surfaces as the service's
- * error page, as it does for a report.
+ * Continue: the ticked tests are validated and, once they pass, recorded and
+ * delivered to the Azure container under the reference number, as a report's
+ * record is. The page is then shown again with the answers still in place. A
+ * failed delivery surfaces as the service's error page, as it does for a
+ * report.
  */
 export const diagnosticTestsPostController = {
   async handler(request, h) {
@@ -224,9 +226,9 @@ export const diagnosticTestsPostController = {
 
     await deliverDiagnosticTestsSubmission({
       submission: buildDiagnosticTestsSubmission(
-        request.auth.credentials?.user
+        request.auth.credentials?.user,
+        selections
       ),
-      workbook: buildDiagnosticTestsWorkbook(selections),
       logger: request.logger
     })
 

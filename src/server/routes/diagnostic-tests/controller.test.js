@@ -1,15 +1,8 @@
-import { strFromU8, unzipSync } from 'fflate'
-
 import { createServer } from '#/server/server.js'
 import { config } from '#/config/config.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
-import {
-  DIAGNOSTIC_TESTS_FILE_NAME,
-  NOT_IN_USE_ACCREDITATION,
-  XLSX_CONTENT_TYPE
-} from './diagnostic-tests-workbook.js'
 import {
   DIAGNOSTIC_TESTS_FORM,
   DIAGNOSTIC_TESTS_PATH,
@@ -33,6 +26,9 @@ import {
 vi.mock('#/server/upload/services/azure-storage-service.js', () => ({
   azureStorageService: { uploadFile: vi.fn() }
 }))
+
+// Not an accreditation of a test in use: a test not in use is not ticked
+const NOT_APPLICABLE = 'Not applicable'
 
 const mycoplasmaPcr = testsByKey.get('mycoplasma-pcr')
 const bhvFat = testsByKey.get('bhv-fat')
@@ -168,7 +164,7 @@ describe('diagnostic tests helpers', () => {
     test('Should refuse "Not applicable", which is what a test not in use reads', () => {
       expect(
         validateDiagnosticTests([
-          { test: bhvFat, accreditation: NOT_IN_USE_ACCREDITATION }
+          { test: bhvFat, accreditation: NOT_APPLICABLE }
         ])
       ).toEqual([
         {
@@ -210,12 +206,16 @@ describe('diagnostic tests helpers', () => {
   describe('buildDiagnosticTestsSubmission', () => {
     const now = new Date('2026-09-24T14:04:00.000Z')
 
-    test('Should record who, for which lab, when, and the workbook that holds the tests', () => {
+    test('Should record who, for which lab, when, and one row per ticked test', () => {
       expect(
-        buildDiagnosticTestsSubmission(user, {
-          referenceNumber: 'ABC-DEF-GHJ',
-          now
-        })
+        buildDiagnosticTestsSubmission(
+          user,
+          [
+            { test: mycoplasmaPcr, accreditation: 'Yes' },
+            { test: bhvFat, accreditation: 'No' }
+          ],
+          { referenceNumber: 'ABC-DEF-GHJ', now }
+        )
       ).toEqual({
         referenceNumber: 'ABC-DEF-GHJ',
         form: DIAGNOSTIC_TESTS_FORM,
@@ -223,7 +223,18 @@ describe('diagnostic tests helpers', () => {
         userId: 'user-id',
         organisationId: 'TestLab1',
         submittedAt: '2026-09-24T14:04:00.000Z',
-        fileName: 'diagnostic-tests.xlsx'
+        diagnosticTestsData: [
+          {
+            pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
+            test: 'PCR',
+            accreditation: 'Yes'
+          },
+          {
+            pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+            test: 'FAT',
+            accreditation: 'No'
+          }
+        ]
       })
     })
 
@@ -233,7 +244,7 @@ describe('diagnostic tests helpers', () => {
     })
 
     test('Should carry only the fields that apply, in the order of a report record', () => {
-      const submission = buildDiagnosticTestsSubmission(user, {
+      const submission = buildDiagnosticTestsSubmission(user, [], {
         referenceNumber: 'ABC-DEF-GHJ',
         now
       })
@@ -245,16 +256,16 @@ describe('diagnostic tests helpers', () => {
         'userId',
         'organisationId',
         'submittedAt',
-        'fileName'
+        'diagnosticTestsData'
       ])
-      expect(submission).not.toHaveProperty('diagnosticTestsData')
+      expect(submission).not.toHaveProperty('fileName')
       expect(submission).not.toHaveProperty('fileNames')
       expect(submission).not.toHaveProperty('notificationEmail')
     })
 
     test('Should generate a reference number and timestamp by default', () => {
       const before = Date.now()
-      const submission = buildDiagnosticTestsSubmission(user)
+      const submission = buildDiagnosticTestsSubmission(user, [])
 
       expect(submission.referenceNumber).toMatch(
         /^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/
@@ -263,7 +274,7 @@ describe('diagnostic tests helpers', () => {
     })
 
     test('Should record null for a user without an id or lab', () => {
-      const submission = buildDiagnosticTestsSubmission(undefined, { now })
+      const submission = buildDiagnosticTestsSubmission(undefined, [], { now })
 
       expect(submission.userId).toBeNull()
       expect(submission.organisationId).toBeNull()
@@ -451,10 +462,8 @@ describe('diagnostic tests routes', () => {
       expect(select.match(/<option /g)).toHaveLength(
         ACCREDITATION_OPTIONS.length + 1
       )
-      // What the workbook gives a test not in use is not a choice here
-      expect(select).not.toEqual(
-        expect.stringContaining(NOT_IN_USE_ACCREDITATION)
-      )
+      // Not an accreditation of a test in use, so not a choice here
+      expect(select).not.toEqual(expect.stringContaining(NOT_APPLICABLE))
 
       expect(result).toMatch(
         new RegExp(`for="${selectId}">\\s*Accreditation\\s*</label>`)
@@ -583,7 +592,7 @@ describe('diagnostic tests routes', () => {
       }
     })
 
-    test.each(['Maybe', NOT_IN_USE_ACCREDITATION])(
+    test.each(['Maybe', NOT_APPLICABLE])(
       'Should refuse "%s" as an accreditation',
       async (accreditation) => {
         const { result, statusCode } = await postDiagnosticTests({
@@ -652,13 +661,24 @@ describe('diagnostic tests routes', () => {
         userId: user.id,
         organisationId: user.organisationId,
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-        fileName: DIAGNOSTIC_TESTS_FILE_NAME
+        diagnosticTestsData: [
+          {
+            pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
+            test: 'PCR',
+            accreditation: 'Yes'
+          },
+          {
+            pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+            test: 'FAT',
+            accreditation: 'Unknown'
+          }
+        ]
       })
       // Azure storage is off in this test, so nothing was delivered
       expect(azureStorageService.uploadFile).not.toHaveBeenCalled()
     })
 
-    test('Should deliver the filled-in workbook and the record to Azure under the reference number', async () => {
+    test('Should deliver the record, and nothing else, to Azure under the reference number', async () => {
       config.set('azure.storage.enabled', true)
 
       const { statusCode } = await postDiagnosticTests({
@@ -671,53 +691,13 @@ describe('diagnostic tests routes', () => {
 
       const [submission] = loggedSubmissions()
       const { referenceNumber } = submission
-      const uploads = azureStorageService.uploadFile.mock.calls
 
-      expect(uploads.map(([, , metadata]) => metadata.type)).toEqual([
-        'file',
-        'submission'
-      ])
+      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
 
-      const [workbookId, workbook, workbookMetadata] = uploads[0]
-
-      expect(workbookId).toBe(`${referenceNumber}-diagnostic-tests`)
-      expect(workbookMetadata).toEqual({
-        blobPrefix: referenceNumber,
-        originalName: DIAGNOSTIC_TESTS_FILE_NAME,
-        contentType: XLSX_CONTENT_TYPE,
-        type: 'file',
-        referenceNumber
-      })
-
-      // The workbook carries the ticks: G of a ticked row is TRUE, and E
-      // holds its accreditation's shared string (Yes = 17, No = 28)
-      const sheet = strFromU8(
-        unzipSync(new Uint8Array(workbook))['xl/worksheets/sheet1.xml']
-      )
-
-      expect(sheet).toEqual(
-        expect.stringContaining(
-          `<c r="G${mycoplasmaPcr.xlsRow}" s="2" t="b"><v>1</v></c>`
-        )
-      )
-      expect(sheet).toMatch(
-        new RegExp(
-          `<c r="E${mycoplasmaPcr.xlsRow}" s="\\d+" t="s"><v>17</v></c>`
-        )
-      )
-      expect(sheet).toMatch(
-        new RegExp(`<c r="E${bhvFat.xlsRow}" s="\\d+" t="s"><v>28</v></c>`)
-      )
-      expect(sheet).toEqual(
-        expect.stringContaining(
-          `<c r="G${bhvPcr.xlsRow}" s="2" t="b"><v>0</v></c>`
-        )
-      )
-
-      const [recordId, record, recordMetadata] = uploads[1]
+      const [recordId, record, recordMetadata] =
+        azureStorageService.uploadFile.mock.calls[0]
 
       expect(recordId).toBe(`${referenceNumber}-submission`)
-      expect(JSON.parse(record.toString())).toEqual(submission)
       expect(recordMetadata).toEqual({
         blobPrefix: referenceNumber,
         originalName: 'submission.json',
@@ -725,6 +705,23 @@ describe('diagnostic tests routes', () => {
         type: 'submission',
         referenceNumber
       })
+
+      // The record itself carries the tests
+      const written = JSON.parse(record.toString())
+
+      expect(written).toEqual(submission)
+      expect(written.diagnosticTestsData).toEqual([
+        {
+          pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
+          test: 'PCR',
+          accreditation: 'Yes'
+        },
+        {
+          pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+          test: 'FAT',
+          accreditation: 'No'
+        }
+      ])
     })
 
     test('Should show the error page when the delivery fails', async () => {
