@@ -5,8 +5,6 @@ import { SummaryPageWithConfirmationEmailController } from '#/server/forms/contr
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import {
   ENTRIES_PATH,
-  ENTRY_PATHS,
-  FIRST_ENTRY_ID,
   WEB_FORM_SLUG,
   buildEntry,
   buildOtherSpeciesEntry,
@@ -196,6 +194,30 @@ describe('#getSummaryViewModel', () => {
     expect(secondRow.value.html).toBe('March2025.xlsx')
   })
 
+  test('Should add the submission kind when the engine summary has no sections', () => {
+    vi.spyOn(
+      SummaryPageController.prototype,
+      'getSummaryViewModel'
+    ).mockReturnValue({})
+
+    const result = buildController([], {
+      basePath: 'bat-rabies'
+    }).getSummaryViewModel({}, {}, {})
+
+    expect(result.checkAnswers).toEqual([
+      {
+        summaryList: {
+          rows: [
+            expect.objectContaining({
+              key: { text: 'Submission kind' },
+              value: expect.objectContaining({ text: 'Bat rabies' })
+            })
+          ]
+        }
+      }
+    ])
+  })
+
   test('Should not invent a submission kind for a journey that is not a report', () => {
     const viewModel = buildViewModel({
       files: [buildFile('March2025.xlsx')]
@@ -221,7 +243,7 @@ describe('#handleFormSubmit', () => {
   test('Should submit when every uploaded file is named after the report date', async () => {
     const uploadPage = buildUploadPage()
     const controller = buildController([uploadPage])
-    const request = {}
+    const request = { payload: { qualifyingTestsConfirmed: 'confirmed' } }
     const context = { state: { reportDate__month: 3, reportDate__year: 2024 } }
     const h = buildToolkit()
 
@@ -264,13 +286,99 @@ describe('#handleFormSubmit', () => {
     const submit = stubSubmit()
 
     const response = await controller.handleFormSubmit(
-      {},
+      { payload: { qualifyingTestsConfirmed: 'confirmed' } },
       { state: {} },
       buildToolkit()
     )
 
     expect(submit).toHaveBeenCalled()
     expect(response).toBe(SUBMITTED_RESPONSE)
+  })
+
+  test('Should submit a Bat rabies report without the qualifying tests confirmation', async () => {
+    const controller = buildController([buildUploadPage()])
+    const submit = stubSubmit()
+
+    const response = await controller.handleFormSubmit(
+      { payload: {} },
+      { state: { reportDate__month: 3, reportDate__year: 2024 } },
+      buildToolkit()
+    )
+
+    expect(submit).toHaveBeenCalled()
+    expect(response).toBe(SUBMITTED_RESPONSE)
+  })
+
+  test('Should show the summary again when the confirmation is missing', async () => {
+    const controller = buildController([], {
+      basePath: 'animal-health-regulations'
+    })
+    controller.viewName = 'report-summary'
+    const viewModel = { errors: [{ text: 'Another problem', href: '#x' }] }
+
+    vi.spyOn(controller, 'getTranslator').mockReturnValue({
+      t: (key) => key
+    })
+    vi.spyOn(controller, 'getSummaryViewModel').mockReturnValue(viewModel)
+    vi.spyOn(controller, 'hasMissingNotificationEmail').mockResolvedValue(false)
+
+    const h = {
+      view: vi.fn((_view, model) => model)
+    }
+
+    const response = await controller.showUnconfirmedQualifyingTests(
+      { payload: {} },
+      { state: {} },
+      h
+    )
+
+    expect(response.qualifyingTestsError).toContain('diagnostic tests')
+    expect(response.errors).toEqual([
+      { text: 'Another problem', href: '#x' },
+      expect.objectContaining({ href: '#qualifying-tests' })
+    ])
+    expect(response.hasMissingNotificationEmail).toBe(false)
+    expect(h.view).toHaveBeenCalledWith('report-summary', response)
+  })
+
+  test('Should start the error list when the summary has none yet', async () => {
+    const controller = buildController([], {
+      basePath: 'animal-health-regulations'
+    })
+
+    vi.spyOn(controller, 'getTranslator').mockReturnValue({
+      t: (key) => key
+    })
+    vi.spyOn(controller, 'getSummaryViewModel').mockReturnValue({})
+    vi.spyOn(controller, 'hasMissingNotificationEmail').mockResolvedValue(true)
+
+    const h = { view: vi.fn((_view, model) => model) }
+
+    const response = await controller.showUnconfirmedQualifyingTests({}, {}, h)
+
+    expect(response.errors).toHaveLength(1)
+    expect(response.hasMissingNotificationEmail).toBe(true)
+  })
+
+  test('Should refuse an Animal Health Regulations upload until the qualifying tests are confirmed', async () => {
+    const controller = buildController([buildUploadPage()], {
+      basePath: 'animal-health-regulations'
+    })
+    const shown = { shown: true }
+    const show = vi
+      .spyOn(controller, 'showUnconfirmedQualifyingTests')
+      .mockResolvedValue(shown)
+    const submit = stubSubmit()
+
+    const response = await controller.handleFormSubmit(
+      { payload: {} },
+      { state: {} },
+      buildToolkit()
+    )
+
+    expect(submit).not.toHaveBeenCalled()
+    expect(show).toHaveBeenCalled()
+    expect(response).toBe(shown)
   })
 })
 
@@ -346,7 +454,7 @@ describe('web form report entries', () => {
     expect(summaryPage.viewName).toBe('report-summary')
   })
 
-  test("Should leave an upload journey with the engine's check your answers page", () => {
+  test('Should render an upload journey on the engine summary with the confirmation', () => {
     const uploadSummary = new SummaryPageWithConfirmationEmailController(
       {
         def: { name: 'x', options: {} },
@@ -356,7 +464,21 @@ describe('web form report entries', () => {
       { path: '/summary', title: 'Check your answers' }
     )
 
-    expect(uploadSummary.viewName).toBe('summary')
+    expect(uploadSummary.viewName).toBe('upload-summary')
+  })
+
+  test('Should render the Animal Health Regulations upload summary at full width', () => {
+    const uploadSummary = new SummaryPageWithConfirmationEmailController(
+      {
+        basePath: 'animal-health-regulations',
+        def: { name: 'x', options: {} },
+        pages: [],
+        getSection: () => undefined
+      },
+      { path: '/summary', title: 'Check your answers' }
+    )
+
+    expect(uploadSummary.viewName).toBe('report-summary')
   })
 
   describe('#getSummaryViewModel', () => {
@@ -392,7 +514,7 @@ describe('web form report entries', () => {
       )
     })
 
-    test('Should show a card per entry with a change link back here on every answer', () => {
+    test('Should show a card per entry without a Change link on each answer', () => {
       const viewModel = summaryViewModelFor([
         buildEntry(),
         buildOtherSpeciesEntry()
@@ -406,9 +528,12 @@ describe('web form report entries', () => {
       expect(cards[0].summaryList.card.actions).toBeUndefined()
       expect(cards[0].summaryList.rows).toHaveLength(6)
       expect(cards[1].summaryList.rows).toHaveLength(7)
-      expect(cards[0].summaryList.rows[0].actions.items[0].href).toBe(
-        `/${WEB_FORM_SLUG}${ENTRY_PATHS.pathogen}/${FIRST_ENTRY_ID}?returnUrl=${encodeURIComponent(WEB_FORM_SUMMARY_HREF)}`
-      )
+      expect(
+        cards.flatMap((card) => card.summaryList.rows.map((row) => row.actions))
+      ).toEqual(expect.arrayContaining([undefined]))
+      expect(
+        cards.some((card) => card.summaryList.rows.some((row) => row.actions))
+      ).toBe(false)
     })
 
     test('Should hand the entries to the output service as a repeated item', () => {
@@ -441,6 +566,11 @@ describe('web form report entries', () => {
       ).toEqual([
         [
           ['pathogen', 'Tritrichomonas foetus'],
+          ['disease', 'Tritrichomonosis'],
+          [
+            'diagnosticTests',
+            ['Culture & microscopy of Tritrichomonas foetus', 'PCR']
+          ],
           ['species', 'Domestic cattle'],
           ['country', 'England'],
           ['submissionsWithQualifyingTest', '12'],
@@ -449,6 +579,11 @@ describe('web form report entries', () => {
         ],
         [
           ['pathogen', 'Tritrichomonas foetus'],
+          ['disease', 'Tritrichomonosis'],
+          [
+            'diagnosticTests',
+            ['Culture & microscopy of Tritrichomonas foetus', 'PCR']
+          ],
           ['species', 'Other'],
           ['otherSpecies', 'Alpaca'],
           ['country', 'England'],
@@ -457,7 +592,7 @@ describe('web form report entries', () => {
           ['positiveSamples', '5']
         ]
       ])
-      expect(entriesItem.subItems[1][1].value).toBe(
+      expect(entriesItem.subItems[1][3].value).toBe(
         'Other (please specify on the next page)'
       )
     })
@@ -497,10 +632,13 @@ describe('web form report entries', () => {
       const submit = stubSubmit()
       const context = { state: buildState([buildEntry()]) }
       const h = buildToolkit()
+      const confirmed = buildRequest({
+        payload: { qualifyingTestsConfirmed: 'confirmed' }
+      })
 
-      const response = await summaryPage.handleFormSubmit(request, context, h)
+      const response = await summaryPage.handleFormSubmit(confirmed, context, h)
 
-      expect(submit).toHaveBeenCalledWith(request, context, h)
+      expect(submit).toHaveBeenCalledWith(confirmed, context, h)
       expect(response).toBe(SUBMITTED_RESPONSE)
     })
 

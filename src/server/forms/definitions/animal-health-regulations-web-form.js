@@ -156,6 +156,8 @@ export const definition = {
       id: '25512f3f-899f-44fe-87a9-621eceee7d67',
       path: '/what-month-does-your-report-cover',
       title: 'What month does your report cover?',
+      // Same back link as the upload journeys' reporting period page
+      controller: 'ReportDatePageController',
       components: [
         {
           id: '686b276a-fdd5-4c35-8d2e-01755b5f0f83',

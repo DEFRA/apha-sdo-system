@@ -34,6 +34,7 @@ export const pathogens = [
   {
     key: 'mycoplasma',
     name: 'Mycoplasma gallisepticum / M. meleagridis',
+    disease: 'Avian mycoplasmosis',
     tests: [
       { key: 'mycoplasma-pcr', name: 'PCR' },
       { key: 'mycoplasma-dgge-pcr', name: 'DGGE/PCR' },
@@ -43,6 +44,7 @@ export const pathogens = [
   {
     key: 'campylobacter',
     name: 'Campylobacter fetus subsp. venerealis',
+    disease: 'Bovine genital campylobacteriosis',
     tests: [
       {
         key: 'campylobacter-culture',
@@ -53,6 +55,7 @@ export const pathogens = [
   {
     key: 'bvdv',
     name: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+    disease: 'Bovine viral diarrhoea (BVD)',
     tests: [
       { key: 'bvdv-antigen-elisa', name: 'Antigen ELISA' },
       {
@@ -70,6 +73,8 @@ export const pathogens = [
   {
     key: 'bhv',
     name: 'Bovine Herpes Virus 1 (BHV-1)',
+    disease:
+      'Infectious bovine rhinotracheitis (IBR) / Infectious pustular vulvovaginitis / Infectious balanoposthitis',
     tests: [
       { key: 'bhv-pcr', name: 'PCR (including gE PCR)' },
       { key: 'bhv-virus-isolation', name: VIRUS_ISOLATION },
@@ -84,6 +89,7 @@ export const pathogens = [
   {
     key: 'map',
     name: 'Mycobacterium avium subsp. paratuberculosis (Map)',
+    disease: "Paratuberculosis (Johne's disease)",
     tests: [
       { key: 'map-pcr', name: 'PCR' },
       { key: 'map-histology', name: 'Histology' },
@@ -96,6 +102,7 @@ export const pathogens = [
   {
     key: 'prrsv',
     name: 'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+    disease: 'Porcine Reproductive and Respiratory Syndrome (PRRS)',
     tests: [
       {
         key: 'prrsv-pcr-differentiating',
@@ -112,6 +119,7 @@ export const pathogens = [
   {
     key: 'tritrichomonas',
     name: 'Tritrichomonas foetus',
+    disease: 'Tritrichomonosis',
     tests: [
       {
         key: 'tritrichomonas-culture-microscopy',
@@ -138,3 +146,8 @@ export const tests = pathogens
 
 /** A posted checkbox value resolved to its test, or undefined when unknown */
 export const testsByKey = new Map(tests.map((test) => [test.key, test]))
+
+/** A pathogen name from the web form resolved to its catalogue entry */
+export const pathogensByName = new Map(
+  pathogens.map((pathogen) => [pathogen.name, pathogen])
+)

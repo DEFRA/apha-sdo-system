@@ -108,7 +108,7 @@ describe('animal health regulations web form', () => {
     // The report date is answered once, for the whole report
     const [reportDatePage] = definition.pages
 
-    expect(reportDatePage.controller).toBeUndefined()
+    expect(reportDatePage.controller).toBe('ReportDatePageController')
     expect(reportDatePage.section).toBeUndefined()
   })
 

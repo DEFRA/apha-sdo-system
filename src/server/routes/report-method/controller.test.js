@@ -112,9 +112,19 @@ describe('report method routes', () => {
         expect.stringContaining('How would you like to report?')
       )
       expect(result).toEqual(
+        expect.stringContaining(
+          'href="/submission-welcome" class="govuk-back-link"'
+        )
+      )
+      expect(result).toEqual(
         expect.stringContaining(`value="${REPORT_METHOD.FILE_UPLOAD}"`)
       )
       expect(result).toEqual(expect.stringContaining('Upload a file'))
+      expect(result).toEqual(
+        expect.stringContaining(
+          'govuk-label govuk-radios__label govuk-!-font-weight-bold'
+        )
+      )
       expect(result).toEqual(
         expect.stringContaining(`value="${REPORT_METHOD.WEB_FORM}"`)
       )

@@ -5,9 +5,26 @@
 import { findReportFileUploadPage } from './report-file-upload-page-controller.js'
 import { QuestionPageController } from '@defra/forms-engine-plugin/controllers/QuestionPageController.js'
 
+import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import { howToReportPath } from '#/server/routes/report-method/controller.js'
 
 const SAVE_AND_EXIT = 'save-and-exit'
+
+/**
+ * Where Back goes from a reporting period page when the journey has no
+ * earlier page: the "how would you like to report" screen for a report type
+ * that offers one, and Submission Welcome otherwise.
+ * @param {string} [slug] - the journey slug, the form model's base path
+ */
+export function reportingPeriodBackHref(slug) {
+  const reportType = reportTypesBySlug.get(slug)
+
+  return reportType?.webFormSlug
+    ? howToReportPath(reportType)
+    : POST_SIGN_IN_PATH
+}
 
 /**
  * Report date page. Changing the date from a "Check your answers" change link
@@ -17,6 +34,20 @@ const SAVE_AND_EXIT = 'save-and-exit'
  * upload a correctly named one.
  */
 export class ReportDatePageController extends QuestionPageController {
+  /**
+   * The engine only links back to an earlier page of the journey. A reporting
+   * period page is the first page, so Back returns to wherever the journey
+   * was opened from. A change link from check your answers still wins.
+   */
+  getBackLink(request, context, t) {
+    return (
+      super.getBackLink(request, context, t) ?? {
+        text: t('common.back'),
+        href: reportingPeriodBackHref(this.model.basePath)
+      }
+    )
+  }
+
   makePostRouteHandler() {
     const handler = super.makePostRouteHandler()
 

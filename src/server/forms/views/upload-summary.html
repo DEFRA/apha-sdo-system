@@ -1,0 +1,11 @@
+{#
+  Check your answers for a file-upload journey: the engine's summary page,
+  with the qualifying tests confirmation before Submit.
+#}
+{% extends "summary.html" %}
+
+{% block customPageContent %}
+  {% if showQualifyingTestsConfirmation %}
+    {% include "qualifying-tests-confirmation.html" %}
+  {% endif %}
+{% endblock %}

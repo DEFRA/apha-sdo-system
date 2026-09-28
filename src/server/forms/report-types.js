@@ -7,8 +7,12 @@
  * The journeys are identical in structure, so an entry only carries what
  * differs: the URL slug, the copy, and the identifiers.
  *
- * `title` is the report type's one label, used for the radio option, the form
- * title and the breadcrumb, so those cannot disagree with each other.
+ * `title` is the report type's one label, used for the form title and the
+ * breadcrumb. Submission Welcome offers it as "Submit a" or "Submit an"
+ * followed by this title.
+ *
+ * `welcomeHint`, when present, is the hint under that radio on Submission
+ * Welcome.
  *
  * `kind` is the shorter name shown as "Submission kind" on check your answers.
  *
@@ -34,7 +38,8 @@ export const reportTypes = [
     code: 'BR',
     title: 'Bat rabies report',
     kind: 'Bat rabies',
-    optionHint: 'Upload a data file (CSV, XLS or XLSX)',
+    welcomeHint:
+      'Use this service to submit your monthly bat rabies reports. The information you provide helps monitor and manage health threats and disease in bat populations across the UK and the British Isles.',
     ids: {
       form: 'b4c2d8e1-7f3a-4b96-9d05-8e6f1a2c3d40',
       reportDatePage: 'd06a6bbe-d570-4348-aec8-4b454bea9c1b',
@@ -52,7 +57,8 @@ export const reportTypes = [
     code: 'AHR',
     title: 'Animal Health Regulations report',
     kind: 'Animal Health Regulation',
-    optionHint: 'Upload a data file (CSV, XLS or XLSX) or complete a web form',
+    welcomeHint:
+      'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across the UK.',
     ids: {
       form: '2f9a5c17-3b48-4e0d-9a61-c5d7e8f01234',
       reportDatePage: '5c1e7a92-8d34-4b6f-a0c8-1e2f3a4b5c6d',

@@ -2,6 +2,7 @@ import { vi } from 'vitest'
 
 import {
   assertAllowedEntraGroups,
+  formatPersonName,
   getAllowedGroupIds,
   getUserProfile
 } from './authorization.js'
@@ -54,6 +55,36 @@ describe('assertAllowedEntraGroups', () => {
         'allowed-group'
       ])
     ).toThrow('could not be evaluated')
+  })
+})
+
+describe('formatPersonName', () => {
+  test('uses given name then surname when both claims are present', () => {
+    expect(
+      formatPersonName({
+        name: 'Surname, George',
+        given_name: 'George',
+        family_name: 'Surname'
+      })
+    ).toBe('George Surname')
+  })
+
+  test('turns a "Surname, Given" display name round when the part claims are absent', () => {
+    expect(formatPersonName({ name: 'Surname, George' })).toBe('George Surname')
+    expect(formatPersonName({ name: '  Surname,   George Middle  ' })).toBe(
+      'George Middle Surname'
+    )
+  })
+
+  test('keeps a display name that is already "Given Surname"', () => {
+    expect(formatPersonName({ name: 'George Surname' })).toBe('George Surname')
+    expect(formatPersonName({ name: 'A Person' })).toBe('A Person')
+  })
+
+  test('returns an empty string when no name claim is present', () => {
+    expect(formatPersonName({})).toBe('')
+    expect(formatPersonName({ given_name: 'George' })).toBe('')
+    expect(formatPersonName({ family_name: 'Surname' })).toBe('')
   })
 })
 

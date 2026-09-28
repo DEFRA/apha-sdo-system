@@ -15,6 +15,9 @@ import {
   entryCaption,
   entryCard,
   entryDetailItems,
+  pathogenSummaryHtml,
+  PATHOGEN_SUMMARY_LABEL,
+  recognitionOf,
   entryEvaluationState,
   entryName,
   entryPageAnswersChanged,
@@ -515,8 +518,8 @@ describe('report entries', () => {
           `/${WEB_FORM_SLUG}${REPORT_DATE_PATH}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
         [
-          'Selected pathogen',
-          'Tritrichomonas foetus',
+          PATHOGEN_SUMMARY_LABEL,
+          pathogenSummaryHtml('Tritrichomonas foetus'),
           `/${WEB_FORM_SLUG}${ENTRY_PATHS.pathogen}/${SECOND_ENTRY_ID}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
         [
@@ -538,7 +541,7 @@ describe('report entries', () => {
       expect(rows[1].actions.items[0]).toEqual(
         expect.objectContaining({
           text: 'Change',
-          visuallyHiddenText: 'selected pathogen'
+          visuallyHiddenText: PATHOGEN_SUMMARY_LABEL.toLowerCase()
         })
       )
     })
@@ -555,7 +558,7 @@ describe('report entries', () => {
 
       expect(rows.map((row) => row.key.text)).toEqual([
         'Report Date',
-        'Selected pathogen',
+        PATHOGEN_SUMMARY_LABEL,
         'Species the report is for'
       ])
     })
@@ -576,7 +579,7 @@ describe('report entries', () => {
         translator
       )
 
-      expect(rows.map((row) => row.key.text)).toEqual(['Selected pathogen'])
+      expect(rows.map((row) => row.key.text)).toEqual([PATHOGEN_SUMMARY_LABEL])
     })
 
     test('Should show only the report date on the first page of an entry', () => {
@@ -630,6 +633,13 @@ describe('report entries', () => {
       expect(answerHtml(numbers, entry, translator)).toBe('12')
     })
 
+    test('Should leave an unknown pathogen as its name', () => {
+      expect(recognitionOf('Not a catalogue pathogen')).toBeNull()
+      expect(pathogenSummaryHtml('Not a catalogue pathogen')).toBe(
+        'Not a catalogue pathogen'
+      )
+    })
+
     test('Should submit an answer as given', () => {
       const pathogen = pageOf(model, ENTRY_PATHS.pathogen).collection.fields[0]
       const numbers = pageOf(model, ENTRY_PATHS.numbers).collection.fields[0]
@@ -655,7 +665,17 @@ describe('report entries', () => {
       expect(
         items.map(({ name, title, value }) => [name, title, value])
       ).toEqual([
-        ['pathogen', 'Selected pathogen', 'Tritrichomonas foetus'],
+        [
+          'pathogen',
+          PATHOGEN_SUMMARY_LABEL,
+          pathogenSummaryHtml('Tritrichomonas foetus')
+        ],
+        ['disease', 'Disease', 'Tritrichomonosis'],
+        [
+          'diagnosticTests',
+          'Diagnostic tests',
+          'Culture & microscopy of Tritrichomonas foetus, PCR'
+        ],
         [
           'species',
           'Species the report is for',
@@ -698,7 +718,10 @@ describe('report entries', () => {
       )
 
       expect(names).not.toContain('otherSpecies')
-      expect(names).toHaveLength(6)
+      expect(names).toEqual(
+        expect.arrayContaining(['disease', 'diagnosticTests'])
+      )
+      expect(names).toHaveLength(8)
     })
 
     test('Should build a card titled with the entry name, a row per answer', () => {

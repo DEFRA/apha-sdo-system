@@ -1,6 +1,9 @@
 // Imported ahead of QuestionPageController, which cannot be the first engine
 // page controller a module loads. See report-date-page-controller.js.
-import { ReportDatePageController } from '#/server/forms/controllers/report-date-page-controller.js'
+import {
+  ReportDatePageController,
+  reportingPeriodBackHref
+} from '#/server/forms/controllers/report-date-page-controller.js'
 import { QuestionPageController } from '@defra/forms-engine-plugin/controllers/QuestionPageController.js'
 
 import { ReportFileUploadPageController } from '#/server/forms/controllers/report-file-upload-page-controller.js'
@@ -61,6 +64,51 @@ function buildContext(overrides = {}) {
 
 afterEach(() => {
   vi.restoreAllMocks()
+})
+
+describe('#reportingPeriodBackHref', () => {
+  test('Should return to Submission Welcome from Bat rabies', () => {
+    expect(reportingPeriodBackHref('bat-rabies')).toBe('/submission-welcome')
+  })
+
+  test('Should return to how to report from either Animal Health Regulations journey', () => {
+    expect(reportingPeriodBackHref('animal-health-regulations')).toBe(
+      '/animal-health-regulations/how-to-report'
+    )
+    expect(reportingPeriodBackHref('animal-health-regulations-web-form')).toBe(
+      '/animal-health-regulations/how-to-report'
+    )
+  })
+})
+
+describe('#getBackLink', () => {
+  const t = (key) => key
+
+  test('Should link back out of the journey when it is the first page', () => {
+    vi.spyOn(QuestionPageController.prototype, 'getBackLink').mockReturnValue(
+      undefined
+    )
+    const controller = buildController(buildUploadPage())
+
+    expect(controller.getBackLink({}, { paths: [] }, t)).toEqual({
+      text: 'common.back',
+      href: '/submission-welcome'
+    })
+  })
+
+  test('Should keep the check-your-answers link when changing from there', () => {
+    const fromSummary = {
+      text: 'Go back to check answers',
+      href: '/bat-rabies/summary'
+    }
+
+    vi.spyOn(QuestionPageController.prototype, 'getBackLink').mockReturnValue(
+      fromSummary
+    )
+    const controller = buildController(buildUploadPage())
+
+    expect(controller.getBackLink({}, { paths: [] }, t)).toBe(fromSummary)
+  })
 })
 
 describe('#makePostRouteHandler', () => {

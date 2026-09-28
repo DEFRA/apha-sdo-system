@@ -1,5 +1,8 @@
 import { generateUniqueReference } from '@defra/forms-engine-plugin/engine/referenceNumbers.js'
 
+import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
+import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
+
 import {
   ACCREDITATION_OPTIONS,
   pathogens,
@@ -196,13 +199,30 @@ function renderDiagnosticTests(h, selections, errors) {
 }
 
 /**
+ * A user without Animal Health Regulations is not offered this page. They
+ * go back to Submission Welcome rather than seeing tests they cannot report.
+ * @param {import('@hapi/hapi').Request} request
+ * @param {import('@hapi/hapi').ResponseToolkit} h
+ */
+function redirectWithoutAnimalHealthRegulations(request, h) {
+  if (canUpdateDiagnosticTests(request.auth.credentials?.user)) {
+    return null
+  }
+
+  return h.redirect(POST_SIGN_IN_PATH)
+}
+
+/**
  * "Define your qualifying tests in use": the tests a lab uses for each
  * pathogen and whether each is UKAS accredited. Reached from Submission
- * Welcome; any signed-in user may open it.
+ * Welcome by a user who can submit Animal Health Regulations.
  */
 export const diagnosticTestsGetController = {
-  handler(_request, h) {
-    return renderDiagnosticTests(h)
+  handler(request, h) {
+    return (
+      redirectWithoutAnimalHealthRegulations(request, h) ??
+      renderDiagnosticTests(h)
+    )
   }
 }
 
@@ -215,6 +235,12 @@ export const diagnosticTestsGetController = {
  */
 export const diagnosticTestsPostController = {
   async handler(request, h) {
+    const refused = redirectWithoutAnimalHealthRegulations(request, h)
+
+    if (refused) {
+      return refused
+    }
+
     const selections = parseDiagnosticTestsPayload(request.payload ?? {})
     const errors = validateDiagnosticTests(selections)
 

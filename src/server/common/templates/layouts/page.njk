@@ -1,6 +1,7 @@
 {% extends "govuk/template.njk" %}
 
 {# Import GOVUK components globally #}
+{% from "govuk/components/back-link/macro.njk" import govukBackLink %}
 {% from "govuk/components/breadcrumbs/macro.njk" import govukBreadcrumbs %}
 {% from "govuk/components/service-navigation/macro.njk" import govukServiceNavigation %}
 
@@ -61,6 +62,21 @@
     {{ govukBreadcrumbs({
       items: breadcrumbs
     }) }}
+  {% endif %}
+  {# On every signed-in page: this layout is shared by the service and the form journeys. #}
+  {% if identityRows.length %}
+    <div class="govuk-!-margin-bottom-2">
+      {% for row in identityRows %}
+        <p class="govuk-body govuk-!-margin-bottom-1">
+          <span class="govuk-!-font-weight-bold">{{ row.key.text }}:</span>
+          {{ row.value.text }}
+        </p>
+      {% endfor %}
+    </div>
+  {% endif %}
+  {# Question pages set this. It sits under the breadcrumbs, as on the web form. #}
+  {% if backLink %}
+    {{ govukBackLink(backLink) }}
   {% endif %}
 {% endblock %}
 
