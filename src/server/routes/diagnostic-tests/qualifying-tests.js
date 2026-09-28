@@ -6,14 +6,11 @@
  * src/server/forms/definitions/animal-health-regulations-web-form.js), so a
  * declared test can be matched to the reports that follow.
  *
- * The tests are those of APHA's "Define diagnostic tests in use" workbook
- * (templates/diagnostic-tests-template.xlsx), in its row order, because the
- * declaration is delivered as that workbook filled in (see
- * diagnostic-tests-workbook.js): the n-th test here is written to the n-th
- * test row of the sheet. Test names are reproduced from the design as they
- * were given, including their capitalisation; where the design had one PCR
- * and the workbook two (differentiating or not the -1 and -2 strains), the
- * workbook's two are offered.
+ * The tests are APHA's qualifying diagnostic tests for these pathogens, in
+ * the order APHA lists them. Test names are reproduced from the design as
+ * they were given, including their capitalisation; where the design had one
+ * PCR for BVDV and for PRRSV, APHA's list has two (differentiating or not the
+ * -1 and -2 strains), and those two are offered.
  *
  * `key` identifies a test in the form (the checkbox value and the element
  * ids) and is unique across pathogens, so a posted value resolves to its
@@ -21,9 +18,8 @@
  */
 
 /**
- * The accreditations a ticked test can be given. The workbook's fourth
- * value, "Not applicable", is what an un-ticked row carries, so it is not
- * offered for a test in use.
+ * The accreditations a ticked test can be given. "Not applicable" is not one:
+ * a test that is not in use is simply not ticked.
  */
 export const ACCREDITATION_OPTIONS = ['Yes', 'No', 'Unknown']
 
@@ -130,19 +126,15 @@ export const pathogens = [
   }
 ]
 
-/** The sheet row of the first test in the workbook; the tests follow in order */
-export const FIRST_XLS_ROW = 6
-
 /**
- * Every test with its pathogen and its row in the workbook, in catalogue
- * order: the order the page lists them in and the order the sheet holds them.
- * @type {{ key: string, name: string, xlsRow: number, pathogen: { key: string, name: string } }[]}
+ * Every test with its pathogen, in catalogue order: the order the page lists
+ * them in and the order they are recorded in.
+ * @type {{ key: string, name: string, pathogen: { key: string, name: string } }[]}
  */
-export const tests = pathogens
-  .flatMap(({ tests: pathogenTests, ...pathogen }) =>
+export const tests = pathogens.flatMap(
+  ({ tests: pathogenTests, ...pathogen }) =>
     pathogenTests.map((test) => ({ ...test, pathogen }))
-  )
-  .map((test, index) => ({ ...test, xlsRow: FIRST_XLS_ROW + index }))
+)
 
 /** A posted checkbox value resolved to its test, or undefined when unknown */
 export const testsByKey = new Map(tests.map((test) => [test.key, test]))

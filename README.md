@@ -386,9 +386,8 @@ pathogen and whether each is UKAS accredited. **Update diagnostic tests** on
 Submission Welcome opens `/diagnostic-tests` ("Define your qualifying tests
 in use"), a plain page served by `src/server/routes/diagnostic-tests` rather
 than a forms-engine journey. The pathogens are the ones of the Animal Health
-Regulations report; the tests are those of APHA's "Define diagnostic tests in
-use" workbook, in its row order, listed in
-`src/server/routes/diagnostic-tests/qualifying-tests.js`.
+Regulations report; the tests are APHA's qualifying diagnostic tests for
+them, listed in `src/server/routes/diagnostic-tests/qualifying-tests.js`.
 
 Each pathogen is a collapsed accordion section of checkboxes, one per test.
 Ticking a test reveals an **Accreditation** select (Yes, No, Unknown), which
@@ -396,29 +395,18 @@ must be answered for every ticked test; at least one test must be ticked. On
 an error the page comes back with the sections holding a tick or an error
 opened. **Go back** returns to Submission Welcome.
 
-**Continue** delivers the declaration the way a report is delivered: the
-workbook, filled in from the ticks, is written to the Azure container as
-`{referenceNumber}/diagnostic-tests.xlsx`, with the record below alongside
-as `{referenceNumber}/submission.json`
+**Continue** delivers the declaration the way a report's record is
+delivered: the record below is written to the Azure container as
+`{referenceNumber}/submission.json`
 (`src/server/routes/diagnostic-tests/diagnostic-tests-output.js`, reusing the
-output service's `uploadSubmissionJson`). When `AZURE_STORAGE_ENABLED` is off
-the submission is only logged (`Diagnostic tests submission received`). The
-page is then shown again with the answers kept.
-
-The workbook is APHA's template
-(`src/server/routes/diagnostic-tests/templates/diagnostic-tests-template.xlsx`)
-with one row per test: the disease, the test, an **Accreditation** dropdown
-and, hidden, a `TRUE`/`FALSE` cell driven by a form-control checkbox. Filling
-it means writing that cell and the accreditation for every row and setting
-the checkbox's state; a ticked test gets `TRUE` and its accreditation, every
-other row `FALSE` and `Not applicable`, which is why the page does not offer
-`Not applicable` for a test in use. Spreadsheet libraries drop form controls,
-so `diagnostic-tests-workbook.js` edits the workbook's XML parts inside the
-zip (with `fflate`) and copies everything else through unchanged, keeping the
-template's styles, dropdowns, check formulas and protection intact.
+output service's `uploadSubmissionJson`). There is no data file. When
+`AZURE_STORAGE_ENABLED` is off the submission is only logged
+(`Diagnostic tests submission received`). The page is then shown again with
+the answers kept.
 
 The record follows the shape of `submission.json` with just the fields that
-apply; the tests themselves are in the workbook it names:
+apply, and one row per ticked test so the rows can be written out as
+spreadsheet lines downstream:
 
 ```json
 {
@@ -428,7 +416,18 @@ apply; the tests themselves are in the workbook it names:
   "userId": "<Entra object ID>",
   "organisationId": "TestLab1",
   "submittedAt": "2026-09-24T14:04:00.000Z",
-  "fileName": "diagnostic-tests.xlsx"
+  "diagnosticTestsData": [
+    {
+      "pathogen": "Mycoplasma gallisepticum / M. meleagridis",
+      "test": "PCR",
+      "accreditation": "Yes"
+    },
+    {
+      "pathogen": "Bovine Herpes Virus 1 (BHV-1)",
+      "test": "FAT",
+      "accreditation": "No"
+    }
+  ]
 }
 ```
 
