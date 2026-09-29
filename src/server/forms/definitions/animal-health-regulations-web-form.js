@@ -89,7 +89,10 @@ const NUMBER_FIELD_OPTIONS = {
 
 // The counts are whole numbers of submissions and samples, never negative.
 // The design leaves this open; precision 0 makes the engine require an
-// integer.
+// integer. The counts must also agree with each other: no more submissions
+// with a positive sample than submissions tested, and at least as many
+// positive samples as submissions with one. That is checked by
+// ReportEntryPageController (see report-entries.js countConsistencyErrors).
 const COUNT_SCHEMA = { min: 0, precision: 0 }
 
 /**

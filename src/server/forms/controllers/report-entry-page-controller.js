@@ -9,6 +9,7 @@ import {
   SAVE_AND_EXIT_TEXT,
   answersSoFar,
   clearAnswersAfter,
+  countConsistencyErrors,
   disallowedListAnswers,
   entriesOf,
   entriesPageOf,
@@ -279,7 +280,9 @@ export class ReportEntryPageController extends QuestionPageController {
 
   /**
    * Handles "Abort new entry", and refuses an answer that is not among the
-   * options offered to the entry, before the engine saves the page
+   * options offered to the entry, or counts that contradict each other,
+   * before the engine saves the page. A count the engine has already found
+   * wrong is not compared with the others: its own error is enough.
    */
   makePostRouteHandler() {
     const handler = super.makePostRouteHandler()
@@ -291,11 +294,8 @@ export class ReportEntryPageController extends QuestionPageController {
 
       this.evaluateForEntry(request, context)
 
-      const disallowed = disallowedListAnswers(
-        this.model,
-        this,
-        this.entryOf(request, context.state)
-      )
+      const entry = this.entryOf(request, context.state)
+      const disallowed = disallowedListAnswers(this.model, this, entry)
 
       if (disallowed.length) {
         context.errors = [
@@ -307,6 +307,14 @@ export class ReportEntryPageController extends QuestionPageController {
             text: `Select one of the options shown for ${field.label.toLowerCase()}`
           }))
         ]
+      }
+
+      const inconsistent = context.errors?.length
+        ? []
+        : countConsistencyErrors(this, entry)
+
+      if (inconsistent.length) {
+        context.errors = inconsistent
       }
 
       return handler(request, context, h)

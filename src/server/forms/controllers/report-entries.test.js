@@ -7,6 +7,7 @@ import {
   answerHtml,
   answersSoFar,
   clearAnswersAfter,
+  countConsistencyErrors,
   disallowedListAnswers,
   entriesCountText,
   entriesErrors,
@@ -29,6 +30,7 @@ import {
   firstIncompleteEntryPage,
   incompleteEntryErrors,
   isAddedEntry,
+  isCountsPage,
   isEntryComplete,
   isEntryPageComplete,
   isReportWithEntries,
@@ -384,6 +386,151 @@ describe('report entries', () => {
       expect(firstIncompleteEntryPage(model, entry)).toBe(speciesPage)
     })
 
+    test('Should know the page that asks for the three counts', () => {
+      expect(isCountsPage(pageOf(model, ENTRY_PATHS.numbers))).toBe(true)
+      expect(isCountsPage(pageOf(model, ENTRY_PATHS.species))).toBe(false)
+      expect(isCountsPage({ collection: { fields: [] } })).toBe(false)
+    })
+
+    test('Should accept counts that agree with each other', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+
+      expect(countConsistencyErrors(numbers, buildEntry())).toEqual([])
+      // As many positive submissions as submissions, one positive sample each
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: 3,
+            submissionsWithPositiveSamples: 3,
+            positiveSamples: 3
+          })
+        )
+      ).toEqual([])
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: 0,
+            submissionsWithPositiveSamples: 0,
+            positiveSamples: 0
+          })
+        )
+      ).toEqual([])
+      // Counts still as posted
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: '12',
+            submissionsWithPositiveSamples: '3',
+            positiveSamples: '5'
+          })
+        )
+      ).toEqual([])
+    })
+
+    test('Should refuse more positive submissions than submissions tested', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: 2,
+            submissionsWithPositiveSamples: 3,
+            positiveSamples: 5
+          })
+        )
+      ).toEqual([
+        {
+          path: ['submissionsWithPositiveSamples'],
+          href: '#submissionsWithPositiveSamples',
+          name: 'submissionsWithPositiveSamples',
+          text: 'Submissions with at least one positive result cannot be more than submissions with at least one qualifying test'
+        }
+      ])
+    })
+
+    test('Should refuse fewer positive samples than positive submissions', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: 12,
+            submissionsWithPositiveSamples: 3,
+            positiveSamples: 2
+          })
+        )
+      ).toEqual([
+        {
+          path: ['positiveSamples'],
+          href: '#positiveSamples',
+          name: 'positiveSamples',
+          text: 'Total positive samples cannot be less than submissions with at least one positive result'
+        }
+      ])
+    })
+
+    test('Should report both inconsistencies at once, in page order', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            submissionsWithQualifyingTest: 1,
+            submissionsWithPositiveSamples: 3,
+            positiveSamples: 0
+          })
+        ).map((error) => error.name)
+      ).toEqual(['submissionsWithPositiveSamples', 'positiveSamples'])
+    })
+
+    test('Should leave a missing or non-numeric count to the page schema', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({ submissionsWithQualifyingTest: undefined })
+        )
+      ).toEqual([])
+      expect(
+        countConsistencyErrors(
+          numbers,
+          buildEntry({
+            positiveSamples: 'many',
+            submissionsWithPositiveSamples: 30
+          })
+        )
+      ).toEqual([])
+      expect(
+        countConsistencyErrors(numbers, buildEntry({ positiveSamples: '' }))
+      ).toEqual([])
+      expect(countConsistencyErrors(numbers)).toEqual([])
+    })
+
+    test('Should not compare the counts on a page that does not ask for them', () => {
+      expect(
+        countConsistencyErrors(
+          pageOf(model, ENTRY_PATHS.species),
+          buildEntry({ submissionsWithPositiveSamples: 30 })
+        )
+      ).toEqual([])
+    })
+
+    test('Should count inconsistent counts as an incomplete page', () => {
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+      const entry = buildEntry({ submissionsWithPositiveSamples: 30 })
+
+      expect(isEntryPageComplete(model, numbers, entry)).toBe(false)
+      expect(isEntryComplete(model, entry)).toBe(false)
+      expect(firstIncompleteEntryPage(model, entry)).toBe(numbers)
+    })
+
     test('Should find the first page of an entry left unanswered', () => {
       expect(firstIncompleteEntryPage(model, buildEntry())).toBeUndefined()
       expect(firstIncompleteEntryPage(model, { itemId: 'new' }).path).toBe(
@@ -672,8 +819,8 @@ describe('report entries', () => {
         ],
         ['disease', 'Disease', 'Tritrichomonosis'],
         [
-          'diagnosticTests',
-          'Diagnostic tests',
+          'qualifyingTests',
+          'Qualifying tests',
           'Culture & microscopy of Tritrichomonas foetus, PCR'
         ],
         ['species', 'Species', 'Other (please specify on the next page)'],
@@ -715,7 +862,7 @@ describe('report entries', () => {
 
       expect(names).not.toContain('otherSpecies')
       expect(names).toEqual(
-        expect.arrayContaining(['disease', 'diagnosticTests'])
+        expect.arrayContaining(['disease', 'qualifyingTests'])
       )
       expect(names).toHaveLength(8)
     })
