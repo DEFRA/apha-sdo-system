@@ -27,7 +27,17 @@ export class ReportFileUploadPageController extends FileUploadPageController {
 
     const result = await this.rejectMisnamedFiles(request, state)
 
-    return result.state
+    if (!result.rejected.length) {
+      return result.state
+    }
+
+    // Turning a file away frees its upload slot, but the engine allocated
+    // upload slots before the rejection: with the page full it had stored no
+    // upload for the form to post to, and left like that the page renders
+    // "You have reached the maximum number of files" over an upload form the
+    // user cannot use. Fetching the state again makes the engine see the
+    // freed slot and initiate a fresh upload.
+    return super.getState(request)
   }
 
   /**
@@ -92,7 +102,7 @@ export class ReportFileUploadPageController extends FileUploadPageController {
         ...formComponent.model,
         hint: {
           html: [
-            `The file name must include ${expected}, for example ${expected}.xlsx or ${expected}-1.xlsx`,
+            `The file name must include "${expected}", for example "${expected}.xlsx" or "${expected}-Report.xlsx"`,
             existingHint
           ]
             .filter(Boolean)

@@ -368,6 +368,21 @@ export class ReportEntryPageController extends QuestionPageController {
     const entry = this.entryOf(request, context.state)
     const { components = [] } = viewModel
 
+    // The engine styles every label of a page that asks several questions as
+    // a medium heading (the counts page's three totals). The design has them
+    // regular weight, like any other label text.
+    const questions = components.filter(
+      ({ isFormComponent }) => isFormComponent
+    )
+
+    if (questions.length > 1) {
+      for (const { model } of questions) {
+        if (model.label) {
+          model.label.classes = ''
+        }
+      }
+    }
+
     return {
       ...viewModel,
       // The caption is rendered by the page, not as a section title
