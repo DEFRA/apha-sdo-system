@@ -432,7 +432,7 @@ describe('animal health regulations web form (end to end)', () => {
     expect(answersSoFar(numbersPage.result)).toEqual([
       ['Report Date', 'August 2026', withReturnUrl(PAGES.reportDate, backHere)],
       [
-        'Pathogen, disease and diagnostic tests',
+        'Pathogen, disease and qualifying tests',
         pathogenSummaryHtml('Tritrichomonas foetus'),
         withReturnUrl(entryPage(PAGES.pathogen, first), backHere)
       ],
@@ -485,7 +485,7 @@ describe('animal health regulations web form (end to end)', () => {
     ).toEqual([
       ['Report Date', 'August 2026'],
       [
-        'Pathogen, disease and diagnostic tests',
+        'Pathogen, disease and qualifying tests',
         pathogenSummaryHtml('Tritrichomonas foetus')
       ],
       ['Species', 'Other (please specify on the next page)'],
@@ -520,6 +520,25 @@ describe('animal health regulations web form (end to end)', () => {
     expect(errorSummaryLinks(badCounts.result).map(({ href }) => href)).toEqual(
       ['#submissionsWithQualifyingTest', '#submissionsWithPositiveSamples']
     )
+
+    // The counts must agree: no more positive submissions than submissions,
+    // and at least as many positive samples as positive submissions
+    const contradictoryCounts = await post(entryPage(PAGES.numbers, first), {
+      submissionsWithQualifyingTest: '2',
+      submissionsWithPositiveSamples: '3',
+      positiveSamples: '1'
+    })
+    expect(contradictoryCounts.statusCode).toBe(statusCodes.ok)
+    expect(errorSummaryLinks(contradictoryCounts.result)).toEqual([
+      {
+        href: '#submissionsWithPositiveSamples',
+        text: 'Submissions with at least one positive result cannot be more than submissions with at least one qualifying test'
+      },
+      {
+        href: '#positiveSamples',
+        text: 'Total positive samples cannot be less than submissions with at least one positive result'
+      }
+    ])
 
     // The last entry page leads to the report entries page
     await answer(entryPage(PAGES.numbers, first), COUNTS, PAGES.entries)
@@ -585,7 +604,7 @@ describe('animal health regulations web form (end to end)', () => {
       {
         submissionsWithQualifyingTest: '1',
         submissionsWithPositiveSamples: '1',
-        positiveSamples: '0'
+        positiveSamples: '1'
       },
       PAGES.entries
     )
@@ -773,7 +792,7 @@ describe('animal health regulations web form (end to end)', () => {
           'Wales',
           '1',
           '1',
-          '0'
+          '1'
         ]
       }
     ])
@@ -794,7 +813,7 @@ describe('animal health regulations web form (end to end)', () => {
       {
         submissionsWithQualifyingTest: '2',
         submissionsWithPositiveSamples: '1',
-        positiveSamples: '0'
+        positiveSamples: '1'
       },
       PAGES.summary
     )
@@ -825,7 +844,7 @@ describe('animal health regulations web form (end to end)', () => {
         {
           pathogen: 'Tritrichomonas foetus',
           disease: 'Tritrichomonosis',
-          diagnosticTests: [
+          qualifyingTests: [
             'Culture & microscopy of Tritrichomonas foetus',
             'PCR'
           ],
@@ -839,7 +858,7 @@ describe('animal health regulations web form (end to end)', () => {
           pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
           disease:
             'Infectious bovine rhinotracheitis (IBR) / Infectious pustular vulvovaginitis / Infectious balanoposthitis',
-          diagnosticTests: [
+          qualifyingTests: [
             'PCR (including gE PCR)',
             'Virus isolation',
             'Immunohistochemistry',
@@ -850,7 +869,7 @@ describe('animal health regulations web form (end to end)', () => {
           country: 'Scotland',
           submissionsWithQualifyingTest: '2',
           submissionsWithPositiveSamples: '1',
-          positiveSamples: '0'
+          positiveSamples: '1'
         }
       ]
     })

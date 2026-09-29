@@ -568,7 +568,7 @@ describe('web form report entries', () => {
           ['pathogen', 'Tritrichomonas foetus'],
           ['disease', 'Tritrichomonosis'],
           [
-            'diagnosticTests',
+            'qualifyingTests',
             ['Culture & microscopy of Tritrichomonas foetus', 'PCR']
           ],
           ['species', 'Domestic cattle'],
@@ -581,7 +581,7 @@ describe('web form report entries', () => {
           ['pathogen', 'Tritrichomonas foetus'],
           ['disease', 'Tritrichomonosis'],
           [
-            'diagnosticTests',
+            'qualifyingTests',
             ['Culture & microscopy of Tritrichomonas foetus', 'PCR']
           ],
           ['species', 'Other'],

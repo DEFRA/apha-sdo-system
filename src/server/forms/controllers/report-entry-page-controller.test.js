@@ -556,6 +556,105 @@ describe('ReportEntryPageController', () => {
         'species'
       ])
     })
+
+    test('Should refuse counts that contradict each other', () => {
+      const engineHandler = stubEngineHandler()
+      // The engine has already merged the posted counts into the state
+      const context = buildContext(
+        buildState([
+          buildEntry({
+            submissionsWithQualifyingTest: 2,
+            submissionsWithPositiveSamples: 3,
+            positiveSamples: 1
+          })
+        ])
+      )
+      const request = buildRequest({
+        itemId: FIRST_ENTRY_ID,
+        payload: {
+          submissionsWithQualifyingTest: '2',
+          submissionsWithPositiveSamples: '3',
+          positiveSamples: '1'
+        }
+      })
+      const h = buildToolkit()
+
+      const response = numbers.makePostRouteHandler()(request, context, h)
+
+      expect(context.errors).toEqual([
+        {
+          path: ['submissionsWithPositiveSamples'],
+          href: '#submissionsWithPositiveSamples',
+          name: 'submissionsWithPositiveSamples',
+          text: 'Submissions with at least one positive result cannot be more than submissions with at least one qualifying test'
+        },
+        {
+          path: ['positiveSamples'],
+          href: '#positiveSamples',
+          name: 'positiveSamples',
+          text: 'Total positive samples cannot be less than submissions with at least one positive result'
+        }
+      ])
+      expect(engineHandler).toHaveBeenCalledWith(request, context, h)
+      expect(response).toBe('handled')
+    })
+
+    test('Should accept counts that agree with each other', () => {
+      stubEngineHandler()
+      const context = buildContext(buildState([buildEntry()]))
+
+      numbers.makePostRouteHandler()(
+        buildRequest({
+          itemId: FIRST_ENTRY_ID,
+          payload: {
+            submissionsWithQualifyingTest: '12',
+            submissionsWithPositiveSamples: '3',
+            positiveSamples: '5'
+          }
+        }),
+        context,
+        buildToolkit()
+      )
+
+      expect(context.errors).toBeUndefined()
+    })
+
+    test('Should not compare the counts when the engine has found one wrong', () => {
+      stubEngineHandler()
+      const engineError = {
+        path: ['submissionsWithQualifyingTest'],
+        href: '#submissionsWithQualifyingTest',
+        name: 'submissionsWithQualifyingTest',
+        text: 'Total submissions with at least one qualifying test must be 0 or higher'
+      }
+      const context = {
+        ...buildContext(
+          buildState([
+            buildEntry({
+              submissionsWithQualifyingTest: -1,
+              submissionsWithPositiveSamples: 3,
+              positiveSamples: 1
+            })
+          ])
+        ),
+        errors: [engineError]
+      }
+
+      numbers.makePostRouteHandler()(
+        buildRequest({
+          itemId: FIRST_ENTRY_ID,
+          payload: {
+            submissionsWithQualifyingTest: '-1',
+            submissionsWithPositiveSamples: '3',
+            positiveSamples: '1'
+          }
+        }),
+        context,
+        buildToolkit()
+      )
+
+      expect(context.errors).toEqual([engineError])
+    })
   })
 
   describe('#makeGetRouteHandler evaluation', () => {
@@ -852,7 +951,7 @@ describe('ReportEntryPageController', () => {
 
       expect(answersSoFar.rows.map((row) => row.key.text)).toEqual([
         'Report Date',
-        'Pathogen, disease and diagnostic tests',
+        'Pathogen, disease and qualifying tests',
         'Species'
       ])
       expect(answersSoFar.rows[2].actions.items[0].href).toBe(

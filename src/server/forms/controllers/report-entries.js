@@ -51,7 +51,7 @@ export const ENTRIES_PAGE_CONTROLLER = 'ReportEntriesPageController'
 
 export const ADD_ANOTHER_ENTRY_TEXT = 'Add another entry to the report'
 export const CONTINUE_TEXT = 'Continue'
-export const PATHOGEN_SUMMARY_LABEL = 'Pathogen, disease and diagnostic tests'
+export const PATHOGEN_SUMMARY_LABEL = 'Pathogen, disease and qualifying tests'
 
 export const CHANGE_TEXT = 'Change'
 export const REMOVE_TEXT = 'Remove'
@@ -306,9 +306,89 @@ export function disallowedListAnswers(model, page, entry = {}) {
   })
 }
 
+// The three counts of an entry, by field name
+export const TOTAL_SUBMISSIONS_FIELD = 'submissionsWithQualifyingTest'
+export const POSITIVE_SUBMISSIONS_FIELD = 'submissionsWithPositiveSamples'
+export const POSITIVE_SAMPLES_FIELD = 'positiveSamples'
+
+const COUNT_FIELDS = [
+  TOTAL_SUBMISSIONS_FIELD,
+  POSITIVE_SUBMISSIONS_FIELD,
+  POSITIVE_SAMPLES_FIELD
+]
+
+// How the counts relate to each other (AHR Data Errors ERR_CNT_002/004 and
+// ERR_CNT_005/007): a submission with a positive sample is one of the
+// submissions tested, and has at least one positive sample. Each rule is
+// reported against the count named, in the order the page asks them.
+const COUNT_RULES = [
+  {
+    name: POSITIVE_SUBMISSIONS_FIELD,
+    holds: (counts) =>
+      counts[POSITIVE_SUBMISSIONS_FIELD] <= counts[TOTAL_SUBMISSIONS_FIELD],
+    text: 'Submissions with at least one positive result cannot be more than submissions with at least one qualifying test'
+  },
+  {
+    name: POSITIVE_SAMPLES_FIELD,
+    holds: (counts) =>
+      counts[POSITIVE_SAMPLES_FIELD] >= counts[POSITIVE_SUBMISSIONS_FIELD],
+    text: 'Total positive samples cannot be less than submissions with at least one positive result'
+  }
+]
+
+function isCount(value) {
+  return value !== '' && value !== null && Number.isFinite(Number(value))
+}
+
 /**
- * Whether a page's answers are present, valid and among the options offered
- * to the entry.
+ * Whether a page asks for the three counts of an entry
+ * @param {{ collection: { fields: object[] } }} page - an entry page
+ */
+export function isCountsPage(page) {
+  const names = new Set(page.collection.fields.map((field) => field.name))
+
+  return COUNT_FIELDS.every((name) => names.has(name))
+}
+
+/**
+ * The errors of a counts page whose counts contradict each other: more
+ * submissions with a positive sample than submissions tested, or fewer
+ * positive samples than submissions with one. Nothing until all three counts
+ * are numbers; whether each is present and a whole non-negative number is
+ * left to the page's schema, whose errors come first. In the shape of the
+ * engine's own errors, so they can be shown alongside them.
+ * @param {{ collection: { fields: object[] } }} page - an entry page
+ * @param {object} [entry] - the entry
+ * @returns {{ path: string[], href: string, name: string, text: string }[]}
+ */
+export function countConsistencyErrors(page, entry = {}) {
+  if (!isCountsPage(page)) {
+    return []
+  }
+
+  const counts = Object.fromEntries(
+    COUNT_FIELDS.map((name) => [name, entry[name]])
+  )
+
+  if (!Object.values(counts).every(isCount)) {
+    return []
+  }
+
+  const numbers = Object.fromEntries(
+    Object.entries(counts).map(([name, value]) => [name, Number(value)])
+  )
+
+  return COUNT_RULES.filter((rule) => !rule.holds(numbers)).map((rule) => ({
+    path: [rule.name],
+    href: `#${rule.name}`,
+    name: rule.name,
+    text: rule.text
+  }))
+}
+
+/**
+ * Whether a page's answers are present, valid, among the options offered to
+ * the entry and, for the counts, consistent with each other.
  * @param {{ conditions?: object }} model - the form model
  * @param {{ entryStateSchema?: object, collection: object }} page - an entry page
  * @param {object} [entry] - the entry
@@ -323,7 +403,10 @@ export function isEntryPageComplete(model, page, entry = {}) {
     return false
   }
 
-  return !disallowedListAnswers(model, page, entry).length
+  return (
+    !disallowedListAnswers(model, page, entry).length &&
+    !countConsistencyErrors(page, entry).length
+  )
 }
 
 /**
@@ -455,7 +538,7 @@ export function answerData(field, state, translator) {
 }
 
 /**
- * The disease and diagnostic tests recognised for a selected pathogen, or
+ * The disease and qualifying tests recognised for a selected pathogen, or
  * null when the name is not in the catalogue.
  * @param {string} pathogenName
  */
@@ -468,13 +551,13 @@ export function recognitionOf(pathogenName) {
 
   return {
     disease: pathogen.disease,
-    diagnosticTests: pathogen.tests.map((test) => test.name)
+    qualifyingTests: pathogen.tests.map((test) => test.name)
   }
 }
 
 /**
  * The pathogen row on a summary: the pathogen, then its disease, then its
- * diagnostic tests separated by commas.
+ * qualifying tests separated by commas.
  * @param {string} pathogenName
  */
 export function pathogenSummaryHtml(pathogenName) {
@@ -485,13 +568,13 @@ export function pathogenSummaryHtml(pathogenName) {
     return name
   }
 
-  const tests = escapeHtml(recognition.diagnosticTests.join(', '))
+  const tests = escapeHtml(recognition.qualifyingTests.join(', '))
 
   return [
     `<p class="govuk-body govuk-!-margin-bottom-2">${name}</p>`,
     '<p class="govuk-body govuk-!-margin-bottom-1 govuk-!-font-weight-bold">Disease</p>',
     `<p class="govuk-body govuk-!-margin-bottom-2">${escapeHtml(recognition.disease)}</p>`,
-    '<p class="govuk-body govuk-!-margin-bottom-1 govuk-!-font-weight-bold">Diagnostic tests</p>',
+    '<p class="govuk-body govuk-!-margin-bottom-1 govuk-!-font-weight-bold">Qualifying tests</p>',
     `<p class="govuk-body govuk-!-margin-bottom-0">${tests}</p>`
   ].join('')
 }
@@ -527,10 +610,10 @@ function withPathogenRecognition(items) {
         recognition.disease
       ),
       recognised(
-        'diagnosticTests',
-        'Diagnostic tests',
-        recognition.diagnosticTests.join(', '),
-        recognition.diagnosticTests
+        'qualifyingTests',
+        'Qualifying tests',
+        recognition.qualifyingTests.join(', '),
+        recognition.qualifyingTests
       )
     ]
   })
@@ -652,7 +735,7 @@ export function answersSoFar(model, page, entry, state, translator) {
 export function entryCard(model, entry, index, translator, options = {}) {
   const rows = entryDetailItems(model, entry, translator, options)
     .filter(
-      (item) => item.name !== 'disease' && item.name !== 'diagnosticTests'
+      (item) => item.name !== 'disease' && item.name !== 'qualifyingTests'
     )
     .map((item) => {
       const row = {

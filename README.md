@@ -323,7 +323,10 @@ which lists the entries added so far and offers **Add another entry to the
 report** or **Continue**. Entries can be changed and removed there and from
 check your answers. The species offered depend on the pathogen chosen (the
 conditions on the species list items in the definition), and the counts must
-be whole numbers that are not negative. Each entry page lists the answers
+be whole numbers that are not negative and agree with each other: no more
+submissions with a positive sample than submissions with a qualifying test,
+and at least as many positive samples as submissions with one. Each entry
+page lists the answers
 given so far (the report date and the entry's earlier answers) above its
 question, each with a Change link, and has a back link to the entry's
 previous page; changing an earlier answer drops the answers that followed it
