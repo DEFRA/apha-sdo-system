@@ -241,7 +241,7 @@ export const definition = {
           type: 'AutocompleteField',
           name: 'species',
           title: 'What species is the report for?',
-          shortDescription: 'Species the report is for',
+          shortDescription: 'Species',
           hint: 'Start typing the name of the species. If the species is not on the list, select "Other" and enter it on the next page.',
           list: SPECIES_LIST_ID,
           options: {

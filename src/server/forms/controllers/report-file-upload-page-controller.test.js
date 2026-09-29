@@ -62,7 +62,13 @@ afterEach(() => {
 })
 
 describe('#rejectMisnamedFiles', () => {
-  test.each(['march2024.xlsx', 'March2024-1.xls', 'March2024-part2.xls'])(
+  test.each([
+    '2024-03.xlsx',
+    '2024-03-1.xls',
+    '2024-03-part2.xls',
+    '2024-03 BR Report.xls',
+    '2024-03-BR-Report.xls'
+  ])(
     'Should keep a file whose name includes the report date (%s)',
     async (filename) => {
       const controller = buildController()
@@ -104,14 +110,14 @@ describe('#rejectMisnamedFiles', () => {
         path: [FIELD_NAME],
         href: `#${FIELD_NAME}`,
         name: FIELD_NAME,
-        text: '‘April2024.xlsx’ must include ‘March2024’'
+        text: '‘April2024.xlsx’ must include ‘2024-03’'
       }
     ])
   })
 
   test('Should keep the matching files of a mixed batch and report the rest', async () => {
     const controller = buildController()
-    const matching = buildFile('MARCH2024.csv')
+    const matching = buildFile('2024-03.csv')
     const state = buildState({
       files: [matching, buildFile('April2024.xlsx'), buildFile('report.xlsx')]
     })
@@ -122,8 +128,8 @@ describe('#rejectMisnamedFiles', () => {
     expect(result.rejected).toHaveLength(2)
     expect(result.state.upload[UPLOAD_PATH].files).toEqual([matching])
     expect(flashedErrors(cacheService).map(({ text }) => text)).toEqual([
-      '‘April2024.xlsx’ must include ‘March2024’',
-      '‘report.xlsx’ must include ‘March2024’'
+      '‘April2024.xlsx’ must include ‘2024-03’',
+      '‘report.xlsx’ must include ‘2024-03’'
     ])
   })
 
@@ -145,7 +151,7 @@ describe('#rejectMisnamedFiles', () => {
     expect(flashedErrors(cacheService)).toEqual([
       virusError,
       expect.objectContaining({
-        text: '‘April2024.xlsx’ must include ‘March2024’'
+        text: '‘April2024.xlsx’ must include ‘2024-03’'
       })
     ])
   })
@@ -172,24 +178,32 @@ describe('#getState', () => {
   test('Should turn away a misnamed file the engine has just added', async () => {
     const controller = buildController()
     const state = buildState({ files: [buildFile('April2024.xlsx')] })
+    // What the engine returns once the misnamed file is gone: no files, and a
+    // fresh upload initiated for the freed slot
+    const refreshed = buildState({ files: [] })
     const { request, cacheService } = buildRequest()
 
-    vi.spyOn(FileUploadPageController.prototype, 'getState').mockResolvedValue(
-      state
-    )
+    vi.spyOn(FileUploadPageController.prototype, 'getState')
+      .mockResolvedValueOnce(state)
+      .mockResolvedValueOnce(refreshed)
 
     const result = await controller.getState(request)
 
     expect(FileUploadPageController.prototype.getState).toHaveBeenCalledWith(
       request
     )
-    expect(result.upload[UPLOAD_PATH].files).toEqual([])
+    expect(state.upload[UPLOAD_PATH].files).toEqual([])
     expect(cacheService.setFlash).toHaveBeenCalled()
+
+    // The state handed back is the engine's second look, so the page renders
+    // with an upload to post to rather than "maximum number of files"
+    expect(FileUploadPageController.prototype.getState).toHaveBeenCalledTimes(2)
+    expect(result).toBe(refreshed)
   })
 
   test('Should return the engine state untouched when the file matches', async () => {
     const controller = buildController()
-    const file = buildFile('March2024.xlsx')
+    const file = buildFile('2024-03.xlsx')
     const state = buildState({ files: [file] })
     const { request } = buildRequest()
 
@@ -201,6 +215,8 @@ describe('#getState', () => {
 
     expect(result).toBe(state)
     expect(result.upload[UPLOAD_PATH].files).toEqual([file])
+    // No rejection, so no second look at the engine state
+    expect(FileUploadPageController.prototype.getState).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -223,7 +239,7 @@ describe('#getViewModel', () => {
     const result = controller.getViewModel({}, { state: buildState() }, {})
 
     expect(result.formComponent.model.hint).toEqual({
-      html: 'The file name must include March2024, for example March2024.xlsx or March2024-1.xlsx<br>Only csv, xls and xlsx.'
+      html: 'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"<br>Only csv, xls and xlsx.'
     })
   })
 
@@ -238,7 +254,7 @@ describe('#getViewModel', () => {
     const result = controller.getViewModel({}, { state: buildState() }, {})
 
     expect(result.formComponent.model.hint).toEqual({
-      html: 'The file name must include March2024, for example March2024.xlsx or March2024-1.xlsx'
+      html: 'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"'
     })
   })
 

@@ -182,7 +182,7 @@ describe('report file name rule (end to end)', () => {
       `href="/${SLUG}/report-date" class="govuk-back-link"`
     )
     expect(uploadPage.result).toContain(
-      'The file name must include March2024, for example March2024.xlsx or March2024-1.xlsx<br>Only csv, xls and xlsx files are supported.'
+      'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"<br>Only csv, xls and xlsx files are supported.'
     )
     expect(uploadPage.result).not.toContain(
       'Upload laboratory results spreadsheet'
@@ -196,9 +196,19 @@ describe('report file name rule (end to end)', () => {
     expect(rejectedPage.statusCode).toBe(statusCodes.ok)
     expect(rejectedPage.result).toContain('There is a problem')
     expect(rejectedPage.result).toContain(
-      '‘Show-and-Tell-2.xlsx’ must include ‘March2024’'
+      '‘Show-and-Tell-2.xlsx’ must include ‘2024-03’'
     )
     expect(rejectedPage.result).not.toContain('1 file uploaded')
+
+    // Turning the file away frees the page's only upload slot, so the user
+    // can try again right away: the form posts to a fresh upload, not the
+    // "maximum number of files" warning
+    expect(rejectedPage.result).toContain(
+      'http://uploader.test/upload-and-scan'
+    )
+    expect(rejectedPage.result).not.toContain(
+      'You have reached the maximum number of files'
+    )
 
     // The rejected file really is gone, not just hidden: reloading shows no
     // error and still no files
@@ -207,12 +217,12 @@ describe('report file name rule (end to end)', () => {
     expect(reloadedPage.result).not.toContain('Show-and-Tell-2.xlsx')
 
     // A file whose name includes the report date is kept, including suffixes
-    uploader.scannedFile('March2024-part2.xlsx')
+    uploader.scannedFile('2024-03-part2.xlsx')
     const acceptedPage = await get(`/${SLUG}/files-upload`)
     uploader.nothingUploadedYet()
 
     expect(acceptedPage.result).not.toContain('There is a problem')
-    expect(acceptedPage.result).toContain('March2024-part2.xlsx')
+    expect(acceptedPage.result).toContain('2024-03-part2.xlsx')
     expect(acceptedPage.result).toContain('1 file uploaded')
 
     // Continue to the summary, which names the attached file rather than
@@ -226,7 +236,7 @@ describe('report file name rule (end to end)', () => {
     expect(summaryPage.result).toContain(
       `href="/${SLUG}/files-upload" class="govuk-back-link"`
     )
-    expect(summaryPage.result).toContain('March2024-part2.xlsx')
+    expect(summaryPage.result).toContain('2024-03-part2.xlsx')
     expect(summaryPage.result).not.toContain('Uploaded 1 file')
 
     const answers = [
@@ -260,11 +270,11 @@ describe('report file name rule (end to end)', () => {
 
     const invalidatedPage = await get(`/${SLUG}/files-upload`)
     expect(invalidatedPage.result).toContain(
-      '‘March2024-part2.xlsx’ must include ‘April2024’'
+      '‘2024-03-part2.xlsx’ must include ‘2024-04’'
     )
     expect(invalidatedPage.result).not.toContain('1 file uploaded')
     expect(invalidatedPage.result).toContain(
-      'The file name must include April2024, for example April2024.xlsx or April2024-1.xlsx<br>Only csv, xls and xlsx files are supported.'
+      'The file name must include "2024-04", for example "2024-04.xlsx" or "2024-04-Report.xlsx"<br>Only csv, xls and xlsx files are supported.'
     )
   })
 
@@ -276,7 +286,7 @@ describe('report file name rule (end to end)', () => {
       reportDate__year: '2024'
     })
 
-    uploader.scannedFile('May2024.xlsx')
+    uploader.scannedFile('2024-05.xlsx')
     const uploadPage = await get(`/${SLUG}/files-upload`)
     uploader.nothingUploadedYet()
     expect(uploadPage.result).toContain('1 file uploaded')

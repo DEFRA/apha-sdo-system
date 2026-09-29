@@ -222,9 +222,10 @@ describe('#outputService.submit', () => {
             title: 'Files',
             value: 'Uploaded 1 file'
           }
-        ],
-        entries: []
+        ]
       })
+      // An uploaded report has no entries, so the record carries none
+      expect(uploadedSubmissionJson()).not.toHaveProperty('entries')
     })
 
     test('maps the journey slug to its process name', async () => {
@@ -320,7 +321,6 @@ describe('#outputService.submit', () => {
         userId: 'entra-oid',
         organisationId: 'TestLab1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-        fileName: null,
         reportMonthYear: 'August 2026',
         // The repeated item itself is not an answer
         answers: [reportDate],
@@ -344,6 +344,8 @@ describe('#outputService.submit', () => {
           }
         ]
       })
+      // A web form report has no file, so the record names none
+      expect(uploadedSubmissionJson()).not.toHaveProperty('fileName')
       expect(request.logger.info).toHaveBeenCalledWith(
         expect.objectContaining({ entries: 2 }),
         'Form submission received'
@@ -397,8 +399,7 @@ describe('#outputService.submit', () => {
         'submittedAt',
         'fileName',
         'reportMonthYear',
-        'answers',
-        'entries'
+        'answers'
       ])
       expect(request.logger.info).toHaveBeenCalledWith(
         expect.not.objectContaining({ notificationEmail: expect.anything() }),
@@ -422,10 +423,11 @@ describe('#outputService.submit', () => {
 
       expect(uploadedSubmissionJson()).toEqual(
         expect.objectContaining({
-          reportMonthYear: 'November 2023',
-          fileName: null
+          reportMonthYear: 'November 2023'
         })
       )
+      // Nothing was uploaded, so no fileName rather than a blank one
+      expect(uploadedSubmissionJson()).not.toHaveProperty('fileName')
     })
 
     test('writes nulls rather than failing when identity or date are unavailable', async () => {

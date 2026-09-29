@@ -388,7 +388,7 @@ describe('animal health regulations web form (end to end)', () => {
     expect(errorSummaryLinks(wrongSpecies.result)).toEqual([
       {
         href: '#species',
-        text: 'Select one of the options shown for species the report is for'
+        text: 'Select one of the options shown for species'
       }
     ])
 
@@ -437,7 +437,7 @@ describe('animal health regulations web form (end to end)', () => {
         withReturnUrl(entryPage(PAGES.pathogen, first), backHere)
       ],
       [
-        'Species the report is for',
+        'Species',
         'Other (please specify on the next page)',
         withReturnUrl(entryPage(PAGES.species, first), backHere)
       ],
@@ -452,6 +452,18 @@ describe('animal health regulations web form (end to end)', () => {
         withReturnUrl(entryPage(PAGES.country, first), backHere)
       ]
     ])
+
+    // The three totals are asked in regular weight, not as medium headings
+    expect(numbersPage.result).toContain(
+      'Total submissions with at least one qualifying test'
+    )
+    expect(numbersPage.result).toContain(
+      'Totals submissions that contained one or more positive samples'
+    )
+    expect(numbersPage.result).toContain(
+      'Total number of positive samples identified'
+    )
+    expect(numbersPage.result).not.toContain('govuk-label--m')
 
     // Giving an earlier answer again unchanged comes straight back
     await answer(
@@ -476,7 +488,7 @@ describe('animal health regulations web form (end to end)', () => {
         'Pathogen, disease and diagnostic tests',
         pathogenSummaryHtml('Tritrichomonas foetus')
       ],
-      ['Species the report is for', 'Other (please specify on the next page)'],
+      ['Species', 'Other (please specify on the next page)'],
       ['Other species', 'Llama']
     ])
 
@@ -805,7 +817,6 @@ describe('animal health regulations web form (end to end)', () => {
       userId: 'user-id',
       organisationId: 'TestLab1',
       submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-      fileName: null,
       reportMonthYear: 'August 2026',
       answers: [
         expect.objectContaining({ name: 'reportDate', value: 'August 2026' })

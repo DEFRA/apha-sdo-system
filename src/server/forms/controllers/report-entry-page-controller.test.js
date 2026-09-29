@@ -531,7 +531,7 @@ describe('ReportEntryPageController', () => {
           path: ['species'],
           href: '#species',
           name: 'species',
-          text: 'Select one of the options shown for species the report is for'
+          text: 'Select one of the options shown for species'
         }
       ])
       expect(engineHandler).toHaveBeenCalledWith(request, context, h)
@@ -753,6 +753,61 @@ describe('ReportEntryPageController', () => {
       ).toBe('Editing entry 2/2')
     })
 
+    test('Should ask the questions of a several-question page with regular-weight labels', () => {
+      const count = (name) => ({
+        type: 'NumberField',
+        isFormComponent: true,
+        model: { name, label: { text: name, classes: 'govuk-label--m' } }
+      })
+
+      QuestionPageController.prototype.getViewModel.mockReturnValue({
+        components: [
+          count('submissionsWithQualifyingTest'),
+          count('submissionsWithPositiveSamples'),
+          count('positiveSamples')
+        ]
+      })
+
+      const { components } = numbers.getViewModel(
+        buildRequest({ itemId: FIRST_ENTRY_ID }),
+        buildContext(buildState([buildEntry()])),
+        translator
+      )
+
+      expect(components.map(({ model }) => model.label.classes)).toEqual([
+        '',
+        '',
+        ''
+      ])
+    })
+
+    test('Should leave the label of a page with a single question as the engine styles it', () => {
+      QuestionPageController.prototype.getViewModel.mockReturnValue({
+        components: [
+          banner,
+          {
+            type: 'AutocompleteField',
+            isFormComponent: true,
+            model: {
+              name: 'species',
+              label: {
+                text: 'What species is the report for?',
+                classes: 'govuk-label--m'
+              }
+            }
+          }
+        ]
+      })
+
+      const { components } = species.getViewModel(
+        buildRequest({ itemId: FIRST_ENTRY_ID }),
+        buildContext(buildState([buildEntry()])),
+        translator
+      )
+
+      expect(components[0].model.label.classes).toBe('govuk-label--m')
+    })
+
     test('Should lift notification banners out of the questions', () => {
       const viewModel = species.getViewModel(
         buildRequest({ itemId: FIRST_ENTRY_ID }),
@@ -798,7 +853,7 @@ describe('ReportEntryPageController', () => {
       expect(answersSoFar.rows.map((row) => row.key.text)).toEqual([
         'Report Date',
         'Pathogen, disease and diagnostic tests',
-        'Species the report is for'
+        'Species'
       ])
       expect(answersSoFar.rows[2].actions.items[0].href).toBe(
         `${entryHref(species, FIRST_ENTRY_ID)}?returnUrl=${encodeURIComponent(entryHref(country, FIRST_ENTRY_ID))}`

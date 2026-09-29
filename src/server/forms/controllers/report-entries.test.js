@@ -523,7 +523,7 @@ describe('report entries', () => {
           `/${WEB_FORM_SLUG}${ENTRY_PATHS.pathogen}/${SECOND_ENTRY_ID}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
         [
-          'Species the report is for',
+          'Species',
           'Other (please specify on the next page)',
           `/${WEB_FORM_SLUG}${ENTRY_PATHS.species}/${SECOND_ENTRY_ID}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
@@ -559,7 +559,7 @@ describe('report entries', () => {
       expect(rows.map((row) => row.key.text)).toEqual([
         'Report Date',
         PATHOGEN_SUMMARY_LABEL,
-        'Species the report is for'
+        'Species'
       ])
     })
 
@@ -676,11 +676,7 @@ describe('report entries', () => {
           'Diagnostic tests',
           'Culture & microscopy of Tritrichomonas foetus, PCR'
         ],
-        [
-          'species',
-          'Species the report is for',
-          'Other (please specify on the next page)'
-        ],
+        ['species', 'Species', 'Other (please specify on the next page)'],
         ['otherSpecies', 'Other species', 'Alpaca'],
         ['country', 'Country', 'England'],
         [

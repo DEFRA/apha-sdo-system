@@ -1,9 +1,10 @@
 /**
  * A report must be uploaded under a file name that includes the report date
- * the user entered, so a report for 03/2024 has to include March2024. Extra
- * text around that token is allowed (March2024-1, March2024-part2), as is any
- * casing or file extension. Separators inside the token and abbreviations are
- * not: March 2024, March-2024 and Mar2024 all fail.
+ * the user entered, so a report for 03/2025 has to include 2025-03. Extra
+ * text after that token is allowed (2025-03 BR Report.xls,
+ * 2025-03-BR-Report.xls), as is any casing or file extension. A different
+ * order, a missing hyphen or an unpadded month is not: 03-2025, 202503 and
+ * 2025-3 all fail.
  *
  * The rule is applied wherever an uploaded file meets a report date — on
  * upload, when the report date changes, and again at submit — so it lives here
@@ -59,20 +60,20 @@ function reportDateParts(reportDate) {
     return undefined
   }
 
-  return { monthName: MONTH_NAMES[month - 1], year }
+  return { monthName: MONTH_NAMES[month - 1], month, year }
 }
 
 /**
- * The month-year token a report file name must include, or undefined when the
- * date is missing or unusable. Callers treat undefined as "nothing to validate
- * against", which is what happens on preview URL direct access or if the
- * report date page has not been answered yet.
+ * The year-month token a report file name must include, or undefined when the
+ * date is missing or unusable. March 2025 is 2025-03. Callers treat undefined
+ * as "nothing to validate against", which is what happens on preview URL
+ * direct access or if the report date page has not been answered yet.
  * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
  */
 export function expectedReportFileName(reportDate) {
   const parts = reportDateParts(reportDate)
 
-  return parts && `${parts.monthName}${parts.year}`
+  return parts && `${parts.year}-${String(parts.month).padStart(2, '0')}`
 }
 
 /**
@@ -138,7 +139,7 @@ export function partitionFilesByName(files, reportDate) {
  * than 100MB"). Names the file whenever we know it, so the user can see
  * which name fell short of the rule.
  * @param {string} [filename] - the rejected file name
- * @param {string} expected - the month-year token the report date requires
+ * @param {string} expected - the year-month token the report date requires
  */
 export function reportFileNameErrorText(filename, expected) {
   const subject = String(filename ?? '').trim()

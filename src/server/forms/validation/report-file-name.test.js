@@ -19,25 +19,25 @@ function buildFile(filename) {
 
 describe('#expectedReportFileName', () => {
   test.each([
-    [1, 'January2024'],
-    [2, 'February2024'],
-    [3, 'March2024'],
-    [4, 'April2024'],
-    [5, 'May2024'],
-    [6, 'June2024'],
-    [7, 'July2024'],
-    [8, 'August2024'],
-    [9, 'September2024'],
-    [10, 'October2024'],
-    [11, 'November2024'],
-    [12, 'December2024']
+    [1, '2024-01'],
+    [2, '2024-02'],
+    [3, '2024-03'],
+    [4, '2024-04'],
+    [5, '2024-05'],
+    [6, '2024-06'],
+    [7, '2024-07'],
+    [8, '2024-08'],
+    [9, '2024-09'],
+    [10, '2024-10'],
+    [11, '2024-11'],
+    [12, '2024-12']
   ])('Should name month %i as %s', (month, expected) => {
     expect(expectedReportFileName({ month, year: 2024 })).toBe(expected)
   })
 
   test('Should accept the month and year as strings', () => {
     expect(expectedReportFileName({ month: '03', year: '2024' })).toBe(
-      'March2024'
+      '2024-03'
     )
   })
 
@@ -74,7 +74,7 @@ describe('#reportDateFromState', () => {
     const state = { reportDate__month: 3, reportDate__year: 2024 }
 
     expect(reportDateFromState(state)).toEqual({ month: 3, year: 2024 })
-    expect(expectedReportFileName(reportDateFromState(state))).toBe('March2024')
+    expect(expectedReportFileName(reportDateFromState(state))).toBe('2024-03')
   })
 
   test('Should produce a date the other helpers treat as unanswered', () => {
@@ -87,31 +87,36 @@ describe('#reportDateFromState', () => {
 
 describe('#matchesReportFileName', () => {
   test.each([
-    'March2024.xlsx',
-    'march2024.xlsx',
-    'MARCH2024.XLSX',
-    'March2024.csv',
-    'March2024.xls',
-    'March2024',
-    ' March2024.xlsx ',
-    'March2024 .xlsx',
-    'March2024-1.xls',
-    'March2024-part2.xls',
-    'March2024_v2.xlsx',
-    'March2024.final.xlsx',
-    'BatRabies_March2024.xlsx'
+    '2024-03.xlsx',
+    '2024-03.XLSX',
+    '2024-03.csv',
+    '2024-03.xls',
+    '2024-03',
+    ' 2024-03.xlsx ',
+    '2024-03 .xlsx',
+    '2024-03-1.xls',
+    '2024-03-part2.xls',
+    '2024-03_v2.xlsx',
+    '2024-03.final.xlsx',
+    '2024-03 BR Report.xls',
+    '2024-03-BR-Report.xls',
+    'BatRabies_2024-03.xlsx'
   ])('Should accept %s for 03/2024', (filename) => {
     expect(matchesReportFileName(filename, MARCH_2024)).toBe(true)
   })
 
   test.each([
+    'March2024.xlsx',
     'March 2024.xlsx',
-    'March_2024.xlsx',
     'March-2024.xlsx',
-    'Mar2024.xlsx',
-    'March24.xlsx',
-    'April2024.xlsx',
-    'March2023.xlsx',
+    '2024-3.xlsx',
+    '202403.xlsx',
+    '03-2024.xlsx',
+    '2024/03.xlsx',
+    '2024_03.xlsx',
+    '2024 03.xlsx',
+    '2024-04.xlsx',
+    '2023-03.xlsx',
     'report.xlsx',
     '',
     undefined
@@ -137,9 +142,9 @@ describe('#uploadedFileName', () => {
 
 describe('#partitionFilesByName', () => {
   test('Should split a batch into matching and misnamed files', () => {
-    const matching = buildFile('march2024.CSV')
-    const suffixed = buildFile('March2024-part2.xls')
-    const wrongMonth = buildFile('April2024.xlsx')
+    const matching = buildFile('2024-03 BR Report.xls')
+    const suffixed = buildFile('2024-03-BR-Report.xls')
+    const wrongMonth = buildFile('2024-04.xlsx')
     const missingToken = buildFile('report.xlsx')
 
     const { kept, rejected } = partitionFilesByName(
@@ -170,14 +175,14 @@ describe('#partitionFilesByName', () => {
 
 describe('#reportFileNameErrorText', () => {
   test('Should name the rejected file', () => {
-    expect(reportFileNameErrorText('April2024.xlsx', 'March2024')).toBe(
-      '‘April2024.xlsx’ must include ‘March2024’'
+    expect(reportFileNameErrorText('2024-04.xlsx', '2024-03')).toBe(
+      '‘2024-04.xlsx’ must include ‘2024-03’'
     )
   })
 
   test('Should fall back to the selected file when the name is unknown', () => {
-    expect(reportFileNameErrorText(undefined, 'March2024')).toBe(
-      'The selected file must include ‘March2024’'
+    expect(reportFileNameErrorText(undefined, '2024-03')).toBe(
+      'The selected file must include ‘2024-03’'
     )
   })
 })

@@ -203,8 +203,12 @@ function fileNameOf(fileStates) {
  * ones the downstream submissions table is built from: who (userId), for
  * which lab (organisationId), which process (BR/AHR), for which month, and
  * which file. `form` is the journey slug and predates `processName`.
- * `entries` carries the entries of a web-form report and is empty for an
- * uploaded one, so the record has the same shape for every journey.
+ *
+ * A field that does not apply to the journey is left out rather than written
+ * blank, the way the diagnostic tests record carries only the fields that
+ * apply (see src/server/routes/diagnostic-tests/controller.js): an uploaded
+ * report has a fileName and no entries, a web-form report has entries and no
+ * file.
  */
 function buildSubmission({
   referenceNumber,
@@ -215,6 +219,8 @@ function buildSubmission({
   fileStates,
   state
 }) {
+  const fileName = fileNameOf(fileStates)
+
   return {
     referenceNumber,
     form: formMetadata?.slug ?? null,
@@ -222,10 +228,10 @@ function buildSubmission({
     userId: user?.id ?? null,
     organisationId: user?.organisationId ?? null,
     submittedAt: new Date().toISOString(),
-    fileName: fileNameOf(fileStates),
+    ...(fileName ? { fileName } : {}),
     reportMonthYear: reportMonthYearOf(answers, state),
     answers,
-    entries
+    ...(entries.length ? { entries } : {})
   }
 }
 
@@ -295,9 +301,11 @@ export const outputService = {
         userId: submission.userId,
         organisationId: submission.organisationId,
         reportMonthYear: submission.reportMonthYear,
-        fileName: submission.fileName,
+        // Logged even when left out of the record, so every submission logs
+        // the same fields
+        fileName: submission.fileName ?? null,
         answers: submission.answers,
-        entries: submission.entries.length
+        entries: submission.entries?.length ?? 0
       },
       'Form submission received'
     )
