@@ -10,10 +10,21 @@
       Your account is not assigned to <strong>{{ reportType }}</strong>
       submissions.
     </p>
-    <p class="govuk-body">
-      Ask your APHA administrator to request access to this report type, or
-      <a href="/submission-welcome" class="govuk-link">go back to the report types you can submit</a>.
-    </p>
+    {# Laboratory users get their report types from their own lab's account
+       administrator in Your Defra account; internal users from APHA. #}
+    {% if signedInUser.provider == "defraId" %}
+      <p class="govuk-body">
+        Ask your laboratory's account administrator to give you access to this report type in
+        {% if accountManagementUrl %}<a href="{{ accountManagementUrl }}" class="govuk-link">Your Defra account</a>{% else %}Your Defra account{% endif %}.
+        If you are the administrator, you can do this yourself. Or
+        <a href="/submission-welcome" class="govuk-link">go back to the report types you can submit</a>.
+      </p>
+    {% else %}
+      <p class="govuk-body">
+        Ask your APHA administrator to request access to this report type, or
+        <a href="/submission-welcome" class="govuk-link">go back to the report types you can submit</a>.
+      </p>
+    {% endif %}
   {% else %}
     {% if account %}
       <p class="govuk-body">

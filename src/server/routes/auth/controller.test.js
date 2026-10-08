@@ -1,9 +1,25 @@
 import { vi } from 'vitest'
 
-import { config } from '#/config/config.js'
-import { createServer } from '#/server/server.js'
-import { statusCodes } from '#/server/common/constants/status-codes.js'
-import { buildEndSessionUrl } from './controller.js'
+// The Customer Identity provider is exercised for real in
+// local-defra-id.integration.test.js; here its entry points are controlled
+// so the routes around them can be tested without a provider.
+const defraIdMocks = vi.hoisted(() => ({
+  isDefraIdEnabled: vi.fn(() => false),
+  startDefraIdLogin: vi.fn(),
+  completeDefraIdLogin: vi.fn(),
+  getDefraIdEndSessionEndpoint: vi.fn()
+}))
+
+vi.mock('#/server/auth/defra-id.js', async (importOriginal) => ({
+  ...(await importOriginal()),
+  ...defraIdMocks
+}))
+
+const { config } = await import('#/config/config.js')
+const { createServer } = await import('#/server/server.js')
+const { statusCodes } =
+  await import('#/server/common/constants/status-codes.js')
+const { buildEndSessionUrl } = await import('./controller.js')
 
 function getCookieValue(response, name) {
   const setCookieHeaders = [response.headers['set-cookie']].flat()
@@ -122,7 +138,7 @@ describe('auth routes', () => {
       )
       expect(result).toEqual(expect.stringContaining('Defra Single Sign-on'))
       expect(result).toEqual(
-        expect.stringContaining('Government Gateway or GOV.UK One Login')
+        expect.stringContaining('GOV.UK One Login or Government Gateway')
       )
     })
 
@@ -195,6 +211,219 @@ describe('auth routes', () => {
       })
 
       expect(headers.location).toBe('/sign-in-entra')
+    })
+  })
+
+  describe('Defra Customer Identity routes', () => {
+    const defraIdClaims = {
+      sub: 'b2c-subject',
+      contactId: 'contact-id',
+      firstName: 'Susan',
+      lastName: 'Example',
+      email: 'susan@lab.example',
+      amr: 'one',
+      currentRelationshipId: 'rel-1',
+      relationships: ['rel-1:org-1:Anytown Veterinary Laboratory:0:Employee:0'],
+      roles: ['rel-1:BR:3']
+    }
+
+    function mockDefraIdCallback(claims = {}) {
+      defraIdMocks.completeDefraIdLogin.mockResolvedValue({
+        accessToken,
+        refreshToken: 'refresh-token',
+        idToken: 'id-token',
+        claims: { ...defraIdClaims, ...claims }
+      })
+    }
+
+    async function signInWithDefraId(claims) {
+      mockDefraIdCallback(claims)
+
+      const response = await server.inject(
+        '/signin-defra-id?code=code&state=state'
+      )
+
+      return { response, cookie: getCookiePair(response, 'userSession') }
+    }
+
+    beforeEach(() => {
+      defraIdMocks.isDefraIdEnabled.mockReturnValue(true)
+      defraIdMocks.startDefraIdLogin.mockImplementation(async (h) =>
+        h.redirect('https://customer-identity.example/authorize')
+      )
+      config.set(
+        'auth.defraId.accountManagementUrl',
+        'https://your-account.example/management'
+      )
+    })
+
+    afterEach(() => {
+      defraIdMocks.isDefraIdEnabled.mockReturnValue(false)
+      defraIdMocks.startDefraIdLogin.mockReset()
+      defraIdMocks.completeDefraIdLogin.mockReset()
+      defraIdMocks.getDefraIdEndSessionEndpoint.mockReset()
+      config.set('auth.defraId.accountManagementUrl', '')
+    })
+
+    test('offers the external option as available', async () => {
+      const { result } = await server.inject('/sign-in-choose')
+
+      expect(result).toContain('For laboratory users')
+      expect(result).not.toContain('not available yet')
+    })
+
+    test('starts the Customer Identity login flow', async () => {
+      const response = await server.inject('/sign-in-external')
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe(
+        'https://customer-identity.example/authorize'
+      )
+      expect(getCookieHeader(response, 'signInReturnTo')).toBeUndefined()
+    })
+
+    test('remembers the requested page across the round trip', async () => {
+      const response = await server.inject(
+        '/sign-in-external?redirect=%2Fbat-rabies'
+      )
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(getCookieHeader(response, 'signInReturnTo')).toBeDefined()
+    })
+
+    test('returns to the chooser when Customer Identity cannot be reached', async () => {
+      defraIdMocks.startDefraIdLogin.mockRejectedValue(
+        new Error('discovery failed')
+      )
+
+      const response = await server.inject(
+        '/sign-in-external?redirect=%2Fbat-rabies'
+      )
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe(
+        '/sign-in-choose?redirect=%2Fbat-rabies'
+      )
+    })
+
+    test('creates a session whose lab and journeys come from the token', async () => {
+      const { response, cookie } = await signInWithDefraId()
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe('/submission-welcome')
+      expect(cookie).toBeDefined()
+
+      const welcome = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(welcome.statusCode).toBe(statusCodes.ok)
+      expect(welcome.result).toContain('value="bat-rabies"')
+      expect(welcome.result).not.toContain('value="animal-health-regulations"')
+      expect(welcome.result).toContain('Anytown Veterinary Laboratory')
+      expect(welcome.result).toContain('Manage your Defra account')
+    })
+
+    test('accepts a form_post callback without a CSRF crumb', async () => {
+      mockDefraIdCallback()
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/signin-defra-id',
+        payload: { code: 'code', state: 'state' }
+      })
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe('/submission-welcome')
+    })
+
+    test('returns to the chooser after a failed callback', async () => {
+      defraIdMocks.completeDefraIdLogin.mockRejectedValue(
+        new Error('state mismatch')
+      )
+
+      const response = await server.inject(
+        '/signin-defra-id?code=code&state=state'
+      )
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe('/sign-in-choose')
+      expect(getCookiePair(response, 'userSession')).toBeUndefined()
+    })
+
+    test('tells a user with only the placeholder role to ask their lab administrator', async () => {
+      const { cookie } = await signInWithDefraId({
+        roles: ['rel-1:Default:3']
+      })
+
+      const welcome = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+
+      expect(welcome.statusCode).toBe(statusCodes.ok)
+      expect(welcome.result).toContain("laboratory's account administrator")
+      expect(welcome.result).toContain(
+        'href="https://your-account.example/management"'
+      )
+      expect(welcome.result).not.toContain('APHA administrator')
+      expect(welcome.result).not.toContain('value="bat-rabies"')
+    })
+
+    test('names the lab administrator on the no access page for a report type', async () => {
+      const { response, cookie } = await signInWithDefraId()
+      const cookies = [cookie, getCookiePair(response, 'session')].join('; ')
+
+      const journeyResponse = await server.inject({
+        url: '/animal-health-regulations/report-date',
+        headers: { cookie: cookies }
+      })
+      const noAccess = await server.inject({
+        url: '/no-access',
+        headers: {
+          cookie: [
+            cookie,
+            getCookiePair(journeyResponse, 'session') ??
+              getCookiePair(response, 'session')
+          ].join('; ')
+        }
+      })
+
+      expect(journeyResponse.headers.location).toBe('/no-access')
+      expect(noAccess.statusCode).toBe(statusCodes.forbidden)
+      expect(noAccess.result).toContain('Animal Health Regulations report')
+      expect(noAccess.result).toContain("laboratory's account administrator")
+      expect(noAccess.result).not.toContain('APHA administrator')
+    })
+
+    test('signs out at Customer Identity rather than Entra', async () => {
+      const { cookie } = await signInWithDefraId()
+      const pageResponse = await server.inject({
+        url: '/submission-welcome',
+        headers: { cookie }
+      })
+      const crumb = getCookieValue(pageResponse, 'crumb')
+      defraIdMocks.getDefraIdEndSessionEndpoint.mockResolvedValue(
+        'https://customer-identity.example/signout'
+      )
+
+      const response = await server.inject({
+        method: 'POST',
+        url: '/sign-out',
+        headers: { cookie: `${cookie}; crumb=${crumb}` },
+        payload: { crumb }
+      })
+      const location = new URL(response.headers.location)
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(location.origin + location.pathname).toBe(
+        'https://customer-identity.example/signout'
+      )
+      expect(location.searchParams.get('id_token_hint')).toBe('id-token')
+      expect(location.searchParams.get('post_logout_redirect_uri')).toBe(
+        'http://localhost:3000/signed-out'
+      )
     })
   })
 

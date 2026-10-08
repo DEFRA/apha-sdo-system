@@ -4,8 +4,63 @@ import {
   assertAllowedEntraGroups,
   formatPersonName,
   getAllowedGroupIds,
+  getDefraIdUserProfile,
   getUserProfile
 } from './authorization.js'
+
+describe('getDefraIdUserProfile', () => {
+  const claims = {
+    sub: 'b2c-subject',
+    contactId: 'contact-id',
+    firstName: 'Susan',
+    lastName: 'Example',
+    email: 'susan@lab.example',
+    uniqueReference: 'AAA-0001-BB-12345',
+    amr: 'one',
+    currentRelationshipId: 'rel-1',
+    relationships: ['rel-1:org-1:Anytown Veterinary Laboratory:0:Employee:0'],
+    roles: ['rel-1:BR:3']
+  }
+
+  test('builds the session user from Customer Identity claims', () => {
+    expect(getDefraIdUserProfile(claims)).toEqual({
+      provider: 'defraId',
+      id: 'contact-id',
+      name: 'Susan Example',
+      email: 'susan@lab.example',
+      uniqueReference: 'AAA-0001-BB-12345',
+      amr: 'one',
+      roles: ['rel-1:BR:3'],
+      organisationId: 'org-1',
+      organisationName: 'Anytown Veterinary Laboratory',
+      journeys: ['BR']
+    })
+  })
+
+  test('falls back to the subject and safe defaults', () => {
+    expect(getDefraIdUserProfile({ sub: 'b2c-subject' })).toEqual({
+      provider: 'defraId',
+      id: 'b2c-subject',
+      name: '',
+      email: '',
+      uniqueReference: null,
+      amr: null,
+      roles: [],
+      organisationId: null,
+      organisationName: null,
+      journeys: []
+    })
+  })
+
+  test('maps roles with the given role names', () => {
+    const profile = getDefraIdUserProfile(
+      { ...claims, roles: ['rel-1:Rabies submitter:3'] },
+      { roleNames: { BR: 'Rabies submitter' } }
+    )
+
+    expect(profile.journeys).toEqual(['BR'])
+  })
+})
 
 describe('getAllowedGroupIds', () => {
   test('uses groups only when group authorization is enabled', () => {
@@ -110,6 +165,7 @@ describe('getUserProfile', () => {
         roles: ['Lab.TestLab1.BR']
       })
     ).toEqual({
+      provider: 'entraId',
       id: 'user-id',
       name: 'A Person',
       email: 'person@example.gov.uk',
@@ -124,6 +180,7 @@ describe('getUserProfile', () => {
     expect(
       getUserProfile({ sub: 'subject', email: 'email@example.gov.uk' })
     ).toEqual({
+      provider: 'entraId',
       id: 'subject',
       name: '',
       email: 'email@example.gov.uk',

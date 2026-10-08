@@ -3,10 +3,23 @@ export const AUTH_PATHS = {
   SIGN_IN_EXTERNAL: '/sign-in-external',
   SIGN_IN_ENTRA: '/sign-in-entra',
   ENTRA_CALLBACK: '/signin-entra-id',
+  // Registered with Defra Customer Identity as the redirect URL; must match
+  // exactly, so changing it means changing the app registration too.
+  DEFRA_ID_CALLBACK: '/signin-defra-id',
   SIGN_OUT: '/sign-out',
   FRONT_CHANNEL_LOGOUT: '/logout',
   SIGNED_OUT: '/signed-out',
   NO_ACCESS: '/no-access'
+}
+
+/**
+ * Which identity provider a session came from. Internal (Defra/APHA) users
+ * sign in with Entra ID; external laboratory users with Defra Customer
+ * Identity, which offers GOV.UK One Login or Government Gateway.
+ */
+export const AUTH_PROVIDERS = {
+  ENTRA_ID: 'entraId',
+  DEFRA_ID: 'defraId'
 }
 
 /**
@@ -17,6 +30,7 @@ export const POST_SIGN_IN_PATH = '/submission-welcome'
 
 export const USER_SESSION_COOKIE_NAME = 'userSession'
 export const OIDC_STATE_COOKIE_NAME = 'entraOidc'
+export const DEFRA_ID_STATE_COOKIE_NAME = 'defraIdOidc'
 export const USER_SESSION_CACHE_SEGMENT = 'userSession'
 
 /**

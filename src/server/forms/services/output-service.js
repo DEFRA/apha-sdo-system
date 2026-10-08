@@ -227,6 +227,11 @@ function buildSubmission({
     processName: reportTypesBySlug.get(formMetadata?.slug)?.code ?? null,
     userId: user?.id ?? null,
     organisationId: user?.organisationId ?? null,
+    // Customer Identity organisation IDs are opaque GUIDs, so the lab's name
+    // travels with them; Entra lab codes are readable on their own
+    ...(user?.organisationName
+      ? { organisationName: user.organisationName }
+      : {}),
     submittedAt: new Date().toISOString(),
     ...(fileName ? { fileName } : {}),
     reportMonthYear: reportMonthYearOf(answers, state),

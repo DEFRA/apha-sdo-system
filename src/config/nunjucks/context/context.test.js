@@ -2,6 +2,8 @@ import { vi } from 'vitest'
 
 const mockReadFileSync = vi.fn()
 const mockLoggerError = vi.fn()
+// Config values a test wants to differ from the defaults
+const mockConfigOverrides = new Map()
 
 vi.mock('node:fs', async () => {
   const nodeFs = await import('node:fs')
@@ -20,6 +22,7 @@ vi.mock(import('#/config/config.js'), async (importOriginal) => {
     config: {
       get(key) {
         if (key === 'isProduction') return true
+        if (mockConfigOverrides.has(key)) return mockConfigOverrides.get(key)
         return originalModule.config.get(key)
       }
     }
@@ -30,6 +33,7 @@ describe('context and cache', () => {
   beforeEach(() => {
     mockReadFileSync.mockReset()
     mockLoggerError.mockReset()
+    mockConfigOverrides.clear()
     vi.resetModules()
   })
 
@@ -63,6 +67,7 @@ describe('context and cache', () => {
           serviceName: 'apha-sdo-system',
           serviceUrl: '/',
           signedInUser: null,
+          accountManagementUrl: null,
           identityRows: []
         })
       })
@@ -78,6 +83,33 @@ describe('context and cache', () => {
 
         expect(authenticatedContext.isAuthenticated).toBe(true)
         expect(authenticatedContext.signedInUser).toBe(user)
+        // An Entra user has no Defra account to manage
+        expect(authenticatedContext.accountManagementUrl).toBeNull()
+      })
+
+      test('Should link Defra Customer Identity users to Your Defra account', () => {
+        mockConfigOverrides.set(
+          'auth.defraId.accountManagementUrl',
+          'https://your-account.example/management'
+        )
+        const defraIdUser = { id: 'user-id', provider: 'defraId' }
+
+        expect(contextImport.accountManagementUrlFor(defraIdUser)).toBe(
+          'https://your-account.example/management'
+        )
+        expect(
+          contextImport.context({
+            auth: { isAuthenticated: true, credentials: { user: defraIdUser } }
+          }).accountManagementUrl
+        ).toBe('https://your-account.example/management')
+      })
+
+      test('Should not link to Your Defra account when no URL is configured', () => {
+        mockConfigOverrides.set('auth.defraId.accountManagementUrl', '')
+
+        expect(
+          contextImport.accountManagementUrlFor({ provider: 'defraId' })
+        ).toBeNull()
       })
 
       describe('With valid asset path', () => {
@@ -156,6 +188,7 @@ describe('context and cache', () => {
           serviceName: 'apha-sdo-system',
           serviceUrl: '/',
           signedInUser: null,
+          accountManagementUrl: null,
           identityRows: []
         })
       })

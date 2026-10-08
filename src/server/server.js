@@ -26,6 +26,7 @@ import { ReportFileUploadPageController } from './forms/controllers/report-file-
 import { ReportEntryPageController } from './forms/controllers/report-entry-page-controller.js'
 import { ReportEntriesPageController } from './forms/controllers/report-entries-page-controller.js'
 import { openId } from './plugins/auth/open-id.js'
+import { defraIdOpenId } from './plugins/auth/defra-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
 import { restrictReportJourneys } from './auth/report-access.js'
 import { stripUnsafeReturnUrl } from './common/helpers/return-url.js'
@@ -76,6 +77,7 @@ export async function createServer() {
     pulse,
     sessionCache,
     openId,
+    defraIdOpenId,
     sessionCookie,
     nunjucksConfig,
     Scooter,

@@ -1,10 +1,45 @@
 import { config } from '#/config/config.js'
 
+import { AUTH_PROVIDERS } from './auth-constants.js'
 import {
   assertAllowedEntraGroups,
   getAllowedGroupIds,
+  getDefraIdUserProfile,
   getUserProfile
 } from './authorization.js'
+import { ensureValidDefraIdToken } from './defra-id.js'
+
+/**
+ * What differs between the identity providers once a session exists: how
+ * its token set is refreshed, whether the claims still entitle the user to
+ * the service, and how they become the session user.
+ */
+const sessionProviders = {
+  [AUTH_PROVIDERS.ENTRA_ID]: {
+    ensureValidToken: (request, token) => request.ensureValidToken(token),
+    assertAuthorised: (claims) =>
+      assertAllowedEntraGroups(
+        claims,
+        getAllowedGroupIds(config.get('auth.entraId'))
+      ),
+    getUserProfile: (claims) => getUserProfile(claims)
+  },
+  [AUTH_PROVIDERS.DEFRA_ID]: {
+    ensureValidToken: (request, token) =>
+      ensureValidDefraIdToken(token, { logger: request.logger }),
+    // Entitlement is the roles in the token, read into the profile
+    assertAuthorised: () => {},
+    getUserProfile: (claims) => getDefraIdUserProfile(claims)
+  }
+}
+
+/**
+ * Sessions written before the provider was recorded are Entra sessions.
+ * @param {{ provider?: string }} session
+ */
+export function getSessionProvider(session) {
+  return session?.provider ?? AUTH_PROVIDERS.ENTRA_ID
+}
 
 function getUserSessionCache(server) {
   const cache = server.app.userSessionCache
@@ -96,12 +131,15 @@ function getAccessTokenLifetimeRemaining(accessToken) {
 /**
  * The OIDC client refreshes shortly before expiry, so a refresh can fail while
  * the current token is still usable. Ending the session at that point would
- * sign every user out over a brief Entra outage and lose any part-written
+ * sign every user out over a brief provider outage and lose any part-written
  * report, so the current token is kept and the next request retries.
  */
-async function refreshTokenWhenPossible(request, session) {
+async function refreshTokenWhenPossible(request, session, provider) {
   try {
-    return await request.ensureValidToken(session.token)
+    return await sessionProviders[provider].ensureValidToken(
+      request,
+      session.token
+    )
   } catch (error) {
     const remaining = getAccessTokenLifetimeRemaining(
       session.token?.accessToken
@@ -112,8 +150,8 @@ async function refreshTokenWhenPossible(request, session) {
     }
 
     request.logger?.warn?.(
-      { err: error },
-      'Keeping Entra session while token refresh is failing'
+      { err: error, provider },
+      'Keeping user session while token refresh is failing'
     )
 
     return { token: session.token, refreshed: false }
@@ -130,22 +168,28 @@ export async function validateUserSession(request, cookie) {
       return { isValid: false }
     }
 
+    const provider = getSessionProvider(session)
+    const sessionProvider = sessionProviders[provider]
+
+    if (!sessionProvider) {
+      throw new Error(`Unknown session provider: ${provider}`)
+    }
+
     const { token, refreshed } = await refreshTokenWhenPossible(
       request,
-      session
+      session,
+      provider
     )
     const claims = token.claims ?? session.claims
 
-    assertAllowedEntraGroups(
-      claims,
-      getAllowedGroupIds(config.get('auth.entraId'))
-    )
+    sessionProvider.assertAuthorised(claims)
 
     const updatedSession = {
       ...session,
+      provider,
       token,
       claims,
-      user: getUserProfile(claims)
+      user: sessionProvider.getUserProfile(claims)
     }
 
     if (refreshed) {
@@ -161,7 +205,7 @@ export async function validateUserSession(request, cookie) {
       }
     }
   } catch (error) {
-    request.logger?.warn?.({ err: error }, 'Invalidating Entra user session')
+    request.logger?.warn?.({ err: error }, 'Invalidating user session')
     await dropUserSession(request.server, sessionId)
     return { isValid: false }
   }

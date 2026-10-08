@@ -105,7 +105,7 @@ export function validateDiagnosticTests(selections) {
  * fields that apply: no report month and no file. The tests are one row
  * each, in catalogue order, so they can be written out as lines of a
  * spreadsheet downstream.
- * @param {{ id?: string, organisationId?: string }} [user] - the session user
+ * @param {{ id?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {{ referenceNumber?: string, now?: Date }} [options] - fixed for tests
  */
@@ -120,6 +120,11 @@ export function buildDiagnosticTestsSubmission(
     processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
     userId: user?.id ?? null,
     organisationId: user?.organisationId ?? null,
+    // Customer Identity organisation IDs are opaque GUIDs, so the lab's name
+    // travels with them; Entra lab codes are readable on their own
+    ...(user?.organisationName
+      ? { organisationName: user.organisationName }
+      : {}),
     submittedAt: now.toISOString(),
     diagnosticTestsData: selections.map(({ test, accreditation }) => ({
       pathogen: test.pathogen.name,
