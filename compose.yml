@@ -68,6 +68,26 @@ services:
     networks:
       - cdp-tenant
 
+  # Defra Customer Identity stand-in for local external (laboratory) sign-in.
+  # `npm run defra-id:register` seeds test identities; the stub's sign-in
+  # page then lists them to pick from.
+  defra-id-stub:
+    image: defradigital/cdp-defra-id-stub:${CDP_DEFRA_ID_STUB_VERSION:-latest}
+    ports:
+      - '3200:3200'
+    environment:
+      PORT: 3200
+      NODE_ENV: development
+      # in-memory registrations; no DynamoDB emulator needed locally
+      REGISTRATIONS_STORE_ENGINE: memory
+      # must match AUTH_DEFRA_ID_CLIENT_ID / AUTH_DEFRA_ID_CLIENT_SECRET in .env
+      OIDC_CLIENT_ID: local-defra-id-client
+      OIDC_CLIENT_SECRET: test_value
+    # No healthcheck: the image has no shell tooling to probe with, and
+    # scripts/defra-id-register.js waits for the stub to answer instead.
+    networks:
+      - cdp-tenant
+
   mongodb:
     image: mongo:7.0.28
     networks:

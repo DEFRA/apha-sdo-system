@@ -11,10 +11,11 @@
   "scripts": {
     "build:frontend": "vite build",
     "auth:stub": "node scripts/oidc-stub.js",
+    "defra-id:register": "node scripts/defra-id-register.js",
     "dev": "cross-env AWS_EMF_ENVIRONMENT=Local npm run server:watch",
     "dev:debug": "cross-env AWS_EMF_ENVIRONMENT=Local npm run server:debug",
     "docker:dev": "npm run dev",
-    "docker:up": "docker compose up --detach --wait --quiet-pull proxy localstack redis cdp-uploader azurite oidc-stub && docker compose ps",
+    "docker:up": "docker compose up --detach --wait --quiet-pull proxy localstack redis cdp-uploader azurite oidc-stub defra-id-stub && npm run defra-id:register && docker compose ps",
     "docker:logs": "docker compose logs --follow",
     "docker:down": "docker compose down",
     "storage:check": "node --env-file-if-exists=.env scripts/storage.js",
@@ -77,6 +78,7 @@
     "joi": "17.13.7",
     "lodash": "4.18.1",
     "nunjucks": "3.2.4",
+    "openid-client": "6.8.2",
     "pino": "10.3.1"
   },
   "devDependencies": {

@@ -22,9 +22,22 @@
       {% endif %}
 
       {% if not hasReportTypes %}
-        {{ govukInsetText({
-          text: "Your account is not assigned to any report type. Ask your APHA administrator to request access."
-        }) }}
+        {# Laboratory users get their report types from their own lab's account
+           administrator in Your Defra account; internal users from APHA. #}
+        {% if signedInUser.provider == "defraId" %}
+          {% set noReportTypesHtml %}
+            Your account is not set up for any report type yet. Ask your laboratory's account administrator to give you access to Bat rabies or Animal Health Regulations reporting in
+            {% if accountManagementUrl %}<a href="{{ accountManagementUrl }}" class="govuk-link">Your Defra account</a>{% else %}Your Defra account{% endif %}.
+            If you are the administrator, you can do this yourself.
+          {% endset %}
+          {{ govukInsetText({
+            html: noReportTypesHtml
+          }) }}
+        {% else %}
+          {{ govukInsetText({
+            text: "Your account is not assigned to any report type. Ask your APHA administrator to request access."
+          }) }}
+        {% endif %}
       {% endif %}
 
       <form method="post" action="/submission-welcome" novalidate>

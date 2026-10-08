@@ -17,6 +17,9 @@ export default defineConfig({
       AUTH_ENTRA_ID_CLIENT_ID: 'local-stub-client',
       AUTH_ENTRA_ID_AUTHORIZATION_MODE: 'groups',
       AUTH_ENTRA_ID_ALLOWED_GROUP_IDS: 'local-dev-group',
+      // Off unless a test turns it on through config: the server's import
+      // graph loads .env, and a developer's .env enables the local stub
+      AUTH_DEFRA_ID_ENABLED: 'false',
       SESSION_COOKIE_SECURE: 'false'
     },
     reporters: ['default', 'junit'],

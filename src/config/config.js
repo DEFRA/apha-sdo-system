@@ -285,6 +285,86 @@ export const config = convict({
         default: 300000,
         env: 'AUTH_ENTRA_ID_EARLY_REFRESH_MS'
       }
+    },
+    // External (laboratory) users sign in with Defra Customer Identity, which
+    // offers GOV.UK One Login or Government Gateway according to the service's
+    // configuration there. Locally the cdp-defra-id-stub stands in for it.
+    defraId: {
+      enabled: {
+        doc: 'Offer Defra Customer Identity sign-in to external users',
+        format: Boolean,
+        default: false,
+        env: 'AUTH_DEFRA_ID_ENABLED'
+      },
+      discoveryUrl: {
+        doc: 'Defra Customer Identity OpenID Connect metadata URL for the environment and policy',
+        format: String,
+        default: '',
+        env: 'AUTH_DEFRA_ID_OIDC_CONFIGURATION_URL'
+      },
+      clientId: {
+        doc: 'Application (client) ID issued by Defra Customer Identity',
+        format: String,
+        default: '',
+        env: 'AUTH_DEFRA_ID_CLIENT_ID'
+      },
+      clientSecret: {
+        doc: 'Client secret issued by Defra Customer Identity',
+        format: String,
+        default: '',
+        env: 'AUTH_DEFRA_ID_CLIENT_SECRET',
+        sensitive: true
+      },
+      serviceId: {
+        doc: 'Service ID issued by Defra Customer Identity, sent on every authorize request',
+        format: String,
+        default: '',
+        env: 'AUTH_DEFRA_ID_SERVICE_ID'
+      },
+      scopes: {
+        doc: 'OIDC scopes, separated by spaces or commas (CDP configuration fields take no spaces). Against Defra Customer Identity the client ID is added as a scope so an access token is issued',
+        format: String,
+        default: 'openid offline_access',
+        env: 'AUTH_DEFRA_ID_SCOPES'
+      },
+      accountManagementUrl: {
+        doc: 'Your Defra account (Account Management) URL for the environment, linked from the service',
+        format: String,
+        default: '',
+        env: 'AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL'
+      },
+      // The service roles GIO configured for this service are "Default" (the
+      // placeholder everyone starts with), "BR" and "AHR"; a user may hold
+      // both reporting roles.
+      roleNames: {
+        BR: {
+          doc: 'Defra Customer Identity service role granting the Bat rabies journey',
+          format: String,
+          default: 'BR',
+          env: 'AUTH_DEFRA_ID_ROLE_BR'
+        },
+        AHR: {
+          doc: 'Defra Customer Identity service role granting the Animal Health Regulations journey',
+          format: String,
+          default: 'AHR',
+          env: 'AUTH_DEFRA_ID_ROLE_AHR'
+        }
+      },
+      redirectHosts: {
+        doc: 'Further origins the sign-in redirect chain may pass through, allowed as CSP form-action',
+        format: Array,
+        default: [
+          'https://*.account.gov.uk',
+          'https://*.access.service.gov.uk'
+        ],
+        env: 'AUTH_DEFRA_ID_REDIRECT_HOSTS'
+      },
+      earlyRefreshMs: {
+        doc: 'Refresh access tokens this many milliseconds before expiry',
+        format: 'nat',
+        default: 300000,
+        env: 'AUTH_DEFRA_ID_EARLY_REFRESH_MS'
+      }
     }
   },
   azure: {

@@ -27,7 +27,8 @@ npm run dev
 Open <http://localhost:3000>.
 
 `docker:up` starts the local dependencies, including LocalStack, Redis,
-Azurite, cdp-uploader and the OIDC stub.
+Azurite, cdp-uploader, the OIDC stub (Entra) and the Defra ID stub (Customer
+Identity), and seeds the Defra ID stub's test identities.
 
 ## Authentication
 
@@ -36,8 +37,14 @@ authorization-code flow with PKCE.
 
 - Local development uses the OIDC stub on `http://localhost:5556`.
 - DEV uses the real `apha-sdo-system-dev` Entra registration.
-- External authentication (Defra Customer Identity) is being built on a
-  separate branch and is not on `main` yet.
+
+External laboratory users sign in with Defra Customer Identity (Defra ID),
+which offers them GOV.UK One Login or Government Gateway and returns their
+laboratory and service roles; see [External sign-in](#external-sign-in-defra-customer-identity).
+
+- Local development uses the `cdp-defra-id-stub` container on
+  `http://localhost:3200`.
+- DEV uses the Customer Identity **CPDEV (UAT)** environment.
 
 Authentication is required for the form journeys. Health checks, static
 assets, the uploader callback, the home page and authentication routes remain
@@ -240,6 +247,174 @@ in [Report access](#report-access-entra-app-roles). Neither needs
 remains available as an additional allow-list if ever needed. DEV can move
 from a client secret to web identity once its federated credential is
 available.
+
+## External sign-in (Defra Customer Identity)
+
+Laboratory users choose **GOV.UK One Login or Government Gateway** on
+`/sign-in-choose`. That starts one integration: OpenID Connect with Defra
+Customer Identity (Defra ID). Customer Identity itself offers the user One
+Login or Government Gateway according to the authentication methods GIO
+configured for this service (`one, scp`), handles registration of the
+laboratory as an organisation and the laboratory admin's team management, and
+returns a signed ID token naming the organisation the user picked and their
+roles in this service. Nothing in this service is specific to either sign-in
+method; the token's `amr` claim (`one` or `scp`) is logged at sign-in.
+
+The flow lives in `src/server/auth/defra-id.js`. `@defra/hapi-auth-oidc`
+drives the Entra sign-in and can only be registered once, so the second
+provider is built from the pieces that package exports: discovery
+(`createOidcConfig`, with `client_secret_post`), the callback (`postLogin`,
+which validates state, PKCE and the ID token signature) and refresh
+(`ensureValidToken`). The authorize request is written here because Customer
+Identity needs its own `serviceId` parameter. The code is bound to the
+browser session with PKCE (S256) and `state`; no nonce is sent. A nonce
+protects the implicit and hybrid flows, the Customer Identity guide lists it
+as recommended rather than required for the code flow, and the local stub
+drops any nonce it is given (which would fail ID token validation), so
+leaving it out keeps the stub and Customer Identity on the same path. On CDP
+the response mode is `form_post` and the `defraIdOidc` state cookie
+`SameSite=None`, exactly as for Entra; locally the response comes back in the
+query string (the protocol default, sent without a `response_mode` parameter,
+which the stub rejects) with a `Lax` cookie.
+
+### Report access (Customer Identity service roles)
+
+Customer Identity packs the user's organisations and roles into
+colon-delimited claims:
+
+```text
+relationships: <relationshipId>:<organisationId>:<organisationName>:<orgLoa>:<Employee|Agent|Citizen>:<relLoa>
+roles:         <relationshipId>:<roleName>:<status>
+```
+
+`currentRelationshipId` is the organisation the user picked when signing in.
+`getDefraIdReportAccess` in `src/server/auth/report-access.js` takes that
+relationship's `organisationId` and `organisationName` as the laboratory, and
+turns its roles with status `3` (Complete, approved) into journeys using the
+configured role names:
+
+| Variable                 | Default | Grants |
+| ------------------------ | ------- | ------ |
+| `AUTH_DEFRA_ID_ROLE_BR`  | `BR`    | `BR`   |
+| `AUTH_DEFRA_ID_ROLE_AHR` | `AHR`   | `AHR`  |
+
+These are the service roles GIO configured for the service: `Default`, `BR`
+and `AHR`. Names are compared trimmed and case-insensitively. Any other role,
+including the `Default` placeholder every laboratory's first admin receives
+through auto-enrolment, grants nothing: the user reaches
+`/submission-welcome` and is told to ask their laboratory's account
+administrator for access in Your Defra account, linked from
+`AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL`. A user holding both roles sees both
+journeys. Role changes made in Your Defra account reach the service at the
+next token refresh (the refreshed ID token carries the current roles) or sign
+in.
+
+The session user has the same shape as for Entra (`organisationId`,
+`journeys`), plus `provider: 'defraId'`, `organisationName`, `uniqueReference`
+and `amr`. `organisationName` is shown as the laboratory name and written to
+`submission.json`, because the Customer Identity organisation ID is a GUID.
+
+### Test external sign-in locally
+
+`npm run docker:up` starts the `defra-id-stub` container
+([cdp-defra-id-stub](https://github.com/DEFRA/cdp-defra-id-stub)) and runs
+`npm run defra-id:register`, which seeds three identities at **Local Test
+Laboratory**:
+
+| Email                      | Role      | Sees                      |
+| -------------------------- | --------- | ------------------------- |
+| `br.reporter@example.com`  | `BR`      | Bat rabies only           |
+| `ahr.reporter@example.com` | `AHR`     | Animal Health Regulations |
+| `default.only@example.com` | `Default` | The "ask your admin" note |
+
+The stub allows one role per relationship, so the both-roles case is covered
+by `src/server/auth/report-access.test.js` and the integration test. The
+`.env` values from `.env.example` point at the stub:
+
+```dotenv
+AUTH_DEFRA_ID_ENABLED=true
+AUTH_DEFRA_ID_OIDC_CONFIGURATION_URL=http://localhost:3200/cdp-defra-id-stub/.well-known/openid-configuration
+AUTH_DEFRA_ID_CLIENT_ID=local-defra-id-client
+AUTH_DEFRA_ID_CLIENT_SECRET=test_value
+AUTH_DEFRA_ID_SCOPES=openid offline_access
+AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL=http://localhost:3200/cdp-defra-id-stub
+```
+
+Start the app, select **GOV.UK One Login or Government Gateway**, pick an
+identity on the stub's page and confirm you land on `/submission-welcome`
+with the expected report types. Re-seed with `npm run defra-id:register` if
+the stub container is recreated. With the stub down, the app still starts
+(discovery failure is a warning off CDP) and the first sign-in retries.
+
+### DEV environment (Customer Identity CPDEV)
+
+GIO registered the DEV app with redirect URL
+`https://apha-sdo-system.dev.cdp-int.defra.cloud/signin-defra-id`
+(`AUTH_PATHS.DEFRA_ID_CALLBACK`); the path must not change without the app
+registration changing too. `localhost` is not registered, so the real CPDEV
+is tested from DEV, not from a developer machine.
+
+These six are ordinary **environment variables**, set alongside the existing
+`AUTH_ENTRA_ID_*` and `APP_BASE_URL` values for the environment (not in the
+Secrets screen):
+
+```dotenv
+AUTH_DEFRA_ID_ENABLED=true
+AUTH_DEFRA_ID_OIDC_CONFIGURATION_URL=https://your-account.cpdev.cui.defra.gov.uk/idphub/b2c/b2c_1a_cui_cpdev_signupsignin/.well-known/openid-configuration
+AUTH_DEFRA_ID_CLIENT_ID=88e687ba-ffb2-40a2-b74e-1c55d97be02f
+AUTH_DEFRA_ID_SERVICE_ID=74cdcbb8-0b66-f011-bec2-00224882d95b
+AUTH_DEFRA_ID_SCOPES=openid,offline_access,88e687ba-ffb2-40a2-b74e-1c55d97be02f
+AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL=https://your-account.cpdev.cui.defra.gov.uk/management
+```
+
+Scopes may be separated by commas or spaces; CDP configuration fields do not
+accept spaces, so the comma form is shown. The client ID is repeated in
+`AUTH_DEFRA_ID_SCOPES` because Customer Identity only issues an access token
+when it is asked for as a scope, and session refresh relies on one; start-up
+validation on CDP checks this, along with HTTPS, the service ID and that the
+stub is not in use.
+
+The client secret (expires 23/07/2027) is the only value that is a **CDP
+Secret**:
+
+```dotenv
+AUTH_DEFRA_ID_CLIENT_SECRET=<from GIO Customer Identity>
+```
+
+Do not put it in source control, `.env.example`, logs or tickets. Rotate it
+through GIO (`giocustomeridentity@defra.gov.uk`) before it expires.
+
+The content security policy's `form-action` must allow every origin the
+sign-in redirect chain passes through. The Customer Identity discovery,
+authorize (`*.b2clogin.com`) and sign-out origins are read from the discovery
+document at start-up; `AUTH_DEFRA_ID_REDIRECT_HOSTS` (default
+`https://*.account.gov.uk,https://*.access.service.gov.uk`) covers the One
+Login and Government Gateway hops.
+
+#### CPDEV smoke-test steps
+
+1. Open <https://apha-sdo-system.dev.cdp-int.defra.cloud> and select
+   **GOV.UK One Login or Government Gateway**.
+2. Create or use a GOV.UK One Login (or Government Gateway) account when
+   Customer Identity offers the choice, register yourself and a test
+   laboratory as the organisation, and complete auto-enrolment.
+3. Confirm you land on `/submission-welcome`. With only the `Default` role
+   you should see the "ask your laboratory's account administrator" note and
+   a **Manage your Defra account** link in the header.
+4. In Your Defra account, give yourself the `BR` role; sign out and in again
+   and confirm **Bat rabies report** is offered. Add `AHR` as well and
+   confirm both appear.
+5. Check the application logs for the sign-in line with `organisationId`,
+   `journeys` and `amr`. Cookies, authorization codes, secrets and tokens
+   must not be present.
+6. Sign out and confirm Customer Identity returns you to `/signed-out`.
+
+If sign-in fails, record the Customer Identity `correlationId` from the error
+page or token, the callback error and the application correlation ID.
+
+Later Customer Identity environments (PRE, PROD) use the same variables with
+their own metadata URL (`b2c_1a_cui_signupsignin` policy), client ID, service
+ID and Account Management URL, and their own registered redirect URL.
 
 ## Sessions and Redis
 

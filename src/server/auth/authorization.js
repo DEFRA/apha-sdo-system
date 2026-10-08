@@ -1,6 +1,8 @@
 import Boom from '@hapi/boom'
 
-import { getReportAccess } from './report-access.js'
+import { config } from '#/config/config.js'
+import { AUTH_PROVIDERS } from './auth-constants.js'
+import { getDefraIdReportAccess, getReportAccess } from './report-access.js'
 
 export function getAllowedGroupIds(settings) {
   return settings.authorizationMode === 'groups' ? settings.allowedGroupIds : []
@@ -91,18 +93,46 @@ export function formatPersonName(claims = {}) {
 /**
  * The session user built from Entra ID token claims. `organisationId` (the
  * lab) and `journeys` (report type codes) come from the app roles, see
- * report-access.js; Defra ID will fill the same two fields from its own
- * claims so the rest of the service stays provider-agnostic.
+ * report-access.js; the Defra ID profile below fills the same fields from
+ * its own claims so the rest of the service stays provider-agnostic.
  * @param {object} [claims] - ID token claims
  * @param {{ logger?: object }} [options] - pass the request logger at sign-in so role problems are reported once, not on every request
  */
 export function getUserProfile(claims = {}, options = {}) {
   return {
+    provider: AUTH_PROVIDERS.ENTRA_ID,
     id: claims.oid ?? claims.sub,
     name: formatPersonName(claims),
     email: claims.preferred_username ?? claims.email ?? claims.upn ?? '',
     groups: Array.isArray(claims.groups) ? claims.groups : [],
     roles: Array.isArray(claims.roles) ? claims.roles : [],
     ...getReportAccess(claims, options)
+  }
+}
+
+/**
+ * The session user built from Defra Customer Identity token claims. The
+ * person is `contactId` (their customer record) rather than the B2C subject,
+ * and the lab is the organisation they picked at sign-in, named by
+ * `organisationName` since the Customer Identity ID is an opaque GUID.
+ * `amr` records how they signed in: `one` for GOV.UK One Login, `scp` for
+ * Government Gateway.
+ * @param {object} [claims] - ID token claims
+ * @param {{ logger?: object, roleNames?: Record<string, string> }} [options] - the request logger at sign-in; role names default to configuration
+ */
+export function getDefraIdUserProfile(claims = {}, options = {}) {
+  const { roleNames = config.get('auth.defraId.roleNames'), logger } = options
+
+  return {
+    provider: AUTH_PROVIDERS.DEFRA_ID,
+    id: claims.contactId ?? claims.sub,
+    name: [claimText(claims.firstName), claimText(claims.lastName)]
+      .filter(Boolean)
+      .join(' '),
+    email: typeof claims.email === 'string' ? claims.email : '',
+    uniqueReference: claims.uniqueReference ?? null,
+    amr: claims.amr ?? null,
+    roles: Array.isArray(claims.roles) ? claims.roles : [],
+    ...getDefraIdReportAccess(claims, { roleNames, logger })
   }
 }

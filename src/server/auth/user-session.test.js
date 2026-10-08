@@ -1,12 +1,19 @@
 import { vi } from 'vitest'
 
-import {
+const mockEnsureValidDefraIdToken = vi.fn()
+
+vi.mock('./defra-id.js', () => ({
+  ensureValidDefraIdToken: (...args) => mockEnsureValidDefraIdToken(...args)
+}))
+
+const {
   dropUserSession,
+  getSessionProvider,
   getUserSession,
   getUserSessionIdByEntraSid,
   setUserSession,
   validateUserSession
-} from './user-session.js'
+} = await import('./user-session.js')
 
 function createCache(initialSession) {
   return {
@@ -57,6 +64,7 @@ const session = {
   },
   claims,
   user: {
+    provider: 'entraId',
     id: 'user-id',
     name: 'A Person',
     email: 'person@example.gov.uk',
@@ -289,5 +297,137 @@ describe('validateUserSession', () => {
       validateUserSession(request, { sessionId: 'session-id' })
     ).resolves.toEqual({ isValid: false })
     expect(cache.drop).toHaveBeenCalledWith('session-id')
+  })
+
+  test('drops a session from an unknown provider', async () => {
+    const cache = createCache({ ...session, provider: 'someone-else' })
+    const request = createRequest(cache)
+
+    await expect(
+      validateUserSession(request, { sessionId: 'session-id' })
+    ).resolves.toEqual({ isValid: false })
+    expect(cache.drop).toHaveBeenCalledWith('session-id')
+  })
+})
+
+describe('getSessionProvider', () => {
+  test('treats a session recorded before providers were as Entra', () => {
+    expect(getSessionProvider({})).toBe('entraId')
+    expect(getSessionProvider(null)).toBe('entraId')
+    expect(getSessionProvider({ provider: 'defraId' })).toBe('defraId')
+  })
+})
+
+describe('validateUserSession for Defra Customer Identity', () => {
+  const defraIdClaims = {
+    sub: 'b2c-subject',
+    contactId: 'contact-id',
+    firstName: 'Susan',
+    lastName: 'Example',
+    email: 'susan@lab.example',
+    amr: 'one',
+    currentRelationshipId: 'rel-1',
+    relationships: ['rel-1:org-1:Anytown Veterinary Laboratory:0:Employee:0'],
+    roles: ['rel-1:BR:3']
+  }
+  const defraIdSession = {
+    provider: 'defraId',
+    token: {
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+      claims: defraIdClaims
+    },
+    claims: defraIdClaims
+  }
+
+  beforeEach(() => {
+    mockEnsureValidDefraIdToken.mockReset()
+  })
+
+  test('refreshes through the Defra ID provider and rebuilds its profile', async () => {
+    const cache = createCache(defraIdSession)
+    const entraEnsureValidToken = vi.fn()
+    const request = createRequest(cache, entraEnsureValidToken)
+    mockEnsureValidDefraIdToken.mockResolvedValue({
+      token: defraIdSession.token,
+      refreshed: false
+    })
+
+    const result = await validateUserSession(request, {
+      sessionId: 'session-id'
+    })
+
+    expect(result.isValid).toBe(true)
+    expect(result.credentials.user).toMatchObject({
+      provider: 'defraId',
+      id: 'contact-id',
+      name: 'Susan Example',
+      organisationId: 'org-1',
+      organisationName: 'Anytown Veterinary Laboratory',
+      journeys: ['BR'],
+      amr: 'one'
+    })
+    expect(mockEnsureValidDefraIdToken).toHaveBeenCalledWith(
+      defraIdSession.token,
+      { logger: request.logger }
+    )
+    // Entra's refresh and group checks do not apply
+    expect(entraEnsureValidToken).not.toHaveBeenCalled()
+  })
+
+  test('picks up role changes carried by a refreshed ID token', async () => {
+    const cache = createCache(defraIdSession)
+    const request = createRequest(cache)
+    const refreshedToken = {
+      ...defraIdSession.token,
+      accessToken: 'new-access-token',
+      claims: {
+        ...defraIdClaims,
+        roles: ['rel-1:BR:3', 'rel-1:AHR:3']
+      }
+    }
+    mockEnsureValidDefraIdToken.mockResolvedValue({
+      token: refreshedToken,
+      refreshed: true
+    })
+
+    const result = await validateUserSession(request, {
+      sessionId: 'session-id'
+    })
+
+    expect(result.credentials.user.journeys).toEqual(['BR', 'AHR'])
+    expect(cache.set).toHaveBeenCalledWith(
+      'session-id',
+      expect.objectContaining({
+        provider: 'defraId',
+        token: refreshedToken,
+        user: expect.objectContaining({ journeys: ['BR', 'AHR'] })
+      })
+    )
+  })
+
+  test('keeps the session while a refresh fails and the token is still valid', async () => {
+    const cache = createCache({
+      ...defraIdSession,
+      token: {
+        ...defraIdSession.token,
+        accessToken: createAccessToken(3600)
+      }
+    })
+    const request = createRequest(cache)
+    mockEnsureValidDefraIdToken.mockRejectedValue(
+      new Error('Customer Identity unreachable')
+    )
+
+    const result = await validateUserSession(request, {
+      sessionId: 'session-id'
+    })
+
+    expect(result.isValid).toBe(true)
+    expect(cache.drop).not.toHaveBeenCalled()
+    expect(request.logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'defraId' }),
+      expect.stringContaining('refresh is failing')
+    )
   })
 })

@@ -37,6 +37,13 @@
      than a link that any other site could trigger. #}
   {% if isAuthenticated %}
     {% set signOutHtml %}
+      {# Laboratory users manage their team and report-type roles in Your Defra
+         account, not in this service, so it is one step away on every page. #}
+      {% if accountManagementUrl %}
+        <li class="govuk-service-navigation__item">
+          <a class="govuk-service-navigation__link" href="{{ accountManagementUrl }}">Manage your Defra account</a>
+        </li>
+      {% endif %}
       <li class="govuk-service-navigation__item">
         <form method="post" action="/sign-out">
           <input type="hidden" name="crumb" value="{{ crumb }}">

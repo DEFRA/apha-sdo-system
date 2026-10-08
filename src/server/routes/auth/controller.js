@@ -5,19 +5,28 @@ import { config } from '#/config/config.js'
 import {
   assertAllowedEntraGroups,
   getAllowedGroupIds,
+  getDefraIdUserProfile,
   getUserProfile
 } from '#/server/auth/authorization.js'
 import {
   AUTH_PATHS,
+  AUTH_PROVIDERS,
   NO_ACCESS_REPORT_TYPE_FLASH_KEY,
   POST_SIGN_IN_PATH,
   RETURN_TO_COOKIE_NAME,
   RETURN_TO_QUERY_PARAM,
   USER_SESSION_COOKIE_NAME
 } from '#/server/auth/auth-constants.js'
+import {
+  completeDefraIdLogin,
+  getDefraIdEndSessionEndpoint,
+  isDefraIdEnabled,
+  startDefraIdLogin
+} from '#/server/auth/defra-id.js'
 import { getSafeRedirect } from '#/server/auth/safe-redirect.js'
 import {
   dropUserSession,
+  getSessionProvider,
   getUserSession,
   getUserSessionIdByEntraSid,
   setUserSession
@@ -72,8 +81,8 @@ function withReturnTo(path, returnTo) {
 }
 
 /**
- * Internal users authenticate with Entra ID. External authentication remains
- * a placeholder until its identity provider is agreed.
+ * Internal users authenticate with Entra ID; external laboratory users with
+ * Defra Customer Identity, once an environment has been onboarded to it.
  */
 export const signInChooseGetController = {
   handler(request, h) {
@@ -82,6 +91,7 @@ export const signInChooseGetController = {
     return h.view('auth/sign-in-choose', {
       pageTitle: 'How do you want to sign in?',
       returnTo: getReturnTo(request),
+      externalSignInEnabled: isDefraIdEnabled(),
       error
     })
   }
@@ -110,14 +120,89 @@ export const signInChoosePostController = {
 }
 
 /**
- * Placeholder until the external sign-in (Government Gateway / GOV.UK One
- * Login) integration is implemented
+ * Starts the Defra Customer Identity sign-in, through which the user is
+ * offered GOV.UK One Login or Government Gateway. A placeholder page stands
+ * in until the environment has been onboarded to Customer Identity.
  */
 export const signInExternalController = {
-  handler(_request, h) {
-    return h.view('auth/sign-in-external', {
-      pageTitle: 'External sign-in is not available yet'
+  async handler(request, h) {
+    if (!isDefraIdEnabled()) {
+      return h.view('auth/sign-in-external', {
+        pageTitle: 'External sign-in is not available yet'
+      })
+    }
+
+    const returnTo = getReturnTo(request)
+
+    try {
+      const response = await startDefraIdLogin(h, { logger: request.logger })
+
+      // A cookie is the only carrier that survives the round trip.
+      return returnTo
+        ? response.state(RETURN_TO_COOKIE_NAME, returnTo)
+        : response
+    } catch (error) {
+      request.logger.error(
+        { err: error },
+        'Defra Customer Identity sign-in could not be started'
+      )
+      request.yar.flash(
+        SIGN_IN_ERROR_FLASH_KEY,
+        'Sign in is temporarily unavailable. Try again.'
+      )
+      return h.redirect(withReturnTo(AUTH_PATHS.SIGN_IN_CHOOSE, returnTo))
+    }
+  }
+}
+
+export const defraIdCallbackController = {
+  async handler(request, h) {
+    // Read before the cookie is cleared, and before yar is reset below.
+    const returnTo = normaliseReturnTo(request.state[RETURN_TO_COOKIE_NAME])
+    h.unstate(RETURN_TO_COOKIE_NAME)
+
+    let token
+
+    try {
+      token = await completeDefraIdLogin(request, h)
+    } catch (error) {
+      request.logger.warn(
+        { err: error },
+        'Defra Customer Identity sign-in failed'
+      )
+      request.yar.flash(
+        SIGN_IN_ERROR_FLASH_KEY,
+        'We could not sign you in. Try again.'
+      )
+      return h.redirect(withReturnTo(AUTH_PATHS.SIGN_IN_CHOOSE, returnTo))
+    }
+
+    const claims = token.claims ?? {}
+    const user = getDefraIdUserProfile(claims, { logger: request.logger })
+    const sessionId = randomUUID()
+
+    request.yar.reset()
+    await setUserSession(request.server, sessionId, {
+      provider: AUTH_PROVIDERS.DEFRA_ID,
+      token,
+      claims,
+      user,
+      yarId: request.yar.id
     })
+    request.cookieAuth.set({ sessionId })
+    // The lab, journeys and sign-in method confirm the Customer Identity
+    // roles are mapped as intended without anyone having to submit a report.
+    request.logger.info(
+      {
+        userId: user.id,
+        organisationId: user.organisationId,
+        journeys: user.journeys,
+        amr: user.amr
+      },
+      'Defra Customer Identity user authenticated successfully'
+    )
+
+    return h.redirect(returnTo ?? POST_SIGN_IN_PATH)
   }
 }
 
@@ -187,6 +272,7 @@ export const entraCallbackController = {
 
     request.yar.reset()
     await setUserSession(request.server, sessionId, {
+      provider: AUTH_PROVIDERS.ENTRA_ID,
       token,
       claims,
       user,
@@ -256,21 +342,39 @@ export function buildEndSessionUrl(endpoint, idToken) {
   return logoutUrl.toString()
 }
 
+/**
+ * Where to end the provider's own session. Without a session (for example a
+ * user refused access at sign-in) the Entra endpoint is used, as before: that
+ * is the provider that can leave a user signed in with nowhere to go.
+ */
+function getProviderEndSessionEndpoint(session, logger) {
+  return getSessionProvider(session) === AUTH_PROVIDERS.DEFRA_ID
+    ? getDefraIdEndSessionEndpoint({ logger })
+    : getEndSessionEndpoint()
+}
+
 export const signOutController = {
   async handler(request, h) {
     const session = await clearUserSession(request)
-    request.logger.info({ userId: session?.user?.id }, 'Entra user signed out')
+    const provider = getSessionProvider(session)
+    request.logger.info(
+      { userId: session?.user?.id, provider },
+      'User signed out'
+    )
 
     try {
-      const endpoint = await getEndSessionEndpoint()
+      const endpoint = await getProviderEndSessionEndpoint(
+        session,
+        request.logger
+      )
 
       if (endpoint) {
         return h.redirect(buildEndSessionUrl(endpoint, session?.token?.idToken))
       }
     } catch (error) {
       request.logger.warn(
-        { err: error },
-        'Entra end-session endpoint was unavailable'
+        { err: error, provider },
+        'End-session endpoint was unavailable'
       )
     }
 
