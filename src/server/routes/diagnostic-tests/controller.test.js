@@ -4,6 +4,8 @@ import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import {
+  DIAGNOSTIC_TESTS_CONFIRMATION_PATH,
+  DIAGNOSTIC_TESTS_CONFIRMATION_TITLE,
   DIAGNOSTIC_TESTS_FORM,
   DIAGNOSTIC_TESTS_PATH,
   DIAGNOSTIC_TESTS_PROCESS_NAME,
@@ -320,34 +322,83 @@ describe('diagnostic tests routes', () => {
     config.set('azure.storage.enabled', false)
   })
 
-  function getCookieValue(response, name) {
-    const setCookieHeaders = [response.headers['set-cookie']].flat()
-    const cookie = setCookieHeaders.find((header) =>
-      header?.startsWith(`${name}=`)
+  /**
+   * The cookies a browser would hold across requests: the CSRF crumb, the
+   * session holding the confirmation, and the lab's diagnostic tests.
+   */
+  function cookieJar() {
+    const cookies = new Map()
+
+    return {
+      remember(response) {
+        for (const header of [response.headers['set-cookie']].flat()) {
+          if (!header) {
+            continue
+          }
+
+          const [name, ...rest] = header.split(';')[0].split('=')
+          const value = rest.join('=')
+
+          if (value) {
+            cookies.set(name, value)
+          } else {
+            cookies.delete(name)
+          }
+        }
+
+        return response
+      },
+      get: (name) => cookies.get(name),
+      header: () =>
+        [...cookies].map(([name, value]) => `${name}=${value}`).join('; ')
+    }
+  }
+
+  async function getDiagnosticTests(authOverride = auth, jar = cookieJar()) {
+    return jar.remember(
+      await server.inject({
+        method: 'GET',
+        url: DIAGNOSTIC_TESTS_PATH,
+        auth: authOverride,
+        headers: { cookie: jar.header() }
+      })
     )
-
-    return cookie?.split(';')[0].split('=')[1]
   }
 
-  function getDiagnosticTests(authOverride = auth) {
-    return server.inject({
-      method: 'GET',
-      url: DIAGNOSTIC_TESTS_PATH,
-      auth: authOverride
-    })
+  async function postDiagnosticTests(
+    payload = {},
+    authOverride = auth,
+    jar = cookieJar()
+  ) {
+    await getDiagnosticTests(authOverride, jar)
+
+    return jar.remember(
+      await server.inject({
+        method: 'POST',
+        url: DIAGNOSTIC_TESTS_PATH,
+        auth: authOverride,
+        headers: { cookie: jar.header() },
+        payload: { ...payload, crumb: jar.get('crumb') }
+      })
+    )
   }
 
-  async function postDiagnosticTests(payload = {}, authOverride = auth) {
-    const getResponse = await getDiagnosticTests(authOverride)
-    const crumb = getCookieValue(getResponse, 'crumb')
+  async function getConfirmation(authOverride = auth, jar = cookieJar()) {
+    return jar.remember(
+      await server.inject({
+        method: 'GET',
+        url: DIAGNOSTIC_TESTS_CONFIRMATION_PATH,
+        auth: authOverride,
+        headers: { cookie: jar.header() }
+      })
+    )
+  }
 
-    return server.inject({
-      method: 'POST',
-      url: DIAGNOSTIC_TESTS_PATH,
-      auth: authOverride,
-      headers: { cookie: `crumb=${crumb}` },
-      payload: { ...payload, crumb }
-    })
+  // A valid submission of two tests, from which the lab's tests are kept
+  const VALID_PAYLOAD = {
+    tests: ['mycoplasma-pcr', 'bhv-fat'],
+    [accreditationFieldId(mycoplasmaPcr)]: 'Yes',
+    [accreditationFieldId(bhvFat)]: 'Unknown'
   }
 
   function loggedSubmissions() {
@@ -522,6 +573,58 @@ describe('diagnostic tests routes', () => {
         `${AUTH_PATHS.SIGN_IN_CHOOSE}?redirect=${encodeURIComponent(DIAGNOSTIC_TESTS_PATH)}`
       )
     })
+
+    test("Should open with the lab's current tests ticked, their sections open", async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+
+      const { result, statusCode } = await getDiagnosticTests(auth, jar)
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).not.toEqual(expect.stringContaining('There is a problem'))
+      expect(result).toEqual(
+        expect.stringContaining('value="mycoplasma-pcr" checked')
+      )
+      expect(result).toEqual(expect.stringContaining('value="bhv-fat" checked'))
+      expect(result).not.toEqual(
+        expect.stringContaining('value="bhv-pcr" checked')
+      )
+      expect(
+        sectionOf(result, bhvFat.pathogen).split(
+          `id="${accreditationFieldId(bhvFat)}"`
+        )[1]
+      ).toEqual(
+        expect.stringContaining(
+          '<option value="Unknown" selected>Unknown</option>'
+        )
+      )
+
+      for (const pathogen of pathogens) {
+        expect(isExpanded(sectionOf(result, pathogen))).toBe(
+          ['mycoplasma', 'bhv'].includes(pathogen.key)
+        )
+      }
+    })
+
+    test("Should not open with another lab's tests", async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+
+      const { result } = await getDiagnosticTests(
+        {
+          ...auth,
+          credentials: {
+            ...auth.credentials,
+            user: { ...user, organisationId: 'TestLab2' }
+          }
+        },
+        jar
+      )
+
+      expect(result).not.toEqual(expect.stringContaining('checked'))
+    })
   })
 
   describe(`POST ${DIAGNOSTIC_TESTS_PATH}`, () => {
@@ -628,45 +731,23 @@ describe('diagnostic tests routes', () => {
       }
     )
 
-    test('Should log the submission and show the page again with the answers kept', async () => {
-      const { result, statusCode, headers } = await postDiagnosticTests({
-        tests: ['bhv-fat', 'mycoplasma-pcr', 'not-a-test'],
-        [accreditationFieldId(mycoplasmaPcr)]: 'Yes',
-        [accreditationFieldId(bhvFat)]: 'Unknown',
-        // Not ticked, so not recorded
-        [accreditationFieldId(bhvPcr)]: 'No'
-      })
+    test('Should log the submission, keep the tests and send the user to the confirmation', async () => {
+      const jar = cookieJar()
+      const { statusCode, headers } = await postDiagnosticTests(
+        {
+          tests: ['bhv-fat', 'mycoplasma-pcr', 'not-a-test'],
+          [accreditationFieldId(mycoplasmaPcr)]: 'Yes',
+          [accreditationFieldId(bhvFat)]: 'Unknown',
+          // Not ticked, so not recorded
+          [accreditationFieldId(bhvPcr)]: 'No'
+        },
+        auth,
+        jar
+      )
 
-      expect(statusCode).toBe(statusCodes.ok)
-      expect(headers.location).toBeUndefined()
-      expect(result).not.toEqual(expect.stringContaining('There is a problem'))
-
-      // The answers stay on the page, in their sections, which are open
-      expect(result).toEqual(
-        expect.stringContaining('value="mycoplasma-pcr" checked')
-      )
-      expect(result).toEqual(expect.stringContaining('value="bhv-fat" checked'))
-      expect(result).not.toEqual(
-        expect.stringContaining('value="bhv-pcr" checked')
-      )
-      expect(
-        sectionOf(result, mycoplasmaPcr.pathogen).split(
-          `id="${accreditationFieldId(mycoplasmaPcr)}"`
-        )[1]
-      ).toEqual(
-        expect.stringContaining('<option value="Yes" selected>Yes</option>')
-      )
-      expect(
-        sectionOf(result, bhvFat.pathogen).split(
-          `id="${accreditationFieldId(bhvFat)}"`
-        )[1]
-      ).toEqual(
-        expect.stringContaining(
-          '<option value="Unknown" selected>Unknown</option>'
-        )
-      )
-      // The form can be submitted again from here
-      expect(/name="crumb" value="[^"]+"/.test(result)).toBe(true)
+      expect(statusCode).toBe(statusCodes.seeOther)
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_CONFIRMATION_PATH)
+      expect(jar.get('diagnosticTests')).toEqual(expect.any(String))
 
       const [submission, ...others] = loggedSubmissions()
 
@@ -706,7 +787,7 @@ describe('diagnostic tests routes', () => {
         [accreditationFieldId(bhvFat)]: 'No'
       })
 
-      expect(statusCode).toBe(statusCodes.ok)
+      expect(statusCode).toBe(statusCodes.seeOther)
 
       const [submission] = loggedSubmissions()
       const { referenceNumber } = submission
@@ -743,19 +824,29 @@ describe('diagnostic tests routes', () => {
       ])
     })
 
-    test('Should show the error page when the delivery fails', async () => {
+    test('Should show the error page, and keep nothing, when the delivery fails', async () => {
       config.set('azure.storage.enabled', true)
       azureStorageService.uploadFile.mockRejectedValueOnce(
         new Error('Azure upload failed: container unavailable')
       )
 
-      const { statusCode } = await postDiagnosticTests({
-        tests: 'bhv-fat',
-        [accreditationFieldId(bhvFat)]: 'Yes'
-      })
+      const jar = cookieJar()
+      const { statusCode } = await postDiagnosticTests(
+        {
+          tests: 'bhv-fat',
+          [accreditationFieldId(bhvFat)]: 'Yes'
+        },
+        auth,
+        jar
+      )
 
       expect(statusCode).toBe(statusCodes.internalServerError)
       expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+      expect(jar.get('diagnosticTests')).toBeUndefined()
+
+      const confirmation = await getConfirmation(auth, jar)
+
+      expect(confirmation.headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
     })
 
     test('Should send a signed-out user to sign in', async () => {
@@ -769,6 +860,85 @@ describe('diagnostic tests routes', () => {
       expect(headers.location).toBe(
         `${AUTH_PATHS.SIGN_IN_CHOOSE}?redirect=${encodeURIComponent(DIAGNOSTIC_TESTS_PATH)}`
       )
+    })
+  })
+
+  describe(`GET ${DIAGNOSTIC_TESTS_CONFIRMATION_PATH}`, () => {
+    test('Should confirm the submission with its reference, like a report confirmation', async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+
+      const { referenceNumber } = loggedSubmissions()[0]
+      const { result, statusCode } = await getConfirmation(auth, jar)
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(expect.stringContaining('govuk-panel'))
+      expect(result).toEqual(
+        expect.stringContaining(DIAGNOSTIC_TESTS_CONFIRMATION_TITLE)
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          `Your reference number<br><strong>${referenceNumber}</strong>`
+        )
+      )
+      expect(result).toEqual(expect.stringContaining('What happens next'))
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Thank you for your submission. We will process it and contact you if additional information is required.'
+        )
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'href="/submission-welcome" class="govuk-link govuk-link--no-visited-state">Return to Submission Welcome</a>'
+        )
+      )
+      expect(result).toEqual(
+        expect.stringContaining('govuk-grid-column-two-thirds')
+      )
+      expect(result).toEqual(expect.stringContaining('govuk-breadcrumbs'))
+      expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
+    })
+
+    test('Should still confirm the submission when refreshed', async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+      await getConfirmation(auth, jar)
+
+      const { referenceNumber } = loggedSubmissions()[0]
+      const { result, statusCode } = await getConfirmation(auth, jar)
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(expect.stringContaining(referenceNumber))
+    })
+
+    test('Should send the user to the page when nothing was submitted', async () => {
+      const { statusCode, headers } = await getConfirmation()
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+    })
+
+    test('Should end the confirmation once the page is opened again', async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+      await getDiagnosticTests(auth, jar)
+
+      const { statusCode, headers } = await getConfirmation(auth, jar)
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+    })
+
+    test('Should send a user without Animal Health Regulations back to Submission Welcome', async () => {
+      const { statusCode, headers } = await getConfirmation(
+        authWithJourneys(['BR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
     })
   })
 })

@@ -11,6 +11,7 @@ const {
   getSessionProvider,
   getUserSession,
   getUserSessionIdByEntraSid,
+  revokeSessionToken,
   setUserSession,
   validateUserSession
 } = await import('./user-session.js')
@@ -429,5 +430,53 @@ describe('validateUserSession for Defra Customer Identity', () => {
       expect.objectContaining({ provider: 'defraId' }),
       expect.stringContaining('refresh is failing')
     )
+  })
+
+  test('keeps a revoked token marked while its refresh is failing', async () => {
+    const cache = createCache({
+      ...defraIdSession,
+      token: {
+        ...defraIdSession.token,
+        accessToken: createAccessToken(3600),
+        revoked: true
+      }
+    })
+    const request = createRequest(cache)
+    mockEnsureValidDefraIdToken.mockRejectedValue(
+      new Error('Customer Identity unreachable')
+    )
+
+    const result = await validateUserSession(request, {
+      sessionId: 'session-id'
+    })
+
+    expect(result.isValid).toBe(true)
+    // Not rewritten, so the next request tries the refresh again
+    expect(cache.set).not.toHaveBeenCalled()
+    expect(cache.drop).not.toHaveBeenCalled()
+  })
+})
+
+describe('revokeSessionToken', () => {
+  test('marks the token for refresh and keeps the rest of the session', async () => {
+    const cache = createCache(session)
+    const server = { app: { userSessionCache: cache } }
+
+    await revokeSessionToken(server, 'session-id')
+
+    expect(cache.set).toHaveBeenCalledWith('session-id', {
+      ...session,
+      token: { ...session.token, revoked: true }
+    })
+  })
+
+  test('does nothing without a session', async () => {
+    const cache = createCache()
+    const server = { app: { userSessionCache: cache } }
+
+    await revokeSessionToken(server, 'missing')
+    await revokeSessionToken(server)
+
+    expect(cache.set).not.toHaveBeenCalled()
   })
 })

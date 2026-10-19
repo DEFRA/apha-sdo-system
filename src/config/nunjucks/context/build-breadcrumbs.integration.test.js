@@ -2,6 +2,15 @@ import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { reportTypes } from '#/server/forms/report-types.js'
 
+// Animal Health Regulations is held back until the lab defines its tests
+vi.mock(
+  '#/server/routes/diagnostic-tests/lab-diagnostic-tests.js',
+  async (importOriginal) =>
+    (
+      await import('#/test-helpers/lab-diagnostic-tests.js')
+    ).mockLabDiagnosticTestsDefined(importOriginal)
+)
+
 /**
  * Breadcrumbs reach the page through two different rendering paths: Hapi Vision
  * for the service's own routes, and the forms-engine-plugin `viewContext` for

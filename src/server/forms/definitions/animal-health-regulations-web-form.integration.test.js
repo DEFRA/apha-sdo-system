@@ -9,6 +9,15 @@ vi.mock('#/server/upload/services/azure-storage-service.js', () => ({
   azureStorageService: { uploadFile: vi.fn() }
 }))
 
+// Animal Health Regulations is held back until the lab defines its tests
+vi.mock(
+  '#/server/routes/diagnostic-tests/lab-diagnostic-tests.js',
+  async (importOriginal) =>
+    (
+      await import('#/test-helpers/lab-diagnostic-tests.js')
+    ).mockLabDiagnosticTestsDefined(importOriginal)
+)
+
 const ahr = reportTypesBySlug.get('animal-health-regulations')
 const SLUG = ahr.webFormSlug
 

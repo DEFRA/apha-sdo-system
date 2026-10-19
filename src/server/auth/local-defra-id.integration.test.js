@@ -4,6 +4,15 @@ import { config } from '#/config/config.js'
 import { createServer } from '#/server/server.js'
 import { clearDefraIdOidcConfigCache } from '#/server/auth/defra-id.js'
 
+// Animal Health Regulations is held back until the lab defines its tests
+vi.mock(
+  '#/server/routes/diagnostic-tests/lab-diagnostic-tests.js',
+  async (importOriginal) =>
+    (
+      await import('#/test-helpers/lab-diagnostic-tests.js')
+    ).mockLabDiagnosticTestsDefined(importOriginal)
+)
+
 function getCookieHeader(response, name) {
   return [response.headers['set-cookie']]
     .flat()
@@ -135,6 +144,37 @@ describe('local Defra ID stand-in', () => {
     expect(welcome.result).not.toContain('value="animal-health-regulations"')
   })
 
+  test('offers a role added in Your Defra account as soon as the user comes back', async () => {
+    const userSessionCookie = await signIn()
+    const welcome = () =>
+      appServer.inject({
+        url: '/submission-welcome',
+        headers: { cookie: userSessionCookie }
+      })
+
+    // The roles are the ones in the token, so a change made elsewhere is not
+    // seen while the access token has life left
+    roles = ['rel-1:BR:3', 'rel-1:AHR:3']
+    expect((await welcome()).result).not.toContain(
+      'value="animal-health-regulations"'
+    )
+
+    const toAccount = await appServer.inject({
+      url: '/manage-account',
+      headers: { cookie: userSessionCookie }
+    })
+
+    expect(toAccount.statusCode).toBe(302)
+    expect(toAccount.headers.location).toBe(
+      'https://your-account.example/management'
+    )
+
+    const back = await welcome()
+
+    expect(back.result).toContain('value="bat-rabies"')
+    expect(back.result).toContain('value="animal-health-regulations"')
+  })
+
   test('completes sign-in, maps roles to journeys and signs out at the provider', async () => {
     const loginResponse = await appServer.inject('/sign-in-external')
     const oidcStateCookie = getCookieHeader(loginResponse, 'defraIdOidc')
@@ -180,10 +220,9 @@ describe('local Defra ID stand-in', () => {
     // The lab is named, not shown as its Customer Identity GUID
     expect(protectedResponse.result).toContain('Anytown Veterinary Laboratory')
     expect(protectedResponse.result).toContain('Susan Example')
-    // Laboratory users manage roles and colleagues in Your Defra account
-    expect(protectedResponse.result).toContain(
-      'href="https://your-account.example/management"'
-    )
+    // Laboratory users manage roles and colleagues in Your Defra account,
+    // reached through the service so their token is refreshed on return
+    expect(protectedResponse.result).toContain('href="/manage-account"')
     expect(protectedResponse.result).toContain('Manage your Defra account')
 
     const crumb = getCookieHeader(protectedResponse, 'crumb')?.split('=')[1]

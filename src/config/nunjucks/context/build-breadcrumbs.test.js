@@ -12,15 +12,16 @@ describe('#buildBreadcrumbs', () => {
     ).toEqual([{ text: 'Home', href: '/' }, { text: 'Submission Welcome' }])
   })
 
-  test('Should provide expected breadcrumbs for the diagnostic tests page', () => {
-    expect(
-      buildBreadcrumbs(mockRequest({ path: '/diagnostic-tests' }))
-    ).toEqual([
-      { text: 'Home', href: '/' },
-      { text: 'Submission Welcome', href: '/submission-welcome' },
-      { text: 'Update diagnostic tests' }
-    ])
-  })
+  test.each(['/diagnostic-tests', '/diagnostic-tests/confirmation'])(
+    'Should provide expected breadcrumbs for %s',
+    (path) => {
+      expect(buildBreadcrumbs(mockRequest({ path }))).toEqual([
+        { text: 'Home', href: '/' },
+        { text: 'Submission Welcome', href: '/submission-welcome' },
+        { text: 'Update diagnostic tests' }
+      ])
+    }
+  )
 
   test.each(reportTypes)(
     'Should provide expected breadcrumbs for the $slug journey',

@@ -87,21 +87,23 @@ describe('context and cache', () => {
         expect(authenticatedContext.accountManagementUrl).toBeNull()
       })
 
-      test('Should link Defra Customer Identity users to Your Defra account', () => {
+      test('Should link Defra Customer Identity users to Your Defra account through the service', () => {
         mockConfigOverrides.set(
           'auth.defraId.accountManagementUrl',
           'https://your-account.example/management'
         )
         const defraIdUser = { id: 'user-id', provider: 'defraId' }
 
+        // The service revokes the token on the way, so roles changed there
+        // are read when the user comes back
         expect(contextImport.accountManagementUrlFor(defraIdUser)).toBe(
-          'https://your-account.example/management'
+          '/manage-account'
         )
         expect(
           contextImport.context({
             auth: { isAuthenticated: true, credentials: { user: defraIdUser } }
           }).accountManagementUrl
-        ).toBe('https://your-account.example/management')
+        ).toBe('/manage-account')
       })
 
       test('Should not link to Your Defra account when no URL is configured', () => {

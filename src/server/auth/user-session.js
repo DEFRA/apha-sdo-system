@@ -99,6 +99,24 @@ export async function dropUserSession(server, sessionId) {
   }
 }
 
+/**
+ * Marks the session's token as revoked, so the next request refreshes it
+ * whatever its expiry. Customer Identity puts the user's current roles in a
+ * refreshed token, which is how a role changed in Your Defra account reaches
+ * a signed-in user. Until a refresh succeeds the current token stays in use
+ * and the mark stays, so the next request tries again.
+ */
+export async function revokeSessionToken(server, sessionId) {
+  const session = await getUserSession(server, sessionId)
+
+  if (session?.token) {
+    await setUserSession(server, sessionId, {
+      ...session,
+      token: { ...session.token, revoked: true }
+    })
+  }
+}
+
 export async function getUserSessionIdByEntraSid(server, sid) {
   if (!sid) {
     return null

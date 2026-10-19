@@ -2,10 +2,24 @@ import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { reportTypes } from '#/server/forms/report-types.js'
 import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
+import { getLabDiagnosticTests } from '../diagnostic-tests/lab-diagnostic-tests.js'
+import { DEFINED_LAB_DIAGNOSTIC_TESTS } from '#/test-helpers/lab-diagnostic-tests.js'
 import {
   UPDATE_DIAGNOSTIC_TESTS,
   VIEW_SUBMISSION_HISTORY
 } from './controller.js'
+
+// Labs have defined their diagnostic tests unless a test says otherwise
+vi.mock(
+  '#/server/routes/diagnostic-tests/lab-diagnostic-tests.js',
+  async (importOriginal) =>
+    (
+      await import('#/test-helpers/lab-diagnostic-tests.js')
+    ).mockLabDiagnosticTestsDefined(importOriginal)
+)
+
+const BANNER_HEADING =
+  'You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.'
 
 function getCookieValue(response, name) {
   const setCookieHeaders = [response.headers['set-cookie']].flat()
@@ -344,5 +358,124 @@ describe('submission welcome routes', () => {
       expect(statusCode).toBe(statusCodes.redirect)
       expect(headers.location).toBe('/submission-welcome')
     })
+  })
+
+  describe('before the lab has defined its diagnostic tests', () => {
+    const radioCount = (html) => html.match(/name="submissionAction"/g).length
+
+    beforeEach(() => {
+      getLabDiagnosticTests.mockResolvedValue(null)
+    })
+
+    afterEach(() => {
+      getLabDiagnosticTests.mockResolvedValue(DEFINED_LAB_DIAGNOSTIC_TESTS)
+    })
+
+    test('Should only offer diagnostic tests to a user who holds just Animal Health Regulations', async () => {
+      const { result, statusCode } = await getSubmissionWelcome(
+        authWithJourneys(['AHR'])
+      )
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining('value="animal-health-regulations"')
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(`value="${VIEW_SUBMISSION_HISTORY}"`)
+      )
+      expect(radioCount(result)).toBe(1)
+      // Holding a report type, even held back, is not holding none
+      expect(result).not.toEqual(
+        expect.stringContaining(NO_REPORT_TYPES_MESSAGE)
+      )
+    })
+
+    test('Should keep Bat rabies and history for a user who also holds it', async () => {
+      const { result } = await getSubmissionWelcome(
+        authWithJourneys(['BR', 'AHR'])
+      )
+
+      expect(result).toEqual(expect.stringContaining('value="bat-rabies"'))
+      expect(result).toEqual(
+        expect.stringContaining(`value="${VIEW_SUBMISSION_HISTORY}"`)
+      )
+      expect(result).toEqual(
+        expect.stringContaining(`value="${UPDATE_DIAGNOSTIC_TESTS}"`)
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining('value="animal-health-regulations"')
+      )
+      expect(radioCount(result)).toBe(3)
+    })
+
+    test.each([[['AHR']], [['BR', 'AHR']]])(
+      'Should explain why Animal Health Regulations is not offered to %j',
+      async (journeys) => {
+        const { result } = await getSubmissionWelcome(
+          authWithJourneys(journeys)
+        )
+
+        expect(result).toEqual(
+          expect.stringContaining('govuk-notification-banner')
+        )
+        expect(result).toEqual(expect.stringContaining(BANNER_HEADING))
+        expect(result).toEqual(
+          expect.stringContaining(
+            'Select ‘Update your diagnostic tests in use’ to tell us which qualifying tests your laboratory uses and their UKAS accreditation.'
+          )
+        )
+        // Above the question it is about
+        expect(result.indexOf(BANNER_HEADING)).toBeLessThan(
+          result.indexOf('govuk-fieldset__heading')
+        )
+      }
+    )
+
+    test('Should neither hold back nor ask about a user who holds only Bat rabies', async () => {
+      const { result } = await getSubmissionWelcome(authWithJourneys(['BR']))
+
+      expect(result).toEqual(expect.stringContaining('value="bat-rabies"'))
+      expect(result).not.toEqual(expect.stringContaining(BANNER_HEADING))
+      expect(getLabDiagnosticTests).not.toHaveBeenCalled()
+    })
+
+    test('Should redirect back when Animal Health Regulations is posted anyway', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome({
+        submissionAction: 'animal-health-regulations'
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/submission-welcome')
+    })
+
+    test('Should still continue into Bat rabies', async () => {
+      const { statusCode, headers } = await postSubmissionWelcome({
+        submissionAction: 'bat-rabies'
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe('/bat-rabies')
+    })
+
+    test('Should still open the diagnostic tests page', async () => {
+      const { headers } = await postSubmissionWelcome(
+        { submissionAction: UPDATE_DIAGNOSTIC_TESTS },
+        authWithJourneys(['AHR'])
+      )
+
+      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+    })
+  })
+
+  test('Should not show the banner once the lab has defined its diagnostic tests', async () => {
+    const { result } = await getSubmissionWelcome(authWithJourneys(['AHR']))
+
+    expect(result).toEqual(
+      expect.stringContaining('value="animal-health-regulations"')
+    )
+    expect(result).not.toEqual(expect.stringContaining(BANNER_HEADING))
   })
 })

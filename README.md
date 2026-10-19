@@ -305,9 +305,19 @@ through auto-enrolment, grants nothing: the user reaches
 `/submission-welcome` and is told to ask their laboratory's account
 administrator for access in Your Defra account, linked from
 `AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL`. A user holding both roles sees both
-journeys. Role changes made in Your Defra account reach the service at the
-next token refresh (the refreshed ID token carries the current roles) or sign
-in.
+journeys.
+
+The roles the service acts on are the ones in the session's token, and a
+refreshed token from Customer Identity carries the roles as they are at the
+time of the refresh. Normally a refresh only happens shortly before the
+access token expires (`AUTH_DEFRA_ID_EARLY_REFRESH_MS`, about an hour after
+sign-in), so links to Your Defra account go through `/manage-account`, which
+revokes the session's token before redirecting there. The first request
+after the user comes back refreshes it, so a role they gave themselves, or
+were given while they were there, is offered straight away. A role changed
+for someone who did not go through that link reaches them at their next
+normal refresh or sign-in. While Customer Identity cannot be reached, the
+current token stays in use and the next request tries the refresh again.
 
 The session user has the same shape as for Entra (`organisationId`,
 `journeys`), plus `provider: 'defraId'`, `organisationName`, `uniqueReference`
@@ -401,9 +411,11 @@ Login and Government Gateway hops.
 3. Confirm you land on `/submission-welcome`. With only the `Default` role
    you should see the "ask your laboratory's account administrator" note and
    a **Manage your Defra account** link in the header.
-4. In Your Defra account, give yourself the `BR` role; sign out and in again
-   and confirm **Bat rabies report** is offered. Add `AHR` as well and
-   confirm both appear.
+4. Follow **Manage your Defra account**, give yourself the `BR` role, come
+   back to `/submission-welcome` and confirm **Bat rabies report** is offered
+   without signing in again. The logs show the token being refreshed
+   (`Defra ID token revoked by the service, refreshing`). Add `AHR` the same
+   way and confirm both appear.
 5. Check the application logs for the sign-in line with `organisationId`,
    `journeys` and `amr`. Cookies, authorization codes, secrets and tokens
    must not be present.
@@ -571,7 +583,9 @@ Each pathogen is a collapsed accordion section of checkboxes, one per test.
 Ticking a test reveals an **Accreditation** select (Yes, No, Unknown), which
 must be answered for every ticked test; at least one test must be ticked. On
 an error the page comes back with the sections holding a tick or an error
-opened. **Go back** returns to Submission Welcome.
+opened. **Go back** returns to Submission Welcome. Once the lab has defined
+its tests, the page opens with them already ticked and their sections open,
+so updating them starts from what the lab has now.
 
 **Continue** delivers the declaration the way a report's record is
 delivered: the record below is written to the Azure container as
@@ -579,8 +593,14 @@ delivered: the record below is written to the Azure container as
 (`src/server/routes/diagnostic-tests/diagnostic-tests-output.js`, reusing the
 output service's `uploadSubmissionJson`). There is no data file. When
 `AZURE_STORAGE_ENABLED` is off the submission is only logged
-(`Diagnostic tests submission received`). The page is then shown again with
-the answers kept.
+(`Diagnostic tests submission received`). The tests are then kept as the
+lab's current tests (see below) and the user is sent to
+`/diagnostic-tests/confirmation`, laid out like the report journeys'
+confirmation: a "Form submitted" panel with the reference number, what
+happens next, and a link back to Submission Welcome. The reference is kept in
+the session, so refreshing the confirmation still shows it; without one, the
+confirmation sends the user to `/diagnostic-tests`. A failed delivery shows
+the error page and keeps nothing.
 
 The record follows the shape of `submission.json` with just the fields that
 apply, and one row per ticked test so the rows can be written out as
@@ -608,6 +628,90 @@ spreadsheet lines downstream:
   ]
 }
 ```
+
+### First-time setup
+
+A lab's first step, once registered, is to define its diagnostic tests.
+Until it has, Animal Health Regulations reports cannot be submitted; other
+report types are not affected.
+
+- **Submission Welcome** leaves out Animal Health Regulations and shows a
+  GOV.UK notification banner asking the user to set up their diagnostic
+  tests. A user who only holds Animal Health Regulations is offered just
+  **Update your diagnostic tests in use** (no submission history yet); a user
+  who also holds Bat rabies keeps Bat rabies and submission history. Posting
+  Animal Health Regulations anyway gets "Select what you want to do".
+- **Journey URLs** opened directly (`/animal-health-regulations`,
+  `/animal-health-regulations-web-form`, their pages,
+  `/animal-health-regulations/how-to-report` and the preview routes) send the
+  user to Submission Welcome. This is the `requireDiagnosticTestsFirst`
+  `onPostAuth` extension, which runs after `restrictReportJourneys`, so a
+  user without the role still gets `/no-access` first.
+
+The rule lives in `src/server/routes/diagnostic-tests/diagnostic-tests-gate.js`
+(`isAwaitingDiagnosticTests`, `isHeldBackForDiagnosticTests`); it only asks
+the store below whether the lab has tests.
+
+### Lab diagnostic tests store (temporary)
+
+`src/server/routes/diagnostic-tests/lab-diagnostic-tests.js` answers "what
+are this lab's current diagnostic tests?" for the gate and the page:
+
+- `getLabDiagnosticTests(request)` resolves to `null` when the user's lab
+  (`organisationId`) has never defined its tests, otherwise to its tests in
+  catalogue order as `{ test, accreditation }` (the shape
+  `parseDiagnosticTestsPayload` reads a posted form into). It is read once
+  per request and memoised on `request.app`.
+- `saveLabDiagnosticTests(request, h, selections)` replaces the lab's tests.
+- `registerLabDiagnosticTestsStore(server)` runs when the diagnostic tests
+  routes are registered.
+
+Until the backend can be queried, the store keeps the tests in an encrypted
+`diagnosticTests` cookie (iron, the session cookie password, one year,
+`HttpOnly`, `SameSite=Lax`), as `[organisationId, { testKey: accreditation }]`
+pairs for the two most recently saved labs, which keeps it well inside the
+4 KB browser limit. Sign-out leaves it in place. Tests no longer in the
+catalogue and accreditations no longer offered are dropped on read. Because
+it is a cookie, the tests are only known to the browser that saved them:
+another user of the same lab, or another browser, is asked to set them up
+again. To start over locally, delete the `diagnosticTests` cookie.
+
+Tests that open Animal Health Regulations journeys mock the store as
+"defined" with `test-helpers/lab-diagnostic-tests.js`, the seam a backend
+client will be mocked at too.
+
+### Moving to the backend
+
+1. **Only the store changes.** Re-implement `getLabDiagnosticTests` as a
+   query by `organisationId`, resolving to `null` when nothing is stored and
+   otherwise to the rows mapped to catalogue entries. Re-implement
+   `saveLabDiagnosticTests` as a backend write, or as a no-op if the backend
+   builds its data from the delivered `submission.json`; `h` can be ignored.
+   `registerLabDiagnosticTestsStore` can set up the client. Every caller
+   already awaits the store and the memo keeps it to one call per request,
+   so the gate, Submission Welcome, the journey guard and the page stay as
+   they are.
+2. **Mapping rows to the catalogue.** `diagnosticTestsData` carries pathogen
+   and test names. The (pathogen, test) pair is unique (several pathogens
+   share test names such as PCR), so rows can be matched on both. Better:
+   add each test's stable `key` to the rows of the record (as `testKey`) so
+   the backend can return it and the mapping survives a test being renamed.
+   Not done yet, because it changes the downstream record.
+3. **Removing the cookie.** Delete the cookie registration and internals in
+   the store and the cookie-specific cases in `lab-diagnostic-tests.test.js`.
+   The two-lab cap goes with it. Tests mocking the store, including the
+   shared helper, keep working.
+4. **Per-lab answers.** The backend makes the tests the lab's rather than the
+   browser's; nothing outside the store depends on where they come from.
+5. **Decide what an unreachable backend means.** Holding Animal Health
+   Regulations back (fail closed) would show the "set up your diagnostic
+   tests" banner during an outage, so Submission Welcome would need its own
+   "we could not check" message; letting it through (fail open) skips the
+   first-time rule while the backend is down. Today an unreadable cookie
+   reads as never defined.
+6. **Freshness (optional).** If the backend returns when the tests were last
+   updated, the Animal Health Regulations check your answers confirmation
+   ("used this reporting month") could show it.
 
 ## CDP proxy
 

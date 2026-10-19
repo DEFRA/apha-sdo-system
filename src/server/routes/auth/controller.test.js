@@ -364,11 +364,41 @@ describe('auth routes', () => {
 
       expect(welcome.statusCode).toBe(statusCodes.ok)
       expect(welcome.result).toContain("laboratory's account administrator")
-      expect(welcome.result).toContain(
-        'href="https://your-account.example/management"'
-      )
+      expect(welcome.result).toContain('href="/manage-account"')
       expect(welcome.result).not.toContain('APHA administrator')
       expect(welcome.result).not.toContain('value="bat-rabies"')
+    })
+
+    test('revokes the token on the way to Your Defra account', async () => {
+      const { cookie } = await signInWithDefraId()
+      const set = vi.spyOn(server.app.userSessionCache, 'set')
+
+      const response = await server.inject({
+        url: '/manage-account',
+        headers: { cookie }
+      })
+
+      expect(response.statusCode).toBe(statusCodes.redirect)
+      expect(response.headers.location).toBe(
+        'https://your-account.example/management'
+      )
+      expect(set).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          token: expect.objectContaining({ revoked: true })
+        })
+      )
+    })
+
+    test('has no Defra account to send an Entra user to', async () => {
+      const { cookie } = await signIn()
+
+      const response = await server.inject({
+        url: '/manage-account',
+        headers: { cookie }
+      })
+
+      expect(response.statusCode).toBe(statusCodes.notFound)
     })
 
     test('names the lab administrator on the no access page for a report type', async () => {

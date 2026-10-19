@@ -2,12 +2,17 @@ import * as openid from 'openid-client'
 import {
   createOidcConfig,
   ensureValidToken,
-  postLogin
+  postLogin,
+  refreshToken
 } from '@defra/hapi-auth-oidc'
 
 import { config } from '#/config/config.js'
 import { getOidcBrowserSettings } from '#/server/plugins/auth/open-id.js'
-import { AUTH_PATHS, DEFRA_ID_STATE_COOKIE_NAME } from './auth-constants.js'
+import {
+  AUTH_PATHS,
+  AUTH_PROVIDERS,
+  DEFRA_ID_STATE_COOKIE_NAME
+} from './auth-constants.js'
 
 /**
  * External (laboratory) users sign in with Defra Customer Identity (Defra
@@ -197,8 +202,9 @@ export async function completeDefraIdLogin(
 }
 
 /**
- * Refreshes the token set shortly before the access token expires. The
- * refreshed ID token carries the user's current roles, so a role the lab
+ * Refreshes the token set shortly before the access token expires, or
+ * straight away once the service has revoked it (see revokeSessionToken).
+ * The refreshed ID token carries the user's current roles, so a role the lab
  * admin adds or removes in Your Defra account reaches the service without a
  * new sign-in.
  */
@@ -206,13 +212,46 @@ export async function ensureValidDefraIdToken(
   token,
   { settings = config.get(authConfigPath), logger } = {}
 ) {
+  const getOidcConfig = (log) =>
+    getDefraIdOidcConfig({ settings, logger: log ?? logger })
+  const scope = scopeString(settings.scopes)
+
+  if (token.revoked) {
+    logger?.info?.('Defra ID token revoked by the service, refreshing')
+
+    return {
+      token: await refreshToken(
+        token.refreshToken,
+        getOidcConfig,
+        scope,
+        logger
+      ),
+      refreshed: true
+    }
+  }
+
   return ensureValidToken(
     token,
-    (log) => getDefraIdOidcConfig({ settings, logger: log ?? logger }),
+    getOidcConfig,
     settings.earlyRefreshMs,
-    scopeString(settings.scopes),
+    scope,
     logger
   )
+}
+
+/**
+ * Your Defra account, where a laboratory's administrator manages its team and
+ * their service roles. Only users who signed in with Customer Identity have
+ * one, and an environment without the URL configured has none to offer.
+ * @param {{ provider?: string } | null} user - the session user
+ */
+export function getAccountManagementUrl(
+  user,
+  accountManagementUrl = config.get('auth.defraId.accountManagementUrl')
+) {
+  return user?.provider === AUTH_PROVIDERS.DEFRA_ID
+    ? accountManagementUrl || null
+    : null
 }
 
 export async function getDefraIdEndSessionEndpoint(options = {}) {

@@ -29,6 +29,7 @@ import { openId } from './plugins/auth/open-id.js'
 import { defraIdOpenId } from './plugins/auth/defra-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
 import { restrictReportJourneys } from './auth/report-access.js'
+import { requireDiagnosticTestsFirst } from './routes/diagnostic-tests/diagnostic-tests-gate.js'
 import { stripUnsafeReturnUrl } from './common/helpers/return-url.js'
 
 export async function createServer() {
@@ -91,6 +92,8 @@ export async function createServer() {
   // open is enforced here, once the session has been validated, rather than
   // inside its routes.
   server.ext('onPostAuth', restrictReportJourneys)
+  // Runs second, so a user without the report type is told that first
+  server.ext('onPostAuth', requireDiagnosticTestsFirst)
   // The engine redirects to a change link's returnUrl without checking it
   // stays within the service, so that is checked before it can act on it
   server.ext('onPreHandler', stripUnsafeReturnUrl)

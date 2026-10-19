@@ -4,6 +4,15 @@ import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 import { REPORT_METHOD, howToReportPath } from './controller.js'
 
+// Animal Health Regulations is held back until the lab defines its tests
+vi.mock(
+  '#/server/routes/diagnostic-tests/lab-diagnostic-tests.js',
+  async (importOriginal) =>
+    (
+      await import('#/test-helpers/lab-diagnostic-tests.js')
+    ).mockLabDiagnosticTestsDefined(importOriginal)
+)
+
 const ahr = reportTypesBySlug.get('animal-health-regulations')
 const batRabies = reportTypesBySlug.get('bat-rabies')
 
