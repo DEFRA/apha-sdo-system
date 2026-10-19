@@ -9,7 +9,8 @@ export const AUTH_PATHS = {
   SIGN_OUT: '/sign-out',
   FRONT_CHANNEL_LOGOUT: '/logout',
   SIGNED_OUT: '/signed-out',
-  NO_ACCESS: '/no-access'
+  NO_ACCESS: '/no-access',
+  MANAGE_ACCOUNT: '/manage-account'
 }
 
 /**

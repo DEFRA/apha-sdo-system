@@ -19,6 +19,7 @@ import {
 } from '#/server/auth/auth-constants.js'
 import {
   completeDefraIdLogin,
+  getAccountManagementUrl,
   getDefraIdEndSessionEndpoint,
   isDefraIdEnabled,
   startDefraIdLogin
@@ -29,6 +30,7 @@ import {
   getSessionProvider,
   getUserSession,
   getUserSessionIdByEntraSid,
+  revokeSessionToken,
   setUserSession
 } from '#/server/auth/user-session.js'
 import { getEndSessionEndpoint } from '#/server/plugins/auth/open-id.js'
@@ -414,6 +416,31 @@ export const frontChannelLogoutController = {
       .response()
       .code(statusCodes.noContent)
       .header('cache-control', 'no-store')
+  }
+}
+
+/**
+ * "Manage your Defra account". A laboratory's administrator changes service
+ * roles there, and the service reads roles from the token, so the token is
+ * revoked on the way out: the first request after the user comes back
+ * refreshes it and gets the roles as they are then.
+ */
+export const manageAccountController = {
+  async handler(request, h) {
+    const { sessionId, user } = request.auth.credentials
+    const accountManagementUrl = getAccountManagementUrl(user)
+
+    if (!accountManagementUrl) {
+      throw Boom.notFound()
+    }
+
+    await revokeSessionToken(request.server, sessionId)
+    request.logger.info(
+      { userId: user.id },
+      'Defra ID token revoked on the way to Your Defra account'
+    )
+
+    return h.redirect(accountManagementUrl)
   }
 }
 

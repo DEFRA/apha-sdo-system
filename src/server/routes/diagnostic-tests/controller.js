@@ -2,6 +2,7 @@ import { generateUniqueReference } from '@defra/forms-engine-plugin/engine/refer
 
 import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
+import { statusCodes } from '#/server/common/constants/status-codes.js'
 
 import {
   ACCREDITATION_OPTIONS,
@@ -10,9 +11,27 @@ import {
   testsByKey
 } from './qualifying-tests.js'
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
+import {
+  getLabDiagnosticTests,
+  saveLabDiagnosticTests
+} from './lab-diagnostic-tests.js'
 
 export const DIAGNOSTIC_TESTS_PATH = '/diagnostic-tests'
 export const DIAGNOSTIC_TESTS_TITLE = 'Define your qualifying tests in use'
+
+export const DIAGNOSTIC_TESTS_CONFIRMATION_PATH =
+  '/diagnostic-tests/confirmation'
+export const DIAGNOSTIC_TESTS_CONFIRMATION_TITLE = 'Form submitted'
+
+// The reference of the last submission, kept in the session (not flashed) so
+// that refreshing the confirmation still shows it, as the report journeys'
+// confirmation does
+const CONFIRMATION_SESSION_KEY = 'diagnosticTestsConfirmation'
+
+// The report journeys' guidance (see report-journey.js), so every
+// confirmation tells the user the same
+const SUBMISSION_GUIDANCE =
+  'Thank you for your submission. We will process it and contact you if additional information is required.'
 
 // `form` and `processName` of the record, the way a report journey's slug and
 // report type code fill them (see src/server/forms/services/output-service.js)
@@ -222,23 +241,36 @@ function redirectWithoutAnimalHealthRegulations(request, h) {
 /**
  * "Define your qualifying tests in use": the tests a lab uses for each
  * pathogen and whether each is UKAS accredited. Reached from Submission
- * Welcome by a user who can submit Animal Health Regulations.
+ * Welcome by a user who can submit Animal Health Regulations. The lab's
+ * current tests, when it has defined them, are already ticked. Opening the
+ * page ends the previous submission's confirmation.
  */
 export const diagnosticTestsGetController = {
-  handler(request, h) {
-    return (
-      redirectWithoutAnimalHealthRegulations(request, h) ??
-      renderDiagnosticTests(h)
+  async handler(request, h) {
+    const refused = redirectWithoutAnimalHealthRegulations(request, h)
+
+    if (refused) {
+      return refused
+    }
+
+    // Only cleared when set: clearing marks the session for saving
+    if (request.yar.get(CONFIRMATION_SESSION_KEY)) {
+      request.yar.clear(CONFIRMATION_SESSION_KEY)
+    }
+
+    return renderDiagnosticTests(
+      h,
+      (await getLabDiagnosticTests(request)) ?? []
     )
   }
 }
 
 /**
- * Continue: the ticked tests are validated and, once they pass, recorded and
- * delivered to the Azure container under the reference number, as a report's
- * record is. The page is then shown again with the answers still in place. A
- * failed delivery surfaces as the service's error page, as it does for a
- * report.
+ * Continue: the ticked tests are validated and, once they pass, delivered to
+ * the Azure container under the reference number, as a report's record is,
+ * and kept as the lab's current tests. The user is then sent to the
+ * confirmation. A failed delivery surfaces as the service's error page, as
+ * it does for a report, and nothing is kept.
  */
 export const diagnosticTestsPostController = {
   async handler(request, h) {
@@ -255,14 +287,52 @@ export const diagnosticTestsPostController = {
       return renderDiagnosticTests(h, selections, errors)
     }
 
+    const submission = buildDiagnosticTestsSubmission(
+      request.auth.credentials?.user,
+      selections
+    )
+
     await deliverDiagnosticTestsSubmission({
-      submission: buildDiagnosticTestsSubmission(
-        request.auth.credentials?.user,
-        selections
-      ),
+      submission,
       logger: request.logger
     })
+    await saveLabDiagnosticTests(request, h, selections)
 
-    return renderDiagnosticTests(h, selections)
+    request.yar.set(CONFIRMATION_SESSION_KEY, {
+      referenceNumber: submission.referenceNumber
+    })
+
+    return h
+      .redirect(DIAGNOSTIC_TESTS_CONFIRMATION_PATH)
+      .code(statusCodes.seeOther)
+  }
+}
+
+/**
+ * Shown once the tests are submitted, like the report journeys'
+ * confirmation: the reference to quote and what happens next. Without a
+ * submission in this session there is nothing to confirm, so the user is
+ * sent to the page itself, as the report journeys send them to their start.
+ */
+export const diagnosticTestsConfirmationGetController = {
+  handler(request, h) {
+    const refused = redirectWithoutAnimalHealthRegulations(request, h)
+
+    if (refused) {
+      return refused
+    }
+
+    const confirmation = request.yar.get(CONFIRMATION_SESSION_KEY)
+
+    if (!confirmation?.referenceNumber) {
+      return h.redirect(DIAGNOSTIC_TESTS_PATH)
+    }
+
+    return h.view('diagnostic-tests/confirmation', {
+      pageTitle: DIAGNOSTIC_TESTS_CONFIRMATION_TITLE,
+      referenceNumber: confirmation.referenceNumber,
+      submissionGuidance: SUBMISSION_GUIDANCE,
+      submissionWelcomePath: POST_SIGN_IN_PATH
+    })
   }
 }

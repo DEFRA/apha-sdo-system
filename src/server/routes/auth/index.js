@@ -2,6 +2,7 @@ import {
   defraIdCallbackController,
   entraCallbackController,
   frontChannelLogoutController,
+  manageAccountController,
   noAccessController,
   signInChooseGetController,
   signInChoosePostController,
@@ -135,6 +136,13 @@ const routes = [
     options: {
       auth: { mode: 'try' }
     }
+  },
+  // A link rather than a form like sign-out: all another site could do with
+  // it is cause one extra token refresh.
+  {
+    method: 'GET',
+    path: AUTH_PATHS.MANAGE_ACCOUNT,
+    ...manageAccountController
   }
 ]
 

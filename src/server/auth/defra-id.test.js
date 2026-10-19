@@ -4,14 +4,16 @@ import * as openid from 'openid-client'
 const mocks = vi.hoisted(() => ({
   createOidcConfig: vi.fn(),
   postLogin: vi.fn(),
-  ensureValidToken: vi.fn()
+  ensureValidToken: vi.fn(),
+  refreshToken: vi.fn()
 }))
 
 vi.mock('@defra/hapi-auth-oidc', async (importOriginal) => ({
   ...(await importOriginal()),
   createOidcConfig: mocks.createOidcConfig,
   postLogin: mocks.postLogin,
-  ensureValidToken: mocks.ensureValidToken
+  ensureValidToken: mocks.ensureValidToken,
+  refreshToken: mocks.refreshToken
 }))
 
 const { DEFRA_ID_STATE_COOKIE_NAME } = await import('./auth-constants.js')
@@ -19,6 +21,7 @@ const {
   clearDefraIdOidcConfigCache,
   completeDefraIdLogin,
   ensureValidDefraIdToken,
+  getAccountManagementUrl,
   getDefraIdEndSessionEndpoint,
   getDefraIdOidcConfig,
   getDefraIdOrigins,
@@ -74,6 +77,7 @@ beforeEach(() => {
   mocks.createOidcConfig.mockReset()
   mocks.postLogin.mockReset()
   mocks.ensureValidToken.mockReset()
+  mocks.refreshToken.mockReset()
   mocks.createOidcConfig.mockResolvedValue(createOidcConfiguration())
 })
 
@@ -301,6 +305,55 @@ describe('ensureValidDefraIdToken', () => {
     expect(scope).toBe('openid offline_access client-id')
     expect(givenLogger).toBe(logger)
     await expect(getOidcConfig()).resolves.toBeInstanceOf(openid.Configuration)
+    expect(mocks.refreshToken).not.toHaveBeenCalled()
+  })
+
+  test('refreshes a revoked token straight away, whatever its expiry', async () => {
+    const token = {
+      accessToken: 'access',
+      refreshToken: 'refresh',
+      revoked: true
+    }
+    const refreshed = { accessToken: 'new-access', refreshToken: 'new-refresh' }
+    const logger = { info: vi.fn() }
+    mocks.refreshToken.mockResolvedValue(refreshed)
+
+    await expect(
+      ensureValidDefraIdToken(token, { settings, logger })
+    ).resolves.toEqual({ token: refreshed, refreshed: true })
+
+    const [refreshTokenValue, getOidcConfig, scope, givenLogger] =
+      mocks.refreshToken.mock.calls[0]
+    expect(refreshTokenValue).toBe('refresh')
+    expect(scope).toBe('openid offline_access client-id')
+    expect(givenLogger).toBe(logger)
+    await expect(getOidcConfig()).resolves.toBeInstanceOf(openid.Configuration)
+    expect(mocks.ensureValidToken).not.toHaveBeenCalled()
+  })
+
+  test('lets a failed refresh of a revoked token surface to the session', async () => {
+    mocks.refreshToken.mockRejectedValue(new Error('Customer Identity down'))
+
+    await expect(
+      ensureValidDefraIdToken(
+        { accessToken: 'access', refreshToken: 'refresh', revoked: true },
+        { settings }
+      )
+    ).rejects.toThrow('Customer Identity down')
+  })
+})
+
+describe('getAccountManagementUrl', () => {
+  const url = 'https://your-account.example/management'
+
+  test('offers Your Defra account to a Customer Identity user', () => {
+    expect(getAccountManagementUrl({ provider: 'defraId' }, url)).toBe(url)
+  })
+
+  test('offers nothing to an Entra user or where no URL is configured', () => {
+    expect(getAccountManagementUrl({ provider: 'entraId' }, url)).toBeNull()
+    expect(getAccountManagementUrl(null, url)).toBeNull()
+    expect(getAccountManagementUrl({ provider: 'defraId' }, '')).toBeNull()
   })
 })
 

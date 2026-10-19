@@ -2,7 +2,8 @@ import path from 'node:path'
 import { readFileSync } from 'node:fs'
 
 import { config } from '#/config/config.js'
-import { AUTH_PROVIDERS } from '#/server/auth/auth-constants.js'
+import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
+import { getAccountManagementUrl } from '#/server/auth/defra-id.js'
 import { identityRows } from '#/server/common/helpers/identity-rows.js'
 import { buildBreadcrumbs } from './build-breadcrumbs.js'
 import { createLogger } from '#/server/common/helpers/logging/logger.js'
@@ -17,17 +18,15 @@ const manifestPath = path.join(
 let viteManifest
 
 /**
- * Your Defra account, for users who signed in with Defra Customer Identity.
+ * Where links to Your Defra account point, for users who signed in with
+ * Defra Customer Identity. They go through this service, which revokes the
+ * session's token on the way so roles changed there are read on return.
  * Entra users have no account there, and an environment without the URL
  * configured gets no link rather than a broken one.
  * @param {{ provider?: string } | null} user - the session user
  */
 export function accountManagementUrlFor(user) {
-  if (user?.provider !== AUTH_PROVIDERS.DEFRA_ID) {
-    return null
-  }
-
-  return config.get('auth.defraId.accountManagementUrl') || null
+  return getAccountManagementUrl(user) ? AUTH_PATHS.MANAGE_ACCOUNT : null
 }
 
 export function context(request) {
