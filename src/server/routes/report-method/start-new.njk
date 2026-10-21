@@ -1,0 +1,43 @@
+{#
+  Confirms starting a new web form report when the user has one saved: what
+  the saved report holds, a warning button to start afresh (which discards
+  it) and a secondary button to continue the saved report instead. Laid out
+  like the engine's own confirmation for removing an entry.
+#}
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/button/macro.njk" import govukButton %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-full">
+      <h1 class="govuk-heading-l">
+        <span class="govuk-caption-l">{{ caption }}</span>
+        {{ heading }}
+      </h1>
+
+      <p class="govuk-body">You have a saved web form report that has not been submitted. {{ draftDescription }}</p>
+      <p class="govuk-body govuk-!-margin-bottom-6">Starting a new report discards the saved one. This cannot be undone.</p>
+
+      <form method="post" action="{{ formAction }}" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        <div class="govuk-button-group">
+          {{ govukButton({
+            text: confirmText,
+            name: "confirm",
+            value: "true",
+            classes: "govuk-button--warning",
+            preventDoubleClick: true
+          }) }}
+
+          {{ govukButton({
+            text: continueText,
+            href: continueHref,
+            classes: "govuk-button--secondary"
+          }) }}
+        </div>
+      </form>
+    </div>
+  </div>
+{% endblock %}

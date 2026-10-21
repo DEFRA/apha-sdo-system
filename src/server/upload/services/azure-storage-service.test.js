@@ -2,14 +2,19 @@ import { EventEmitter } from 'node:events'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { azureStorageService } from './azure-storage-service.js'
+import {
+  azureStorageService,
+  submissionsFolder,
+  submissionsFolderPrefix
+} from './azure-storage-service.js'
 
 const { mockGetAzureBlobClient, mockAzureConfig, mockLogger } = vi.hoisted(
   () => ({
     mockGetAzureBlobClient: vi.fn(),
     mockAzureConfig: {
       enabled: true,
-      containerName: 'test-container'
+      containerName: 'test-container',
+      blobPrefix: 'landingzone'
     },
     mockLogger: {
       info: vi.fn(),
@@ -82,6 +87,34 @@ describe('azureStorageService', () => {
     mockGetAzureBlobClient.mockReset()
     mockAzureConfig.enabled = true
     mockAzureConfig.containerName = 'test-container'
+    mockAzureConfig.blobPrefix = 'landingzone'
+  })
+
+  describe('submissionsFolder', () => {
+    it('is the configured folder without surrounding slashes', () => {
+      mockAzureConfig.blobPrefix = ' /landingzone/ '
+
+      expect(submissionsFolder()).toBe('landingzone')
+      expect(submissionsFolderPrefix()).toBe('landingzone/')
+    })
+
+    it('strips any run of slashes, keeping those within the folder', () => {
+      mockAzureConfig.blobPrefix = '///sdo/landingzone///'
+
+      expect(submissionsFolder()).toBe('sdo/landingzone')
+
+      mockAzureConfig.blobPrefix = '////'
+
+      expect(submissionsFolder()).toBe('')
+      expect(submissionsFolderPrefix()).toBe('')
+    })
+
+    it('is empty when none is configured', () => {
+      mockAzureConfig.blobPrefix = ''
+
+      expect(submissionsFolder()).toBe('')
+      expect(submissionsFolderPrefix()).toBe('')
+    })
   })
 
   describe('uploadFile', () => {
@@ -121,6 +154,9 @@ describe('azureStorageService', () => {
         'test-container'
       )
       expect(containerClient.createIfNotExists).toHaveBeenCalledWith()
+      expect(containerClient.getBlockBlobClient).toHaveBeenCalledWith(
+        'landingzone/test.xlsx'
+      )
       expect(blockBlobClient.upload).toHaveBeenCalledWith(
         file.buffer,
         file.buffer.length,
@@ -139,7 +175,7 @@ describe('azureStorageService', () => {
       expect(result).toMatchObject({
         success: true,
         uploadId,
-        blobName: file.originalname,
+        blobName: `landingzone/${file.originalname}`,
         url: 'https://test.blob.core.windows.net/test-container/test.xlsx',
         plainUrl: 'https://test.blob.core.windows.net/test-container/test.xlsx',
         size: file.buffer.length,
@@ -165,7 +201,7 @@ describe('azureStorageService', () => {
       })
 
       expect(containerClient.getBlockBlobClient).toHaveBeenCalledWith(
-        'preferred.json'
+        'landingzone/preferred.json'
       )
       expect(blockBlobClient.upload).toHaveBeenCalledWith(
         file.buffer,
@@ -200,12 +236,53 @@ describe('azureStorageService', () => {
       const result = await azureStorageService.uploadFile('upload-3', file)
 
       expect(containerClient.getBlockBlobClient).toHaveBeenCalledWith(
-        'from-hapi.csv'
+        'landingzone/from-hapi.csv'
       )
       expect(result).toMatchObject({
-        blobName: 'from-hapi.csv',
+        blobName: 'landingzone/from-hapi.csv',
         contentType: 'text/csv'
       })
+    })
+
+    it('groups the blobs of a submission under its prefix within the folder', async () => {
+      const { blobServiceClient, containerClient, blockBlobClient } =
+        createMockBlobServiceClient()
+
+      mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
+
+      const result = await azureStorageService.uploadFile(
+        'upload-3a',
+        Buffer.from('{}'),
+        { blobPrefix: 'REF-1', originalName: 'submission.json' }
+      )
+
+      expect(containerClient.getBlockBlobClient).toHaveBeenCalledWith(
+        'landingzone/REF-1/submission.json'
+      )
+      expect(result.blobName).toBe('landingzone/REF-1/submission.json')
+      // The grouping prefix is not persisted as metadata
+      expect(
+        blockBlobClient.upload.mock.calls[0][2].metadata
+      ).not.toHaveProperty('blobPrefix')
+    })
+
+    it('writes to the container root when no folder is configured', async () => {
+      mockAzureConfig.blobPrefix = ''
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient()
+
+      mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
+
+      const result = await azureStorageService.uploadFile(
+        'upload-3b',
+        Buffer.from('{}'),
+        { blobPrefix: 'REF-1', originalName: 'submission.json' }
+      )
+
+      expect(containerClient.getBlockBlobClient).toHaveBeenCalledWith(
+        'REF-1/submission.json'
+      )
+      expect(result.blobName).toBe('REF-1/submission.json')
     })
 
     it('uploads a raw Buffer input', async () => {
@@ -226,7 +303,7 @@ describe('azureStorageService', () => {
         expect.any(Object)
       )
       expect(result).toMatchObject({
-        blobName: 'raw.bin',
+        blobName: 'landingzone/raw.bin',
         contentType: 'application/octet-stream'
       })
     })
@@ -258,7 +335,7 @@ describe('azureStorageService', () => {
         Buffer.from('stream data').length,
         expect.any(Object)
       )
-      expect(result.blobName).toBe('stream.txt')
+      expect(result.blobName).toBe('landingzone/stream.txt')
 
       streamToBufferSpy.mockRestore()
     })
@@ -408,10 +485,10 @@ describe('azureStorageService', () => {
   })
 
   describe('listFiles', () => {
-    it('lists files and passes the prefix to Azure', async () => {
+    it('lists files and passes the prefix to Azure, within the submissions folder', async () => {
       const blobs = [
         {
-          name: 'folder/a.csv',
+          name: 'landingzone/folder/a.csv',
           properties: {
             contentLength: 12,
             lastModified: new Date('2026-07-28T10:00:00.000Z'),
@@ -421,7 +498,7 @@ describe('azureStorageService', () => {
           metadata: { type: 'spreadsheet' }
         },
         {
-          name: 'folder/b.json',
+          name: 'landingzone/folder/b.json',
           properties: {
             contentLength: 18,
             lastModified: new Date('2026-07-28T10:10:00.000Z'),
@@ -443,13 +520,13 @@ describe('azureStorageService', () => {
       const result = await azureStorageService.listFiles('folder/')
 
       expect(containerClient.listBlobsFlat).toHaveBeenCalledWith({
-        prefix: 'folder/'
+        prefix: 'landingzone/folder/'
       })
       expect(result).toEqual({
         success: true,
         files: [
           {
-            name: 'folder/a.csv',
+            name: 'landingzone/folder/a.csv',
             size: 12,
             lastModified: new Date('2026-07-28T10:00:00.000Z'),
             contentType: 'text/csv',
@@ -457,7 +534,7 @@ describe('azureStorageService', () => {
             metadata: { type: 'spreadsheet' }
           },
           {
-            name: 'folder/b.json',
+            name: 'landingzone/folder/b.json',
             size: 18,
             lastModified: new Date('2026-07-28T10:10:00.000Z'),
             contentType: 'application/json',
@@ -484,6 +561,20 @@ describe('azureStorageService', () => {
       await expect(azureStorageService.listFiles()).rejects.toThrow(
         'List files failed: list failed'
       )
+
+      expect(containerClient.listBlobsFlat).toHaveBeenCalledWith({
+        prefix: 'landingzone/'
+      })
+    })
+
+    it('lists the whole container when no folder is configured', async () => {
+      mockAzureConfig.blobPrefix = ''
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient()
+
+      mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
+
+      await azureStorageService.listFiles()
 
       expect(containerClient.listBlobsFlat).toHaveBeenCalledWith({})
     })
@@ -523,26 +614,31 @@ describe('azureStorageService', () => {
   })
 
   describe('getContainerStats', () => {
-    it('aggregates blob counts and sizes', async () => {
+    it('aggregates blob counts and sizes of the submissions folder', async () => {
       const blobs = [
         { properties: { contentLength: 1024 } },
         { properties: { contentLength: 2048 } },
         { properties: { contentLength: 0 } }
       ]
-      const { blobServiceClient } = createMockBlobServiceClient({
-        containerClient: {
-          listBlobsFlat: vi.fn().mockReturnValue(createBlobIterator(blobs))
-        }
-      })
+      const { blobServiceClient, containerClient } =
+        createMockBlobServiceClient({
+          containerClient: {
+            listBlobsFlat: vi.fn().mockReturnValue(createBlobIterator(blobs))
+          }
+        })
 
       mockGetAzureBlobClient.mockResolvedValue(blobServiceClient)
 
       await expect(azureStorageService.getContainerStats()).resolves.toEqual({
         success: true,
         containerName: 'test-container',
+        folder: 'landingzone',
         totalFiles: 3,
         totalSize: 3072,
         totalSizeFormatted: '3 KB'
+      })
+      expect(containerClient.listBlobsFlat).toHaveBeenCalledWith({
+        prefix: 'landingzone/'
       })
     })
 

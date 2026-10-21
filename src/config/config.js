@@ -8,6 +8,7 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const fourHoursMs = 14400000
 const oneWeekMs = 604800000
+const fourWeeksMs = 4 * oneWeekMs
 
 const isProduction = process.env.NODE_ENV === 'production'
 const isTest = process.env.NODE_ENV === 'test'
@@ -201,6 +202,12 @@ export const config = convict({
       format: 'url',
       default: 'http://localhost:3000',
       env: 'FORMS_ENGINE_BASE_URL'
+    },
+    draftTtl: {
+      doc: 'How long a saved web form report is kept after it was last saved, in milliseconds (see src/server/forms/services/report-draft-cache-service.js)',
+      format: Number,
+      default: fourWeeksMs,
+      env: 'REPORT_DRAFT_TTL'
     }
   },
   appBaseUrl: {
@@ -421,8 +428,14 @@ export const config = convict({
       containerName: {
         doc: 'Azure Blob container that receives submissions',
         format: String,
-        default: 'uploads',
+        default: 'sdo',
         env: 'AZURE_CONTAINER_NAME'
+      },
+      blobPrefix: {
+        doc: 'Folder within the container that receives submissions. Empty writes to the container root.',
+        format: String,
+        default: 'landingzone',
+        env: 'AZURE_BLOB_PREFIX'
       }
     }
   },

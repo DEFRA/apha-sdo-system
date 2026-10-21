@@ -1,9 +1,13 @@
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { reportTypes } from '#/server/forms/report-types.js'
-import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
 import { getLabDiagnosticTests } from '../diagnostic-tests/lab-diagnostic-tests.js'
+import { LABORATORY_DETAILS_PATH } from '../diagnostic-tests/laboratory-details.js'
 import { DEFINED_LAB_DIAGNOSTIC_TESTS } from '#/test-helpers/lab-diagnostic-tests.js'
+import {
+  dropWebFormDraft,
+  saveWebFormDraft
+} from '#/test-helpers/web-form-draft.js'
 import {
   UPDATE_DIAGNOSTIC_TESTS,
   VIEW_SUBMISSION_HISTORY
@@ -283,13 +287,13 @@ describe('submission welcome routes', () => {
       expect(headers.location).toBe('/submission-welcome')
     })
 
-    test('Should open the diagnostic tests page when update diagnostic tests is selected', async () => {
+    test('Should open the laboratory details page, the first step of the diagnostic tests, when update diagnostic tests is selected', async () => {
       const { statusCode, headers } = await postSubmissionWelcome({
         submissionAction: UPDATE_DIAGNOSTIC_TESTS
       })
 
       expect(statusCode).toBe(statusCodes.redirect)
-      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
     test('Should offer diagnostic tests only when the user can submit Animal Health Regulations', async () => {
@@ -460,13 +464,13 @@ describe('submission welcome routes', () => {
       expect(headers.location).toBe('/bat-rabies')
     })
 
-    test('Should still open the diagnostic tests page', async () => {
+    test('Should still open the diagnostic tests journey', async () => {
       const { headers } = await postSubmissionWelcome(
         { submissionAction: UPDATE_DIAGNOSTIC_TESTS },
         authWithJourneys(['AHR'])
       )
 
-      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
   })
 
@@ -477,5 +481,25 @@ describe('submission welcome routes', () => {
       expect.stringContaining('value="animal-health-regulations"')
     )
     expect(result).not.toEqual(expect.stringContaining(BANNER_HEADING))
+  })
+
+  test('Should not mention a saved web form report; that is for how to report', async () => {
+    const user = auth.credentials.user
+
+    await saveWebFormDraft(server, user)
+
+    try {
+      const { result } = await getSubmissionWelcome()
+
+      expect(result).not.toEqual(
+        expect.stringContaining('govuk-notification-banner')
+      )
+      expect(result).not.toEqual(expect.stringContaining('saved'))
+      expect(result).toEqual(
+        expect.stringContaining('value="animal-health-regulations"')
+      )
+    } finally {
+      await dropWebFormDraft(server, user)
+    }
   })
 })

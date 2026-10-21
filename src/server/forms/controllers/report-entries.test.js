@@ -6,9 +6,9 @@ import {
   answerData,
   answerHtml,
   answersSoFar,
-  clearAnswersAfter,
   countConsistencyErrors,
   disallowedListAnswers,
+  dropDisallowedAnswers,
   entriesCountText,
   entriesErrors,
   entriesOf,
@@ -21,7 +21,6 @@ import {
   recognitionOf,
   entryEvaluationState,
   entryName,
-  entryPageAnswersChanged,
   entryPageHref,
   entryPagePath,
   entryPagesOf,
@@ -547,6 +546,49 @@ describe('report entries', () => {
       ).toBe(ENTRY_PATHS.country)
     })
 
+    test('Should only look at the pages before the one given', () => {
+      const country = pageOf(model, ENTRY_PATHS.country)
+      const numbers = pageOf(model, ENTRY_PATHS.numbers)
+      const otherSpecies = pageOf(model, ENTRY_PATHS.otherSpecies)
+      const entry = buildOtherSpeciesEntry({
+        otherSpecies: undefined,
+        country: undefined
+      })
+
+      // Both the other species and the country are missing: only the
+      // pages before the one given are reported
+      expect(firstIncompleteEntryPage(model, entry, numbers).path).toBe(
+        ENTRY_PATHS.otherSpecies
+      )
+      expect(firstIncompleteEntryPage(model, entry, country).path).toBe(
+        ENTRY_PATHS.otherSpecies
+      )
+      expect(
+        firstIncompleteEntryPage(model, entry, otherSpecies)
+      ).toBeUndefined()
+
+      // Nothing missing before the counts, which are themselves unanswered
+      expect(
+        firstIncompleteEntryPage(
+          model,
+          buildEntry({ positiveSamples: undefined }),
+          numbers
+        )
+      ).toBeUndefined()
+    })
+
+    test('Should look at every page when the one given is not relevant to the entry', () => {
+      const otherSpecies = pageOf(model, ENTRY_PATHS.otherSpecies)
+
+      expect(
+        firstIncompleteEntryPage(
+          model,
+          buildEntry({ country: undefined }),
+          otherSpecies
+        ).path
+      ).toBe(ENTRY_PATHS.country)
+    })
+
     test('Should not want the other species of a species on the list', () => {
       expect(isEntryComplete(model, buildEntry())).toBe(true)
       expect(isEntryComplete(model, buildOtherSpeciesEntry())).toBe(true)
@@ -588,52 +630,76 @@ describe('report entries', () => {
   })
 
   describe('changing an earlier answer', () => {
-    const species = pageOf(model, ENTRY_PATHS.species)
-    const numbers = pageOf(model, ENTRY_PATHS.numbers)
+    const MYCOPLASMA = 'Mycoplasma gallisepticum / M. meleagridis'
 
-    test("Should notice when a page's answers differ from the entry's", () => {
-      const entry = buildEntry()
+    test('Should keep every answer that still fits', () => {
+      // Another pathogen reported for cattle: the species still fits
+      const entry = buildEntry({
+        pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+        added: true
+      })
 
-      expect(
-        entryPageAnswersChanged(species, entry, { species: 'Domestic cattle' })
-      ).toBe(false)
-      expect(
-        entryPageAnswersChanged(species, entry, { species: 'Turkey' })
-      ).toBe(true)
-      expect(
-        entryPageAnswersChanged(numbers, entry, {
-          submissionsWithQualifyingTest: 12,
-          submissionsWithPositiveSamples: 3,
-          positiveSamples: 6
-        })
-      ).toBe(true)
+      expect(dropDisallowedAnswers(model, entry)).toEqual(entry)
     })
 
-    test('Should count a page never answered as changed', () => {
+    test('Should drop a species the new pathogen is not reported for, keeping the rest', () => {
+      const { species, ...kept } = buildEntry({
+        pathogen: MYCOPLASMA,
+        added: true
+      })
+
+      expect(species).toBe('Domestic cattle')
+      expect(dropDisallowedAnswers(model, { species, ...kept })).toEqual(kept)
+    })
+
+    test('Should keep an Other species and its name for any pathogen', () => {
+      const entry = buildOtherSpeciesEntry({ pathogen: MYCOPLASMA })
+
+      expect(dropDisallowedAnswers(model, entry)).toEqual(entry)
+    })
+
+    test('Should drop the other species once the species is on the list', () => {
       expect(
-        entryPageAnswersChanged(
-          species,
-          { itemId: 'new' },
-          { species: 'Domestic cattle' }
+        dropDisallowedAnswers(
+          model,
+          buildOtherSpeciesEntry({ species: 'Domestic cattle' })
         )
-      ).toBe(true)
-      expect(entryPageAnswersChanged(species)).toBe(false)
+      ).toEqual(buildEntry({ itemId: SECOND_ENTRY_ID }))
     })
 
-    test('Should drop the answers of every page after the one changed', () => {
-      expect(
-        clearAnswersAfter(model, species, buildOtherSpeciesEntry())
-      ).toEqual({
+    test('Should drop a species and the other species it no longer needs together', () => {
+      // A species dropped as not offered takes the other species with it,
+      // since without a species the other species page is not relevant
+      const entry = buildOtherSpeciesEntry({
+        species: 'Domestic cattle',
+        pathogen: MYCOPLASMA
+      })
+
+      expect(dropDisallowedAnswers(model, entry)).toEqual({
         itemId: SECOND_ENTRY_ID,
-        pathogen: 'Tritrichomonas foetus',
-        species: 'Other'
+        pathogen: MYCOPLASMA,
+        country: 'England',
+        submissionsWithQualifyingTest: 12,
+        submissionsWithPositiveSamples: 3,
+        positiveSamples: 5
       })
     })
 
-    test('Should keep every answer when the last page is the one changed', () => {
+    test('Should leave an entry with nothing to drop as it is', () => {
       const entry = buildEntry()
 
-      expect(clearAnswersAfter(model, numbers, entry)).toEqual(entry)
+      expect(dropDisallowedAnswers(model, entry)).toEqual(entry)
+      expect(dropDisallowedAnswers(model, { itemId: 'new' })).toEqual({
+        itemId: 'new'
+      })
+    })
+
+    test('Should leave the answers of the page just answered to be refused', () => {
+      const species = pageOf(model, ENTRY_PATHS.species)
+      const entry = buildEntry({ species: 'Chicken' })
+
+      expect(dropDisallowedAnswers(model, entry, species)).toEqual(entry)
+      expect(dropDisallowedAnswers(model, entry)).not.toHaveProperty('species')
     })
   })
 

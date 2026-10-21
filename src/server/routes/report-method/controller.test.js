@@ -2,7 +2,21 @@ import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
-import { REPORT_METHOD, howToReportPath } from './controller.js'
+import {
+  dropWebFormDraft,
+  readWebFormDraft,
+  saveWebFormDraft
+} from '#/test-helpers/web-form-draft.js'
+import { buildState } from '#/test-helpers/web-form-model.js'
+import {
+  CONTINUE_SAVED_TEXT,
+  CONTINUE_WEB_FORM_TEXT,
+  REPORT_METHOD,
+  START_NEW_CONFIRM_TEXT,
+  START_NEW_HEADING,
+  howToReportPath,
+  startNewWebFormPath
+} from './controller.js'
 
 // Animal Health Regulations is held back until the lab defines its tests
 vi.mock(
@@ -120,6 +134,11 @@ describe('report method routes', () => {
       expect(result).toEqual(
         expect.stringContaining('How would you like to report?')
       )
+      // Full width, like Submission Welcome and the web form pages
+      expect(result).toEqual(expect.stringContaining('govuk-grid-column-full'))
+      expect(result).not.toEqual(
+        expect.stringContaining('govuk-grid-column-two-thirds')
+      )
       expect(result).toEqual(
         expect.stringContaining(
           'href="/submission-welcome" class="govuk-back-link"'
@@ -143,6 +162,13 @@ describe('report method routes', () => {
       )
       expect(/name="crumb" value="[^"]+"/.test(result)).toBe(true)
       expect(result).not.toEqual(expect.stringContaining('There is a problem'))
+      // Nothing saved: nothing to continue, and no banner about it
+      expect(result).not.toEqual(
+        expect.stringContaining(`value="${REPORT_METHOD.CONTINUE_WEB_FORM}"`)
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining('govuk-notification-banner')
+      )
     })
 
     test('Should sit under the report type in the breadcrumbs', async () => {
@@ -249,6 +275,15 @@ describe('report method routes', () => {
       expect(headers.location).toBe(HOW_TO_REPORT)
     })
 
+    test('Should ask again when continue is posted with nothing saved', async () => {
+      const { statusCode, headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.CONTINUE_WEB_FORM
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(HOW_TO_REPORT)
+    })
+
     test('Should not exist for a report type that is upload only', async () => {
       await get(HOW_TO_REPORT)
 
@@ -270,6 +305,236 @@ describe('report method routes', () => {
 
       expect(statusCode).toBe(statusCodes.redirect)
       expect(headers.location).toBe(AUTH_PATHS.NO_ACCESS)
+    })
+  })
+
+  describe('with a saved web form report', () => {
+    const START_NEW = startNewWebFormPath(ahr)
+    const WEB_FORM = `/${ahr.webFormSlug}`
+    const RESUME_AT_ENTRIES = `${WEB_FORM}/report-entries`
+    const user = auth.credentials.user
+
+    beforeEach(async () => {
+      await saveWebFormDraft(server, user)
+    })
+
+    afterEach(async () => {
+      await dropWebFormDraft(server, user)
+    })
+
+    test('startNewWebFormPath names the confirmation for a report type', () => {
+      expect(START_NEW).toBe(
+        '/animal-health-regulations/how-to-report/start-new'
+      )
+    })
+
+    test('Should say so, and offer to continue it first', async () => {
+      const { result } = await get(HOW_TO_REPORT)
+
+      expect(result).toEqual(
+        expect.stringContaining('govuk-notification-banner')
+      )
+      // The text runs the full width of the banner
+      expect(result).toEqual(
+        expect.stringContaining('app-notification-banner-full-width')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          `You have a saved ${ahr.title} that has not been submitted.`
+        )
+      )
+      expect(result).toEqual(
+        expect.stringContaining('It covers August 2026 and has 1 entry.')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(`value="${REPORT_METHOD.CONTINUE_WEB_FORM}"`)
+      )
+      expect(result).toEqual(expect.stringContaining(CONTINUE_WEB_FORM_TEXT))
+      // Ahead of the other options
+      expect(
+        result.indexOf(`value="${REPORT_METHOD.CONTINUE_WEB_FORM}"`)
+      ).toBeLessThan(result.indexOf(`value="${REPORT_METHOD.FILE_UPLOAD}"`))
+    })
+
+    test('Should offer a new web form report in place of the web form, with a warning', async () => {
+      const { result } = await get(HOW_TO_REPORT)
+
+      expect(result).toEqual(
+        expect.stringContaining('Start a new web form report')
+      )
+      expect(result).toEqual(
+        expect.stringContaining('Your saved web form report will be discarded')
+      )
+      expect(result).not.toEqual(expect.stringContaining('Complete a web form'))
+      expect(result).toEqual(
+        expect.stringContaining(`value="${REPORT_METHOD.WEB_FORM}"`)
+      )
+      expect(result).toEqual(expect.stringContaining('Upload a file'))
+    })
+
+    test('Should still offer the web form, plainly, to a user with nothing saved', async () => {
+      await dropWebFormDraft(server, user)
+
+      const { result } = await get(HOW_TO_REPORT)
+
+      expect(result).toEqual(expect.stringContaining('Complete a web form'))
+      expect(result).not.toEqual(
+        expect.stringContaining('Start a new web form report')
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(`value="${REPORT_METHOD.CONTINUE_WEB_FORM}"`)
+      )
+    })
+
+    test('Should continue the saved report at the report entries page', async () => {
+      const { statusCode, headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.CONTINUE_WEB_FORM
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(RESUME_AT_ENTRIES)
+    })
+
+    test('Should continue at the first entry when only the report date was saved', async () => {
+      await saveWebFormDraft(server, user, buildState([]))
+
+      const { headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.CONTINUE_WEB_FORM
+      })
+
+      expect(headers.location).toBe(`${WEB_FORM}/which-pathogen-was-tested`)
+    })
+
+    test('Should ask for confirmation before the web form journey starts', async () => {
+      const { statusCode, headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.WEB_FORM
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(START_NEW)
+    })
+
+    test('Should still go straight into the upload journey', async () => {
+      const { headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.FILE_UPLOAD
+      })
+
+      expect(headers.location).toBe(`/${ahr.slug}`)
+    })
+
+    describe(`GET ${START_NEW}`, () => {
+      test('Should describe the saved report and offer to start afresh or continue it', async () => {
+        const { result, statusCode } = await get(START_NEW)
+
+        expect(statusCode).toBe(statusCodes.ok)
+        expect(result).toEqual(expect.stringContaining(START_NEW_HEADING))
+        expect(result).toEqual(
+          expect.stringContaining('govuk-grid-column-full')
+        )
+        expect(result).toEqual(expect.stringContaining(ahr.title))
+        expect(result).toEqual(
+          expect.stringContaining('It covers August 2026 and has 1 entry.')
+        )
+        expect(result).toEqual(
+          expect.stringContaining(
+            'Starting a new report discards the saved one.'
+          )
+        )
+        expect(result).toEqual(expect.stringContaining(START_NEW_CONFIRM_TEXT))
+        expect(result).toEqual(expect.stringContaining('govuk-button--warning'))
+        expect(result).toEqual(expect.stringContaining(CONTINUE_SAVED_TEXT))
+        expect(result).toEqual(
+          expect.stringContaining(`href="${RESUME_AT_ENTRIES}"`)
+        )
+        expect(result).toEqual(expect.stringContaining(`action="${START_NEW}"`))
+        expect(result).toEqual(
+          expect.stringContaining(
+            `href="${HOW_TO_REPORT}" class="govuk-back-link"`
+          )
+        )
+        expect(/name="crumb" value="[^"]+"/.test(result)).toBe(true)
+      })
+
+      test('Should start the web form straight away when nothing is saved', async () => {
+        await dropWebFormDraft(server, user)
+
+        const { statusCode, headers } = await get(START_NEW)
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(WEB_FORM)
+      })
+
+      test('Should not exist for a report type that is upload only', async () => {
+        const { statusCode } = await get(startNewWebFormPath(batRabies))
+
+        expect(statusCode).toBe(statusCodes.notFound)
+      })
+
+      test('Should refuse a user whose roles do not grant the report type', async () => {
+        const { statusCode, headers } = await get(
+          START_NEW,
+          authWithJourneys(['BR'])
+        )
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(AUTH_PATHS.NO_ACCESS)
+      })
+    })
+
+    describe(`POST ${START_NEW}`, () => {
+      test('Should discard the saved report and start the web form when confirmed', async () => {
+        const { statusCode, headers } = await post(START_NEW, {
+          confirm: 'true'
+        })
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(WEB_FORM)
+        await expect(readWebFormDraft(server, user)).resolves.toBeNull()
+
+        // With nothing saved any more, the web form is offered plainly again
+        const { result } = await get(HOW_TO_REPORT)
+        expect(result).toEqual(expect.stringContaining('Complete a web form'))
+      })
+
+      test('Should keep the saved report and continue it when not confirmed', async () => {
+        const { statusCode, headers } = await post(START_NEW)
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(RESUME_AT_ENTRIES)
+        await expect(readWebFormDraft(server, user)).resolves.toEqual(
+          expect.objectContaining({ reportDate__month: 8 })
+        )
+      })
+
+      test('Should continue at the first entry when only the report date was saved', async () => {
+        await saveWebFormDraft(server, user, buildState([]))
+
+        const { headers } = await post(START_NEW)
+
+        expect(headers.location).toBe(`${WEB_FORM}/which-pathogen-was-tested`)
+      })
+
+      test('Should start the web form straight away when nothing is saved', async () => {
+        await get(START_NEW)
+        await dropWebFormDraft(server, user)
+
+        const { statusCode, headers } = await post(START_NEW, {
+          confirm: 'true'
+        })
+
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(WEB_FORM)
+      })
+
+      test('Should not exist for a report type that is upload only', async () => {
+        await get(START_NEW)
+
+        const { statusCode } = await post(startNewWebFormPath(batRabies), {
+          confirm: 'true'
+        })
+
+        expect(statusCode).toBe(statusCodes.notFound)
+      })
     })
   })
 })

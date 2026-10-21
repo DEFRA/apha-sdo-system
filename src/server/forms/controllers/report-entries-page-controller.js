@@ -17,6 +17,7 @@ import {
   entryPagesOf,
   entryTitleOf,
   findEntry,
+  incompleteEntryErrors,
   newEntryId,
   removeEntry,
   tooManyEntriesError
@@ -43,7 +44,10 @@ const CANCEL_TEXT = 'Cancel'
  * that a user part way through their first entry is not turned back. That
  * the report has at least one entry and that every entry is complete is
  * checked here when the user continues, and again by the summary page when
- * they submit.
+ * they submit. While an entry is incomplete (a saved report picked up again
+ * part-way through an entry, or a pathogen change that dropped the species)
+ * another is not offered: the one there is has to be completed or removed
+ * first, and the page says so if adding another is posted anyway.
  */
 export class ReportEntriesPageController extends QuestionPageController {
   removeViewName = 'item-delete'
@@ -122,6 +126,12 @@ export class ReportEntriesPageController extends QuestionPageController {
       }
 
       if (action === ADD_ANOTHER_ACTION) {
+        const incomplete = this.incompleteEntryErrors(entries)
+
+        if (incomplete.length) {
+          return this.renderList(request, context, h, incomplete)
+        }
+
         if (entries.length >= MAX_ENTRIES) {
           return this.renderList(request, context, h, [
             tooManyEntriesError(this.model)
@@ -144,6 +154,15 @@ export class ReportEntriesPageController extends QuestionPageController {
     }
   }
 
+  /**
+   * One error per entry with a question left unanswered, linking to it and
+   * returning here
+   * @param {object[]} entries - the entries in form state
+   */
+  incompleteEntryErrors(entries) {
+    return incompleteEntryErrors(this.model, entries, { returnUrl: this.href })
+  }
+
   renderList(request, context, h, errors) {
     const translator = this.getTranslator(request)
     const { t } = translator
@@ -164,6 +183,8 @@ export class ReportEntriesPageController extends QuestionPageController {
       context,
       errors,
       entryCards,
+      // Another entry is only offered once every entry is complete
+      canAddAnother: !this.incompleteEntryErrors(entries).length,
       addAnotherText: ADD_ANOTHER_ENTRY_TEXT,
       continueText: CONTINUE_TEXT,
       t
