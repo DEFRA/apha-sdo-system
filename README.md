@@ -124,7 +124,7 @@ What the user sees:
 - Roles for more than one lab are refused (no lab, no journeys) and logged as a
   warning at sign-in; choosing a lab is not supported yet.
 - **Update diagnostic tests** is offered to every signed-in user, whatever
-  their roles, and opens `/diagnostic-tests` (see
+  their roles, and opens `/diagnostic-tests/laboratory-details` (see
   [Diagnostic tests](#diagnostic-tests)).
 
 A group membership change takes effect at the next token refresh. The
@@ -206,7 +206,15 @@ AUTH_ENTRA_ID_AUTHORIZATION_MODE=tenant-only
 AUTH_ENTRA_ID_TENANT_WIDE_ACCESS_CONFIRMED=true
 SESSION_COOKIE_SECURE=true
 SESSION_CACHE_ENGINE=redis
+AZURE_STORAGE_ENABLED=true
+AZURE_CONTAINER_NAME=sdo
+AZURE_BLOB_PREFIX=landingzone
 ```
+
+`AZURE_CONTAINER_NAME` and `AZURE_BLOB_PREFIX` are also the defaults, so
+submissions land in `sdo/landingzone` unless set otherwise. The storage
+account credentials (`AZURE_STORAGE_CONNECTION_STRING`, or the `AZURE_*`
+account or identity values) are secrets.
 
 Do not set `AUTH_ENTRA_ID_OIDC_CONFIGURATION_URL` in DEV. CDP must also supply
 `NODE_USE_ENV_PROXY=1` with its normal proxy settings.
@@ -436,6 +444,11 @@ Sessions use Catbox memory locally and Redis in deployed environments. Set
 Memory sessions must not be used in CDP because they are not shared between
 application instances and are lost when an instance restarts.
 
+The same cache holds the forms engine's state for a report in progress. An
+Animal Health Regulations web form report is kept there for the signed-in
+person rather than the session, so it survives signing out (see "Saved web
+form reports" under Submission output).
+
 ## File uploads
 
 File uploads are handled by `@defra/forms-engine-plugin` and
@@ -456,8 +469,12 @@ filenames containing `virus`.
 On submit, the confirmation page shows the user their reference number (the
 `showReferenceNumber` option of every journey definition), and
 `src/server/forms/services/output-service.js` copies the scanned file from S3
-to the Azure container as `{referenceNumber}/{filename}` and writes
-`{referenceNumber}/submission.json` alongside:
+to the landing zone of the Azure container as
+`landingzone/{referenceNumber}/{filename}` and writes
+`landingzone/{referenceNumber}/submission.json` alongside. The container
+(`AZURE_CONTAINER_NAME`, `sdo`) and the folder within it (`AZURE_BLOB_PREFIX`,
+`landingzone`) are configuration; every record this service delivers, the
+diagnostic tests declaration included, goes under that folder.
 
 ```json
 {
@@ -506,9 +523,11 @@ A web-form report covers one month but any number of entries, one per
 pathogen, species and country. After the report date, the user answers the
 pathogen, species, country and count pages for an entry, then reaches the
 report entries page (`/animal-health-regulations-web-form/report-entries`),
-which lists the entries added so far and offers **Add another entry to the
-report** or **Continue**. Entries can be changed and removed there and from
-check your answers. The species offered depend on the pathogen chosen (the
+which lists the entries added so far and offers **Continue** and, once every
+entry is complete, **Add another entry to the report**; while an entry is
+incomplete (a saved report picked up again part-way through one, say) it has
+to be completed or removed first. Entries can be changed and removed there
+and from check your answers. The species offered depend on the pathogen chosen (the
 conditions on the species list items in the definition), and the counts must
 be whole numbers that are not negative and agree with each other: no more
 submissions with a positive sample than submissions with a qualifying test,
@@ -516,12 +535,19 @@ and at least as many positive samples as submissions with one. Each entry
 page lists the answers
 given so far (the report date and the entry's earlier answers) above its
 question, each with a Change link, and has a back link to the entry's
-previous page; changing an earlier answer drops the answers that followed it
-in that entry, so those questions are asked again. The page's caption says
+previous page. Changing an earlier answer, from an entry page, the report
+entries page or check your answers, keeps the answers that followed it; only
+an answer the change made impossible is dropped, and the user is asked for
+that alone before being returned to where the change came from. Changing
+the species to "Other" asks for the other species; changing it back to one on
+the list drops the other species; changing the pathogen to one the species
+is not reported for asks for the species again, keeping the country and
+counts. The page's caption says
 whether the entry is being added ("Adding entry 2") or, once it has been
 completed before, edited ("Editing entry 2/3"). Beside **Continue**, **Save
 and exit** returns to Submission Welcome without saving the page being left
-(earlier pages are already saved), and while adding, **Abort new entry**
+(earlier pages are already saved; see "Saved web form reports" below for how
+long they are kept), and while adding, **Abort new entry**
 (a form post, so it cannot be triggered from another site) drops the entry
 and returns to the report entries page; when it was the only one the whole
 report is abandoned, report date included, and the user returns to
@@ -567,43 +593,102 @@ for how entries are kept in form state and validated). A report needs at least
 one entry and every entry complete before it can continue or be submitted;
 `MAX_ENTRIES` in that module caps how many can be added.
 
-Locally, Azurite receives the same blobs (see `AZURE_*` in `.env.example`).
+Locally, Azurite receives the same blobs under the same `sdo/landingzone`
+layout (see `AZURE_*` in `.env.example`); `npm run storage:check` lists them.
+
+### Saved web form reports
+
+The forms engine keeps a journey's answers in the session cache under the
+browser's session id, which signing out or in resets, so an upload report
+part-way through is lost when the user signs out. A web form report is not:
+`src/server/forms/services/report-draft-cache-service.js` is the engine's
+`CacheService` with the web form's state keyed by the signed-in person, their
+laboratory and the journey instead, the way DEFRA's grants-ui keys form state
+by business and grant. One saved report per person per laboratory, kept
+until it is submitted, abandoned with **Abort new entry**, replaced with a
+new one, or left for `REPORT_DRAFT_TTL` (28 days by default) since it was
+last saved; every save starts that time again. It lives in the session cache
+(Redis in CDP; memory locally, so a restart drops it). The upload journeys,
+whose file is only held in the uploader's staging bucket for so long, keep
+the engine's per-session state.
+
+Submission Welcome says nothing of a saved report. Choosing **Submit an
+Animal Health Regulations report** there opens "How would you like to
+report", which tells a person with a saved report so in a banner, with its
+month, how many entries it has and when it was last saved, and offers
+**Continue your saved web form report** first: it opens the report entries
+page when the report has entries, the first entry page when only the report
+date was answered. The web form option becomes **Start a new web form
+report**, which asks for confirmation at
+`/animal-health-regulations/how-to-report/start-new` before the saved report
+is discarded; **Continue saved report** there picks it up instead. The upload
+option is unaffected.
 
 ## Diagnostic tests
 
-Before a lab reports, it defines the qualifying tests it uses for each
-pathogen and whether each is UKAS accredited. **Update diagnostic tests** on
-Submission Welcome opens `/diagnostic-tests` ("Define your qualifying tests
-in use"), a plain page served by `src/server/routes/diagnostic-tests` rather
-than a forms-engine journey. The pathogens are the ones of the Animal Health
-Regulations report; the tests are APHA's qualifying diagnostic tests for
-them, listed in `src/server/routes/diagnostic-tests/qualifying-tests.js`.
+Before a lab reports, it gives its laboratory details and defines the
+qualifying tests it uses for each pathogen and whether each is UKAS
+accredited. **Update diagnostic tests** on Submission Welcome opens
+`/diagnostic-tests/laboratory-details`, then `/diagnostic-tests` ("Define
+your qualifying tests in use"): plain pages served by
+`src/server/routes/diagnostic-tests` rather than a forms-engine journey. The
+pathogens are the ones of the Animal Health Regulations report; the tests are
+APHA's qualifying diagnostic tests for them, listed in
+`src/server/routes/diagnostic-tests/qualifying-tests.js`.
 
-Each pathogen is a collapsed accordion section of checkboxes, one per test.
-Ticking a test reveals an **Accreditation** select (Yes, No, Unknown), which
-must be answered for every ticked test; at least one test must be ticked. On
-an error the page comes back with the sections holding a tick or an error
-opened. **Go back** returns to Submission Welcome. Once the lab has defined
-its tests, the page opens with them already ticked and their sections open,
-so updating them starts from what the lab has now.
+### Laboratory details
+
+The first page ("Laboratory details", `laboratory-details.js` and
+`laboratory-details-controller.js`) asks for the lab's address, using the
+Design System's [address pattern](https://design-system.service.gov.uk/patterns/addresses/)
+(address line 1, address line 2 (optional), town or city, county (optional),
+postcode), and its UKAS accreditation number (optional). The reporting person
+and the laboratory name are not asked for: they come from the sign-in, as
+shown above every page, and go into the record from there.
+
+Answers are trimmed. Address line 1, town or city and postcode are required;
+text fields take up to 100 characters; the postcode must be a full UK
+postcode and is kept upper case with one space (`SY23 1ND`); the UKAS number,
+when given, must be up to 10 digits. Errors are shown in an error summary and
+next to their field. Valid answers are kept in the session
+(`diagnosticTestsLaboratoryDetails`) and the user goes on to the tests.
+**Back** returns to Submission Welcome. The page starts from what was
+answered earlier in the session, otherwise from the lab's last submitted
+details (see the store below), otherwise blank.
+
+### Qualifying tests
+
+The tests page needs the laboratory details in the session: opened or posted
+without them (directly, or once the session has expired) it sends the user to
+`/diagnostic-tests/laboratory-details`. Each pathogen is a collapsed accordion
+section of checkboxes, one per test. Ticking a test reveals an
+**Accreditation** select (Yes, No, Unknown), which must be answered for every
+ticked test; at least one test must be ticked. On an error the page comes
+back with the sections holding a tick or an error opened. **Go back** returns
+to the laboratory details. Once the lab has defined its tests, the page opens
+with them already ticked and their sections open, so updating them starts
+from what the lab has now.
 
 **Continue** delivers the declaration the way a report's record is
-delivered: the record below is written to the Azure container as
-`{referenceNumber}/submission.json`
+delivered: the record below is written to the landing zone of the Azure
+container as `landingzone/{referenceNumber}/submission.json`
 (`src/server/routes/diagnostic-tests/diagnostic-tests-output.js`, reusing the
 output service's `uploadSubmissionJson`). There is no data file. When
 `AZURE_STORAGE_ENABLED` is off the submission is only logged
-(`Diagnostic tests submission received`). The tests are then kept as the
-lab's current tests (see below) and the user is sent to
+(`Diagnostic tests submission received`). The tests and laboratory details
+are then kept as the lab's current ones (see below), the laboratory details
+are cleared from the session, and the user is sent to
 `/diagnostic-tests/confirmation`, laid out like the report journeys'
 confirmation: a "Form submitted" panel with the reference number, what
 happens next, and a link back to Submission Welcome. The reference is kept in
-the session, so refreshing the confirmation still shows it; without one, the
-confirmation sends the user to `/diagnostic-tests`. A failed delivery shows
-the error page and keeps nothing.
+the session, so refreshing the confirmation still shows it; opening either
+page of the journey again ends it. Without one, the confirmation sends the
+user to `/diagnostic-tests/laboratory-details`. A failed delivery shows the
+error page and keeps nothing.
 
 The record follows the shape of `submission.json` with just the fields that
-apply, and one row per ticked test so the rows can be written out as
+apply, the laboratory details as one block (a blank optional field is
+`null`), and one row per ticked test so the rows can be written out as
 spreadsheet lines downstream:
 
 ```json
@@ -614,6 +699,16 @@ spreadsheet lines downstream:
   "userId": "<Entra object ID>",
   "organisationId": "TestLab1",
   "submittedAt": "2026-09-24T14:04:00.000Z",
+  "laboratoryDetails": {
+    "reportingPerson": "Caroline Ford",
+    "laboratoryName": "TestLab1",
+    "addressLine1": "Y Buarth",
+    "addressLine2": null,
+    "townOrCity": "Aberystwyth",
+    "county": "Ceredigion",
+    "postcode": "SY23 1ND",
+    "ukasAccreditationNumber": "9934"
+  },
   "diagnosticTestsData": [
     {
       "pathogen": "Mycoplasma gallisepticum / M. meleagridis",
@@ -631,9 +726,10 @@ spreadsheet lines downstream:
 
 ### First-time setup
 
-A lab's first step, once registered, is to define its diagnostic tests.
-Until it has, Animal Health Regulations reports cannot be submitted; other
-report types are not affected.
+A lab's first step, once registered, is to give its laboratory details and
+define its diagnostic tests, which are submitted together. Until it has,
+Animal Health Regulations reports cannot be submitted; other report types are
+not affected.
 
 - **Submission Welcome** leaves out Animal Health Regulations and shows a
   GOV.UK notification banner asking the user to set up their diagnostic
@@ -655,7 +751,9 @@ the store below whether the lab has tests.
 ### Lab diagnostic tests store (temporary)
 
 `src/server/routes/diagnostic-tests/lab-diagnostic-tests.js` answers "what
-are this lab's current diagnostic tests?" for the gate and the page:
+are this lab's current diagnostic tests?" for the gate and the tests page,
+and "what were this lab's last laboratory details?" for the laboratory
+details page:
 
 - `getLabDiagnosticTests(request)` resolves to `null` when the user's lab
   (`organisationId`) has never defined its tests, otherwise to its tests in
@@ -663,6 +761,12 @@ are this lab's current diagnostic tests?" for the gate and the page:
   `parseDiagnosticTestsPayload` reads a posted form into). It is read once
   per request and memoised on `request.app`.
 - `saveLabDiagnosticTests(request, h, selections)` replaces the lab's tests.
+- `getLabDetails(request)` resolves to `null` when nothing is kept for the
+  lab, otherwise to its laboratory details with every field present (`null`
+  where it has no text). The page validates what it is posted, so this is
+  only a starting point.
+- `saveLabDetails(request, h, details)` replaces the lab's laboratory
+  details.
 - `registerLabDiagnosticTestsStore(server)` runs when the diagnostic tests
   routes are registered.
 
@@ -670,11 +774,15 @@ Until the backend can be queried, the store keeps the tests in an encrypted
 `diagnosticTests` cookie (iron, the session cookie password, one year,
 `HttpOnly`, `SameSite=Lax`), as `[organisationId, { testKey: accreditation }]`
 pairs for the two most recently saved labs, which keeps it well inside the
-4 KB browser limit. Sign-out leaves it in place. Tests no longer in the
-catalogue and accreditations no longer offered are dropped on read. Because
-it is a cookie, the tests are only known to the browser that saved them:
-another user of the same lab, or another browser, is asked to set them up
-again. To start over locally, delete the `diagnosticTests` cookie.
+4 KB browser limit. The laboratory details have their own `laboratoryDetails`
+cookie with the same options and cap, as `[organisationId, { field: text }]`
+pairs with blank fields left out; sharing one cookie could pass the limit.
+Sign-out leaves both in place. Tests no longer in the catalogue and
+accreditations no longer offered are dropped on read. Because they are
+cookies, the tests and details are only known to the browser that saved
+them: another user of the same lab, or another browser, is asked to set them
+up again. To start over locally, delete the `diagnosticTests` and
+`laboratoryDetails` cookies.
 
 Tests that open Animal Health Regulations journeys mock the store as
 "defined" with `test-helpers/lab-diagnostic-tests.js`, the seam a backend
@@ -690,14 +798,15 @@ client will be mocked at too.
    `registerLabDiagnosticTestsStore` can set up the client. Every caller
    already awaits the store and the memo keeps it to one call per request,
    so the gate, Submission Welcome, the journey guard and the page stay as
-   they are.
+   they are. `getLabDetails` and `saveLabDetails` move the same way, from
+   the `laboratoryDetails` block of the record.
 2. **Mapping rows to the catalogue.** `diagnosticTestsData` carries pathogen
    and test names. The (pathogen, test) pair is unique (several pathogens
    share test names such as PCR), so rows can be matched on both. Better:
    add each test's stable `key` to the rows of the record (as `testKey`) so
    the backend can return it and the mapping survives a test being renamed.
    Not done yet, because it changes the downstream record.
-3. **Removing the cookie.** Delete the cookie registration and internals in
+3. **Removing the cookies.** Delete the cookie registrations and internals in
    the store and the cookie-specific cases in `lab-diagnostic-tests.test.js`.
    The two-lab cap goes with it. Tests mocking the store, including the
    shared helper, keep working.

@@ -1,9 +1,9 @@
 {#
   The report entries page of the Animal Health Regulations web form, rendered
   by ReportEntriesPageController: one summary card per entry added so far,
-  then "Add another entry to the report" and "Continue". Follows the engine's
-  own repeat-list-summary template so it sits in the journey like any other
-  page.
+  then "Continue" and, once every entry is complete, "Add another entry to
+  the report". Follows the engine's own repeat-list-summary template so it
+  sits in the journey like any other page.
 #}
 {% extends baseLayoutPath %}
 
@@ -41,13 +41,16 @@
             preventDoubleClick: true
           }) }}
 
-          {{ govukButton({
-            text: addAnotherText,
-            name: "action",
-            value: "add-another",
-            classes: "govuk-button--secondary",
-            preventDoubleClick: true
-          }) }}
+          {# Not while an entry is incomplete: it is completed or removed first #}
+          {% if canAddAnother %}
+            {{ govukButton({
+              text: addAnotherText,
+              name: "action",
+              value: "add-another",
+              classes: "govuk-button--secondary",
+              preventDoubleClick: true
+            }) }}
+          {% endif %}
         </div>
       </form>
     </div>

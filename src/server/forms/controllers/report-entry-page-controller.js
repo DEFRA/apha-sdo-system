@@ -8,14 +8,13 @@ import {
   ENTRIES_KEY,
   SAVE_AND_EXIT_TEXT,
   answersSoFar,
-  clearAnswersAfter,
   countConsistencyErrors,
   disallowedListAnswers,
+  dropDisallowedAnswers,
   entriesOf,
   entriesPageOf,
   entryCaption,
   entryEvaluationState,
-  entryPageAnswersChanged,
   entryPagePath,
   entryPageHref,
   entryPagesOf,
@@ -24,7 +23,6 @@ import {
   isAddedEntry,
   isEntryComplete,
   newEntryId,
-  pruneEntry,
   relevantEntryPages,
   removeEntry,
   upsertEntry
@@ -36,10 +34,6 @@ import Joi from 'joi'
 
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
-
-// Set on request.app by getStateFromValidForm, read by proceed: whether the
-// post changed an answer the entry already had
-const ANSWERS_CHANGED = 'reportEntryAnswersChanged'
 
 // Rendered above the page heading rather than among the questions
 const NOTIFICATION_BANNER = 'NotificationBanner'
@@ -66,9 +60,11 @@ const BACK_TEXT_KEY = 'common.back'
  *
  * Above its question, each page lists the answers given so far, the report
  * date and the entry's earlier answers, each with a Change link back to its
- * page. Changing an earlier answer drops the answers that followed it, so
- * the user is asked those questions again rather than keeping answers given
- * before the change.
+ * page. Changing an earlier answer keeps the answers that followed it; only
+ * an answer the change made impossible is dropped (a species the new
+ * pathogen is not reported for, the other species once the species is on
+ * the list), and the user is asked only what is then missing before being
+ * returned to where the change came from.
  *
  * Beside Continue, "Save and exit" leaves for Submission Welcome without
  * saving the page being left (the pages before it are already saved), and
@@ -157,11 +153,14 @@ export class ReportEntryPageController extends QuestionPageController {
   }
 
   /**
-   * Stores the page's answers in the entry, and the entry in the list. When
-   * they differ from the answers the entry had, the answers of the pages
-   * that follow are dropped so those questions are asked again. Answers of
-   * pages no longer relevant to the entry are dropped too. An entry that is
-   * complete has been added to the report, from now on it is edited.
+   * Stores the page's answers in the entry, and the entry in the list. The
+   * entry's other answers are kept, except those the new answers make
+   * impossible: a list answer no longer among the options offered (a
+   * species the new pathogen is not reported for) and the answers of pages
+   * no longer relevant (the other species once the species is on the list).
+   * This page's own answers are kept as given, for makePostRouteHandler to
+   * refuse if they are not offered. An entry that is complete has been
+   * added to the report, from now on it is edited.
    */
   getStateFromValidForm(request, state, payload) {
     const itemId = this.getItemId(request)
@@ -173,22 +172,15 @@ export class ReportEntryPageController extends QuestionPageController {
     const entries = entriesOf(state)
     const existing = findEntry(entries, itemId) ?? { itemId }
     const answers = this.collection.getStateFromValidForm(payload)
-    const changed = entryPageAnswersChanged(this, existing, answers)
 
-    let updated = { ...existing, ...answers, itemId }
-
-    if (changed) {
-      updated = clearAnswersAfter(this.model, this, updated)
-    }
-
-    updated = pruneEntry(this.model, updated)
+    const updated = dropDisallowedAnswers(
+      this.model,
+      { ...existing, ...answers, itemId },
+      this
+    )
 
     if (isEntryComplete(this.model, updated)) {
       updated[ADDED_KEY] = true
-    }
-
-    if (request.app) {
-      request.app[ANSWERS_CHANGED] = changed
     }
 
     return { [ENTRIES_KEY]: upsertEntry(entries, updated) }
@@ -323,27 +315,26 @@ export class ReportEntryPageController extends QuestionPageController {
 
   /**
    * After saving, on to the next page the entry needs answered, then to the
-   * report entries page. A change link's returnUrl is honoured only once the
-   * entry is complete, so changing the species to "Other" still asks for
-   * the other species first. A change made from a later page of the same
-   * entry drops that page's answers along with the rest, so there is
-   * nothing to return to: the entry is walked forward from here instead.
+   * report entries page. A change link's returnUrl is honoured once the
+   * entry has everything the page it returns to needs: changing the species
+   * to "Other" still asks for the other species first, and a pathogen the
+   * species is not reported for asks for the species again. Back to a later
+   * page of this entry, only the pages before it have to be answered; back
+   * to the report entries page or check your answers, all of them.
    */
   async proceed(request, h) {
     const state = await this.getState(request)
     const entry = this.entryOf(request, state)
     const { itemId } = entry
     const { returnUrl } = request.query
-    const returnsToThisEntry = returnUrl?.includes(`/${itemId}`)
-    const changed = request.app?.[ANSWERS_CHANGED] === true
     const redirectTo = (href) => h.redirect(href).code(statusCodes.seeOther)
 
-    if (returnUrl && !(changed && returnsToThisEntry)) {
-      // Back to a later page of this entry with nothing changed: the pages
-      // before it are as complete as when the user was there
-      const incomplete = returnsToThisEntry
-        ? undefined
-        : firstIncompleteEntryPage(this.model, entry)
+    if (returnUrl) {
+      const incomplete = firstIncompleteEntryPage(
+        this.model,
+        entry,
+        this.entryPageReturnedTo(returnUrl, itemId)
+      )
 
       if (incomplete) {
         return redirectTo(entryPageHref(incomplete, itemId, { returnUrl }))
@@ -361,6 +352,18 @@ export class ReportEntryPageController extends QuestionPageController {
       nextPage
         ? entryPageHref(nextPage, itemId)
         : this.getHref(this.entriesPagePath)
+    )
+  }
+
+  /**
+   * The page of this entry a returnUrl goes back to, or undefined when it
+   * goes elsewhere: the report entries page or check your answers.
+   * @param {string} returnUrl - where the change came from
+   * @param {string} itemId - the entry's id
+   */
+  entryPageReturnedTo(returnUrl, itemId) {
+    return this.entryPages.find((page) =>
+      returnUrl.includes(`${page.path}/${itemId}`)
     )
   }
 

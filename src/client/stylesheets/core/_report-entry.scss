@@ -5,6 +5,7 @@
 
 // GOV.UK wraps a notification banner's text at the width of a two-thirds
 // column, for shorter line lengths, even when the banner itself is wider.
+// Also used by "How would you like to report" for its saved report banner.
 .app-notification-banner-full-width .govuk-notification-banner__content > * {
   max-width: none;
 }

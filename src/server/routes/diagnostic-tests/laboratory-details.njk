@@ -1,0 +1,115 @@
+{#
+  "Laboratory details", rendered by the laboratory details controller: the
+  lab's address, as the Design System's address pattern (separate inputs,
+  only line 1, town or city and postcode required), and its UKAS
+  accreditation number. The first step of updating the diagnostic tests.
+#}
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/fieldset/macro.njk" import govukFieldset %}
+{% from "govuk/components/input/macro.njk" import govukInput %}
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds">
+      {% if errors | length %}
+        {{ govukErrorSummary({
+          titleText: "There is a problem",
+          errorList: errors
+        }) }}
+      {% endif %}
+
+      <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+
+      <form method="post" action="{{ formAction }}" novalidate>
+        <input type="hidden" name="crumb" value="{{ crumb }}">
+
+        {% call govukFieldset({
+          legend: {
+            text: "Laboratory address",
+            classes: "govuk-fieldset__legend--m"
+          }
+        }) %}
+          {{ govukInput({
+            label: {
+              text: "Address line 1"
+            },
+            id: fields.addressLine1.id,
+            name: fields.addressLine1.name,
+            value: fields.addressLine1.value,
+            autocomplete: "address-line1",
+            errorMessage: fields.addressLine1.errorMessage
+          }) }}
+
+          {{ govukInput({
+            label: {
+              text: "Address line 2 (optional)"
+            },
+            id: fields.addressLine2.id,
+            name: fields.addressLine2.name,
+            value: fields.addressLine2.value,
+            autocomplete: "address-line2",
+            errorMessage: fields.addressLine2.errorMessage
+          }) }}
+
+          {{ govukInput({
+            label: {
+              text: "Town or city"
+            },
+            classes: "govuk-!-width-two-thirds",
+            id: fields.townOrCity.id,
+            name: fields.townOrCity.name,
+            value: fields.townOrCity.value,
+            autocomplete: "address-level2",
+            errorMessage: fields.townOrCity.errorMessage
+          }) }}
+
+          {{ govukInput({
+            label: {
+              text: "County (optional)"
+            },
+            classes: "govuk-!-width-two-thirds",
+            id: fields.county.id,
+            name: fields.county.name,
+            value: fields.county.value,
+            errorMessage: fields.county.errorMessage
+          }) }}
+
+          {{ govukInput({
+            label: {
+              text: "Postcode"
+            },
+            classes: "govuk-input--width-10",
+            id: fields.postcode.id,
+            name: fields.postcode.name,
+            value: fields.postcode.value,
+            autocomplete: "postal-code",
+            errorMessage: fields.postcode.errorMessage
+          }) }}
+        {% endcall %}
+
+        {{ govukInput({
+          label: {
+            text: "UKAS accreditation number (optional)",
+            classes: "govuk-label--m"
+          },
+          classes: "govuk-input--width-10",
+          id: fields.ukasAccreditationNumber.id,
+          name: fields.ukasAccreditationNumber.name,
+          value: fields.ukasAccreditationNumber.value,
+          inputmode: "numeric",
+          spellcheck: false,
+          errorMessage: fields.ukasAccreditationNumber.errorMessage
+        }) }}
+
+        {{ govukButton({
+          type: "submit",
+          text: "Continue",
+          preventDoubleClick: true
+        }) }}
+      </form>
+    </div>
+  </div>
+{% endblock %}

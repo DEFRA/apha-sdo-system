@@ -20,6 +20,7 @@ import { contentSecurityPolicy } from './plugins/content-security-policy.js'
 import { metrics } from '@defra/cdp-metrics'
 import './forms/dev-nunjucks.js'
 import { services } from './forms/services/index.js'
+import { ReportDraftCacheService } from './forms/services/report-draft-cache-service.js'
 import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
 import { ReportDatePageController } from './forms/controllers/report-date-page-controller.js'
 import { ReportFileUploadPageController } from './forms/controllers/report-file-upload-page-controller.js'
@@ -113,7 +114,15 @@ async function registerFormsEngine(server) {
     plugin: formsEnginePlugin,
     options: {
       baseUrl: config.get('formsEngine.baseUrl'),
-      cache: config.get('session.cache.name'),
+      /**
+       * Form state lives in the session cache. A web form report's state is
+       * keyed by its owner rather than the session, so it outlives sign-out
+       * (see report-draft-cache-service.js).
+       */
+      cache: new ReportDraftCacheService({
+        server,
+        cacheName: config.get('session.cache.name')
+      }),
       /**
        * Options the forms-engine-plugin uses to render Nunjucks templates.
        * The base layout is shared with the rest of the service, and

@@ -12,7 +12,8 @@ export class UploadConfig {
     this.azureConfig = {
       enabled: config.get('azure.storage.enabled'),
       connectionString: config.get('azure.storage.connectionString'),
-      containerName: config.get('azure.storage.containerName')
+      containerName: config.get('azure.storage.containerName'),
+      blobPrefix: config.get('azure.storage.blobPrefix')
     }
 
     this.s3Config = {

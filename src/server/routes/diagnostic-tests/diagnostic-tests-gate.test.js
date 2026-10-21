@@ -9,6 +9,7 @@ import {
   isHeldBackForDiagnosticTests,
   requireDiagnosticTestsFirst
 } from './diagnostic-tests-gate.js'
+import { LABORATORY_DETAILS_PATH } from './laboratory-details.js'
 import { testsByKey } from './qualifying-tests.js'
 
 const ahr = reportTypesBySlug.get('animal-health-regulations')
@@ -185,22 +186,42 @@ describe('diagnostic tests first (end to end)', () => {
   }
 
   /**
-   * Defines TestLab1's tests through the diagnostic tests page, as a user
-   * would, and returns the cookie its browser then holds
+   * Defines TestLab1's tests through the laboratory details and diagnostic
+   * tests pages, as a user would, and returns the cookie its browser then
+   * holds
    */
   async function defineDiagnosticTests() {
     const auth = authFor()
     const page = await server.inject({
       method: 'GET',
-      url: DIAGNOSTIC_TESTS_PATH,
+      url: LABORATORY_DETAILS_PATH,
       auth
     })
     const crumb = cookiesOf(page).get('crumb')
+    const details = await server.inject({
+      method: 'POST',
+      url: LABORATORY_DETAILS_PATH,
+      auth,
+      headers: { cookie: `crumb=${crumb}` },
+      payload: {
+        crumb,
+        addressLine1: 'Y Buarth',
+        townOrCity: 'Aberystwyth',
+        postcode: 'SY23 1ND'
+      }
+    })
+
+    expect(details.statusCode).toBe(statusCodes.seeOther)
+
+    // The crumb, and the session holding the laboratory details
+    const cookie = [...new Map([...cookiesOf(page), ...cookiesOf(details)])]
+      .map(([name, value]) => `${name}=${value}`)
+      .join('; ')
     const submitted = await server.inject({
       method: 'POST',
       url: DIAGNOSTIC_TESTS_PATH,
       auth,
-      headers: { cookie: `crumb=${crumb}` },
+      headers: { cookie },
       payload: {
         crumb,
         tests: 'bhv-fat',

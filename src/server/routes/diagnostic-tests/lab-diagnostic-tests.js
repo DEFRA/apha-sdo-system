@@ -1,13 +1,16 @@
 import { config } from '#/config/config.js'
 
+import { LABORATORY_DETAILS_FIELD_NAMES } from './laboratory-details.js'
 import { ACCREDITATION_OPTIONS, tests } from './qualifying-tests.js'
 
 /**
  * The diagnostic tests a lab currently uses: what decides whether the lab
  * still has to define them before reporting Animal Health Regulations (see
  * diagnostic-tests-gate.js), and what the diagnostic tests page starts from.
+ * Also the lab's last submitted laboratory details, which the laboratory
+ * details page starts from.
  *
- * TEMPORARY: until the backend can be asked, they are kept in a cookie in the
+ * TEMPORARY: until the backend can be asked, they are kept in cookies in the
  * user's browser, so they are only known to the browser that saved them.
  * Nothing outside this module knows that: the functions below are the
  * contract the backend version keeps (async, keyed by the user's lab), and
@@ -15,9 +18,11 @@ import { ACCREDITATION_OPTIONS, tests } from './qualifying-tests.js'
  */
 
 const COOKIE_NAME = 'diagnosticTests'
+const LABORATORY_DETAILS_COOKIE_NAME = 'laboratoryDetails'
 const ONE_YEAR_MS = 31536000000
 
-// A lab's record is up to about 1.2 KB once encrypted. Two labs stay well
+// A lab's tests are up to about 1.2 KB once encrypted, and its laboratory
+// details about as much, so each has its own cookie. Two labs stay well
 // inside the 4 KB a browser allows a cookie; older labs are forgotten.
 const MAX_LABS = 2
 
@@ -25,22 +30,24 @@ const MEMO_KEY = 'labDiagnosticTests'
 
 /**
  * Called when the diagnostic tests routes are registered. Sign-out leaves
- * the cookie in place, so the tests survive signing in again.
+ * the cookies in place, so the tests survive signing in again.
  * @param {import('@hapi/hapi').Server} server
  */
 export function registerLabDiagnosticTestsStore(server) {
   const { password, secure } = config.get('session.cookie')
 
-  server.state(COOKIE_NAME, {
-    ttl: ONE_YEAR_MS,
-    encoding: 'iron',
-    password,
-    path: '/',
-    isSecure: secure,
-    isHttpOnly: true,
-    isSameSite: 'Lax',
-    clearInvalid: true
-  })
+  for (const name of [COOKIE_NAME, LABORATORY_DETAILS_COOKIE_NAME]) {
+    server.state(name, {
+      ttl: ONE_YEAR_MS,
+      encoding: 'iron',
+      password,
+      path: '/',
+      isSecure: secure,
+      isHttpOnly: true,
+      isSameSite: 'Lax',
+      clearInvalid: true
+    })
+  }
 }
 
 function labOf(request) {
@@ -51,11 +58,11 @@ function isRecord(value) {
   return value !== null && typeof value === 'object' && !Array.isArray(value)
 }
 
-// The cookie holds [lab, { testKey: accreditation }] pairs, the most
-// recently saved first. A pair list rather than an object keyed by lab,
-// because an object would reorder labs whose IDs look like numbers.
-function storedLabs(request) {
-  const value = request.state?.[COOKIE_NAME]
+// Each cookie holds [lab, record] pairs, the most recently saved first. A
+// pair list rather than an object keyed by lab, because an object would
+// reorder labs whose IDs look like numbers.
+function storedLabs(request, cookieName) {
+  const value = request.state?.[cookieName]
 
   return Array.isArray(value)
     ? value.filter(
@@ -65,6 +72,21 @@ function storedLabs(request) {
           isRecord(entry[1])
       )
     : []
+}
+
+function storedRecord(request, cookieName) {
+  const lab = labOf(request)
+
+  return lab
+    ? storedLabs(request, cookieName).find(([id]) => id === lab)?.[1]
+    : undefined
+}
+
+// Puts the lab first with its new record, keeping the other labs
+function storeRecord(request, h, cookieName, lab, record) {
+  const others = storedLabs(request, cookieName).filter(([id]) => id !== lab)
+
+  h.state(cookieName, [[lab, record], ...others].slice(0, MAX_LABS))
 }
 
 // Tests no longer in the catalogue and accreditations no longer offered are
@@ -90,11 +112,7 @@ export async function getLabDiagnosticTests(request) {
     return request.app[MEMO_KEY]
   }
 
-  const lab = labOf(request)
-  const record = lab
-    ? storedLabs(request).find(([id]) => id === lab)?.[1]
-    : undefined
-  const selections = selectionsOf(record)
+  const selections = selectionsOf(storedRecord(request, COOKIE_NAME))
 
   request.app[MEMO_KEY] = selections
 
@@ -118,8 +136,54 @@ export async function saveLabDiagnosticTests(request, h, selections) {
   const record = Object.fromEntries(
     selections.map(({ test, accreditation }) => [test.key, accreditation])
   )
-  const others = storedLabs(request).filter(([id]) => id !== lab)
 
-  h.state(COOKIE_NAME, [[lab, record], ...others].slice(0, MAX_LABS))
+  storeRecord(request, h, COOKIE_NAME, lab, record)
   request.app[MEMO_KEY] = selectionsOf(record)
+}
+
+/**
+ * The signed-in user's lab's last submitted laboratory details, with a field
+ * it has no text for as null, or null when nothing is kept for the lab. Only
+ * a starting point for the page, which validates what it is sent.
+ * @param {import('@hapi/hapi').Request} request
+ * @returns {Promise<Record<string, string | null> | null>}
+ */
+export async function getLabDetails(request) {
+  const record = storedRecord(request, LABORATORY_DETAILS_COOKIE_NAME)
+
+  if (!record) {
+    return null
+  }
+
+  const details = Object.fromEntries(
+    LABORATORY_DETAILS_FIELD_NAMES.map((name) => [
+      name,
+      typeof record[name] === 'string' ? record[name] : null
+    ])
+  )
+
+  return Object.values(details).some((value) => value !== null) ? details : null
+}
+
+/**
+ * Records submitted laboratory details as the signed-in user's lab's,
+ * replacing any it had. Blank fields are left out.
+ * @param {import('@hapi/hapi').Request} request
+ * @param {import('@hapi/hapi').ResponseToolkit} h - sets the cookie on the response
+ * @param {Record<string, string | null>} details - normalised answers
+ */
+export async function saveLabDetails(request, h, details) {
+  const lab = labOf(request)
+
+  if (!lab) {
+    return
+  }
+
+  const record = Object.fromEntries(
+    LABORATORY_DETAILS_FIELD_NAMES.filter(
+      (name) => typeof details?.[name] === 'string'
+    ).map((name) => [name, details[name]])
+  )
+
+  storeRecord(request, h, LABORATORY_DETAILS_COOKIE_NAME, lab, record)
 }

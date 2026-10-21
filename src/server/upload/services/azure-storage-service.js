@@ -3,6 +3,46 @@ import { createLogger } from '../../common/helpers/logging/logger.js'
 
 const logger = createLogger()
 
+/**
+ * The folder within the container that submissions are written to
+ * (AZURE_BLOB_PREFIX, "landingzone"), without surrounding slashes. Empty
+ * when submissions go to the container root.
+ */
+export function submissionsFolder() {
+  return trimSlashes((uploadConfig.azureConfig.blobPrefix ?? '').trim())
+}
+
+/**
+ * The value without leading or trailing slashes. Walks the string rather
+ * than matching a regular expression, whose alternatives would backtrack
+ * over a run of slashes.
+ * @param {string} value
+ */
+function trimSlashes(value) {
+  let start = 0
+  let end = value.length
+
+  while (start < end && value[start] === '/') {
+    start += 1
+  }
+
+  while (end > start && value[end - 1] === '/') {
+    end -= 1
+  }
+
+  return value.slice(start, end)
+}
+
+/**
+ * The listing prefix of the submissions folder: "landingzone/", or empty for
+ * the container root.
+ */
+export function submissionsFolderPrefix() {
+  const folder = submissionsFolder()
+
+  return folder ? `${folder}/` : ''
+}
+
 export const azureStorageService = {
   async uploadFile(uploadId, file, metadata = {}) {
     if (!uploadConfig.azureConfig.enabled) {
@@ -18,7 +58,8 @@ export const azureStorageService = {
       await containerClient.createIfNotExists()
 
       // blobPrefix groups the blobs of a submission (e.g. its reference
-      // number); it is not persisted as blob metadata.
+      // number); it is not persisted as blob metadata. The blob sits in the
+      // submissions folder: {folder}/{blobPrefix}/{fileName}.
       const { blobPrefix, ...blobMetadata } = metadata
 
       const fileName =
@@ -26,7 +67,9 @@ export const azureStorageService = {
         file.originalname ||
         file.hapi?.filename ||
         'unnamed-file'
-      const blobName = blobPrefix ? `${blobPrefix}/${fileName}` : fileName
+      const blobName = [submissionsFolder(), blobPrefix, fileName]
+        .filter(Boolean)
+        .join('/')
       const blockBlobClient = containerClient.getBlockBlobClient(blobName)
 
       logger.debug(
@@ -164,7 +207,8 @@ export const azureStorageService = {
   },
 
   /**
-   * List files in Azure container
+   * List files in the submissions folder of the Azure container. The prefix
+   * is relative to that folder.
    */
   async listFiles(prefix = '') {
     if (!uploadConfig.azureConfig.enabled) {
@@ -178,7 +222,8 @@ export const azureStorageService = {
       )
 
       const files = []
-      const options = prefix ? { prefix } : {}
+      const fullPrefix = `${submissionsFolderPrefix()}${prefix}`
+      const options = fullPrefix ? { prefix: fullPrefix } : {}
 
       for await (const blob of containerClient.listBlobsFlat(options)) {
         files.push({
@@ -229,7 +274,7 @@ export const azureStorageService = {
   },
 
   /**
-   * Get container statistics
+   * Statistics of the submissions folder of the container
    */
   async getContainerStats() {
     if (!uploadConfig.azureConfig.enabled) {
@@ -244,8 +289,10 @@ export const azureStorageService = {
 
       let totalSize = 0
       let totalFiles = 0
+      const prefix = submissionsFolderPrefix()
+      const options = prefix ? { prefix } : {}
 
-      for await (const blob of containerClient.listBlobsFlat()) {
+      for await (const blob of containerClient.listBlobsFlat(options)) {
         totalFiles++
         totalSize += blob.properties.contentLength || 0
       }
@@ -253,6 +300,7 @@ export const azureStorageService = {
       return {
         success: true,
         containerName: uploadConfig.azureConfig.containerName,
+        folder: submissionsFolder(),
         totalFiles,
         totalSize,
         totalSizeFormatted: this.formatBytes(totalSize)
