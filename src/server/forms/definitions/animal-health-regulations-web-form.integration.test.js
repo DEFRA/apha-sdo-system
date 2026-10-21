@@ -4,6 +4,7 @@ import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { pathogenSummaryHtml } from '#/server/forms/controllers/report-entries.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
+import { dropWebFormDraft } from '#/test-helpers/web-form-draft.js'
 
 vi.mock('#/server/upload/services/azure-storage-service.js', () => ({
   azureStorageService: { uploadFile: vi.fn() }
@@ -35,11 +36,20 @@ const PAGES = {
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
+const SUBMISSION_WELCOME = '/submission-welcome'
+const HOW_TO_REPORT = `/${ahr.slug}/how-to-report`
+const SAVED_REPORT_HEADING =
+  'You have a saved Animal Health Regulations report that has not been submitted.'
+const CONTINUE_SAVED_REPORT = 'continue-web-form'
+
 const COUNTS = {
   submissionsWithQualifyingTest: '12',
   submissionsWithPositiveSamples: '3',
   positiveSamples: '5'
 }
+
+// A pathogen reported for poultry, not cattle
+const MYCOPLASMA = 'Mycoplasma gallisepticum / M. meleagridis'
 
 /**
  * The JSON written to {referenceNumber}/submission.json
@@ -187,7 +197,11 @@ describe('animal health regulations web form (end to end)', () => {
       .map(([name, value]) => `${name}=${value}`)
       .join('; ')
 
-    return { ...options, auth, headers: { ...options.headers, cookie } }
+    return {
+      ...options,
+      auth: options.auth ?? auth,
+      headers: { ...options.headers, cookie }
+    }
   }
 
   async function get(url) {
@@ -224,6 +238,10 @@ describe('animal health regulations web form (end to end)', () => {
 
     server = await createServer()
     await server.initialize()
+
+    // A web form report is kept for the user rather than the session, so
+    // start the user without one
+    await dropWebFormDraft(server, auth.credentials.user)
   })
 
   afterAll(async () => {
@@ -298,7 +316,39 @@ describe('animal health regulations web form (end to end)', () => {
       action: 'save-and-exit'
     })
     expect(savedAndExited.statusCode).toBe(statusCodes.seeOther)
-    expect(savedAndExited.headers.location).toBe('/submission-welcome')
+    expect(savedAndExited.headers.location).toBe(SUBMISSION_WELCOME)
+
+    // The report is kept for the user, not the browser session. A new
+    // session with the same sign-in (signing out and back in resets the
+    // session cookie) still has the report date. Submission Welcome says
+    // nothing of it; "How would you like to report" does, and offers to
+    // continue the saved report
+    jar.clear()
+
+    const welcomeAgain = await get(SUBMISSION_WELCOME)
+    expect(welcomeAgain.statusCode).toBe(statusCodes.ok)
+    expect(welcomeAgain.result).not.toContain(SAVED_REPORT_HEADING)
+
+    const howToReportWithDraft = await get(HOW_TO_REPORT)
+    expect(howToReportWithDraft.statusCode).toBe(statusCodes.ok)
+    expect(howToReportWithDraft.result).toContain(SAVED_REPORT_HEADING)
+    expect(howToReportWithDraft.result).toContain(
+      'It covers August 2026 and has 0 entries.'
+    )
+    expect(howToReportWithDraft.result).toContain(
+      `value="${CONTINUE_SAVED_REPORT}"`
+    )
+
+    const continued = await post(HOW_TO_REPORT, {
+      reportMethod: CONTINUE_SAVED_REPORT
+    })
+    expect(continued.statusCode).toBe(statusCodes.redirect)
+    expect(continued.headers.location).toBe(PAGES.pathogen)
+
+    const savedDatePage = await get(PAGES.reportDate)
+    expect(savedDatePage.result).toMatch(
+      /name="reportDate__year"[^>]*value="2026"/
+    )
 
     const backAgain = await get(entryPage(PAGES.pathogen, first))
     expect(/<select[\s\S]*?<\/select>/.exec(backAgain.result)[0]).not.toContain(
@@ -355,7 +405,7 @@ describe('animal health regulations web form (end to end)', () => {
     // The species offered depend on the pathogen
     await answer(
       entryPage(PAGES.pathogen, first),
-      { pathogen: 'Mycoplasma gallisepticum / M. meleagridis' },
+      { pathogen: MYCOPLASMA },
       entryPage(PAGES.species, first)
     )
 
@@ -481,16 +531,18 @@ describe('animal health regulations web form (end to end)', () => {
       backHere
     )
 
-    // Changing it drops the answers that followed, which are asked again
+    // Changing it keeps the answers that followed, and comes straight back
+    // too: the country is still there
     await answer(
       withReturnUrl(entryPage(PAGES.otherSpecies, first), backHere),
       { otherSpecies: 'Llama' },
-      entryPage(PAGES.country, first)
+      backHere
     )
 
-    const countryAgain = await get(entryPage(PAGES.country, first))
+    const numbersAgain = await get(backHere)
+    expect(numbersAgain.statusCode).toBe(statusCodes.ok)
     expect(
-      answersSoFar(countryAgain.result).map(([key, value]) => [key, value])
+      answersSoFar(numbersAgain.result).map(([key, value]) => [key, value])
     ).toEqual([
       ['Report Date', 'August 2026'],
       [
@@ -498,20 +550,9 @@ describe('animal health regulations web form (end to end)', () => {
         pathogenSummaryHtml('Tritrichomonas foetus')
       ],
       ['Species', 'Other (please specify on the next page)'],
-      ['Other species', 'Llama']
+      ['Other species', 'Llama'],
+      ['Country', 'England']
     ])
-
-    // The country is gone, so the counts page is not reachable until it is
-    // answered again
-    const countsTooSoon = await get(entryPage(PAGES.numbers, first))
-    expect(countsTooSoon.statusCode).toBe(statusCodes.redirect)
-    expect(countsTooSoon.headers.location).toBe(entryPage(PAGES.country, first))
-
-    await answer(
-      entryPage(PAGES.country, first),
-      { country: 'England' },
-      entryPage(PAGES.numbers, first)
-    )
 
     // Every count is required, and is a whole number that is not negative
     const incomplete = await post(entryPage(PAGES.numbers, first), {
@@ -627,9 +668,9 @@ describe('animal health regulations web form (end to end)', () => {
       'Entry 2'
     ])
 
-    // Changing an answer from the entries page asks the questions that
-    // followed it again, then returns there. Throughout, the pages say the
-    // entry is being edited, and do not offer to abort it
+    // Changing an answer from the entries page keeps the answers that
+    // followed it and returns straight there. The page says the entry is
+    // being edited, and does not offer to abort it
     const editingPage = await get(
       withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
     )
@@ -643,22 +684,84 @@ describe('animal health regulations web form (end to end)', () => {
     await answer(
       withReturnUrl(entryPage(PAGES.species, first), PAGES.entries),
       { species: 'Domestic cattle' },
-      withReturnUrl(entryPage(PAGES.country, first), PAGES.entries)
+      PAGES.entries
     )
+
+    const afterSpeciesChange = await get(PAGES.entries)
+    expect(summaryCards(afterSpeciesChange.result)[0]).toEqual({
+      title: 'Entry 1',
+      values: [
+        pathogenSummaryHtml('Tritrichomonas foetus'),
+        'Domestic cattle',
+        'England',
+        '12',
+        '3',
+        '5'
+      ]
+    })
+
+    // Changing the pathogen to one the species is not reported for asks for
+    // the species again, and only that: the country and counts are kept
+    await answer(
+      withReturnUrl(entryPage(PAGES.pathogen, first), PAGES.entries),
+      { pathogen: MYCOPLASMA },
+      withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
+    )
+
+    // Until the species is given the entry is incomplete: its later pages
+    // send the user back to the species, and the report cannot continue
+    const countsTooSoon = await get(entryPage(PAGES.numbers, first))
+    expect(countsTooSoon.statusCode).toBe(statusCodes.redirect)
+    expect(countsTooSoon.headers.location).toBe(entryPage(PAGES.species, first))
+
+    const blockedBySpecies = await post(PAGES.entries, { action: 'continue' })
+    expect(blockedBySpecies.statusCode).toBe(statusCodes.ok)
+    expect(errorSummaryLinks(blockedBySpecies.result)).toEqual([
+      {
+        text: 'Complete entry 1 or remove it',
+        href: withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
+      }
+    ])
 
     const reAsked = await get(
-      withReturnUrl(entryPage(PAGES.country, first), PAGES.entries)
+      withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
     )
+    expect(reAsked.statusCode).toBe(statusCodes.ok)
     expect(entryCaption(reAsked.result)).toBe('Editing entry 1/2')
+    expect(selectOptions(reAsked.result)).toEqual([
+      'Chicken',
+      'Turkey',
+      'Other'
+    ])
 
     await answer(
-      withReturnUrl(entryPage(PAGES.country, first), PAGES.entries),
-      { country: 'England' },
-      withReturnUrl(entryPage(PAGES.numbers, first), PAGES.entries)
+      withReturnUrl(entryPage(PAGES.species, first), PAGES.entries),
+      { species: 'Turkey' },
+      PAGES.entries
+    )
+
+    const afterPathogenChange = await get(PAGES.entries)
+    expect(summaryCards(afterPathogenChange.result)[0]).toEqual({
+      title: 'Entry 1',
+      values: [
+        pathogenSummaryHtml(MYCOPLASMA),
+        'Turkey',
+        'England',
+        '12',
+        '3',
+        '5'
+      ]
+    })
+
+    // Back to the original pathogen, which asks for the species once more
+    await answer(
+      withReturnUrl(entryPage(PAGES.pathogen, first), PAGES.entries),
+      { pathogen: 'Tritrichomonas foetus' },
+      withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
     )
     await answer(
-      withReturnUrl(entryPage(PAGES.numbers, first), PAGES.entries),
-      COUNTS,
+      withReturnUrl(entryPage(PAGES.species, first), PAGES.entries),
+      { species: 'Domestic cattle' },
       PAGES.entries
     )
 
@@ -723,6 +826,23 @@ describe('animal health regulations web form (end to end)', () => {
       }
     ])
 
+    // Nor is another entry offered, or started, until it is completed or
+    // removed
+    const withIncomplete = await get(PAGES.entries)
+    expect(withIncomplete.result).not.toContain(
+      'Add another entry to the report'
+    )
+    expect(withIncomplete.result).toContain('Continue')
+
+    const addAnyway = await post(PAGES.entries, { action: 'add-another' })
+    expect(addAnyway.statusCode).toBe(statusCodes.ok)
+    expect(errorSummaryLinks(addAnyway.result)).toEqual([
+      {
+        text: 'Complete entry 3 or remove it',
+        href: withReturnUrl(entryPage(PAGES.species, third), PAGES.entries)
+      }
+    ])
+
     const blockedSubmit = await post(PAGES.summary, {})
     expect(blockedSubmit.statusCode).toBe(statusCodes.seeOther)
     expect(blockedSubmit.headers.location).toBe(PAGES.entries)
@@ -746,6 +866,7 @@ describe('animal health regulations web form (end to end)', () => {
     expect(pageHeading(afterRemoval.result)).toBe(
       'You have added 2 entries to the report'
     )
+    expect(afterRemoval.result).toContain('Add another entry to the report')
 
     await answer(PAGES.entries, { action: 'continue' }, PAGES.summary)
 
@@ -758,7 +879,9 @@ describe('animal health regulations web form (end to end)', () => {
     expect(summaryPage.result).toContain(
       'Change my diagnostic tests and UKAS Accreditation my laboratory provides'
     )
-    expect(summaryPage.result).toContain('href="/diagnostic-tests"')
+    expect(summaryPage.result).toContain(
+      'href="/diagnostic-tests/laboratory-details"'
+    )
     expect(summaryPage.result).not.toContain('govuk-grid-column-two-thirds')
 
     const answers = [
@@ -810,12 +933,12 @@ describe('animal health regulations web form (end to end)', () => {
     )
     expect(summaryPage.result).not.toContain('Uploaded')
 
-    // Changing an answer from check your answers asks the questions that
-    // followed it again, then returns there
+    // Changing an answer with check your answers to return to keeps the
+    // answers that followed it and returns straight there
     await answer(
       withReturnUrl(entryPage(PAGES.country, second), PAGES.summary),
       { country: 'Scotland' },
-      withReturnUrl(entryPage(PAGES.numbers, second), PAGES.summary)
+      PAGES.summary
     )
     await answer(
       withReturnUrl(entryPage(PAGES.numbers, second), PAGES.summary),
@@ -826,6 +949,19 @@ describe('animal health regulations web form (end to end)', () => {
       },
       PAGES.summary
     )
+
+    const changedSummary = await get(PAGES.summary)
+    expect(summaryCards(changedSummary.result)[1]).toEqual({
+      title: 'Entry 2',
+      values: [
+        pathogenSummaryHtml('Bovine Herpes Virus 1 (BHV-1)'),
+        'Domestic cattle',
+        'Scotland',
+        '2',
+        '1',
+        '1'
+      ]
+    })
 
     // Submitting delivers submission.json, and nothing else, to Azure
     const submitted = await post(PAGES.summary, {
@@ -887,6 +1023,65 @@ describe('animal health regulations web form (end to end)', () => {
     const statusPage = await get(PAGES.status)
     expect(statusPage.statusCode).toBe(statusCodes.ok)
     expect(statusPage.result).toContain(submission.referenceNumber)
+
+    // Submitted, the report is no longer a saved one to continue
+    const howToReportAfterSubmit = await get(HOW_TO_REPORT)
+    expect(howToReportAfterSubmit.result).not.toContain(SAVED_REPORT_HEADING)
+    expect(howToReportAfterSubmit.result).not.toContain(
+      `value="${CONTINUE_SAVED_REPORT}"`
+    )
+  })
+
+  test('Should keep an uploaded report with the browser session, as before', async () => {
+    const batRabiesAuth = {
+      ...auth,
+      credentials: {
+        ...auth.credentials,
+        user: { ...auth.credentials.user, journeys: ['BR'] }
+      }
+    }
+    const reportDate = '/bat-rabies/report-date'
+
+    jar.clear()
+
+    const page = await server.inject(
+      withCookies({ method: 'GET', url: reportDate, auth: batRabiesAuth })
+    )
+    rememberCookies(page)
+    expect(page.statusCode).toBe(statusCodes.ok)
+
+    const answered = await server.inject(
+      withCookies({
+        method: 'POST',
+        url: reportDate,
+        auth: batRabiesAuth,
+        payload: {
+          reportDate__month: '8',
+          reportDate__year: '2026',
+          crumb: jar.get('crumb')
+        }
+      })
+    )
+    rememberCookies(answered)
+    expect(answered.statusCode).toBe(statusCodes.seeOther)
+
+    const sameSession = await server.inject(
+      withCookies({ method: 'GET', url: reportDate, auth: batRabiesAuth })
+    )
+    expect(sameSession.result).toMatch(
+      /name="reportDate__year"[^>]*value="2026"/
+    )
+
+    // A new session starts afresh: the upload journeys are not kept for the user
+    jar.clear()
+
+    const newSession = await server.inject(
+      withCookies({ method: 'GET', url: reportDate, auth: batRabiesAuth })
+    )
+    expect(newSession.statusCode).toBe(statusCodes.ok)
+    expect(newSession.result).not.toMatch(
+      /name="reportDate__year"[^>]*value="2026"/
+    )
   })
 
   test('Should refuse a user whose roles do not grant AHR', async () => {

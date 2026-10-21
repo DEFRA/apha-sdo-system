@@ -27,11 +27,15 @@
  * pages are walked here, evaluating each page's condition against that
  * entry's answers. That is what asks for the other species only when that
  * entry's species is "Other".
+ *
+ * Changing an earlier answer keeps the later ones. Only an answer the change
+ * made impossible goes: a species the new pathogen is not reported for (see
+ * dropDisallowedAnswers), or the other species once the species is on the
+ * list (see pruneEntry). The user is then asked only what is missing.
  */
 
 import { randomUUID } from 'node:crypto'
 import escapeHtml from 'lodash/escape.js'
-import isEqual from 'lodash/isEqual.js'
 
 import { pathogensByName } from '#/server/routes/diagnostic-tests/qualifying-tests.js'
 import {
@@ -411,14 +415,20 @@ export function isEntryPageComplete(model, page, entry = {}) {
 
 /**
  * The first relevant page of an entry whose answers are missing or invalid,
- * or undefined when the entry is complete.
+ * or undefined when the entry is complete. Given a page to stop before, only
+ * the relevant pages ahead of it are checked: those the user has to have
+ * answered to be on that page. A page that is not relevant to the entry
+ * stops nothing, so every page is checked.
  * @param {{ pages?: object[] }} model - the form model
  * @param {object} [entry] - the entry
+ * @param {object} [before] - an entry page to stop before
  */
-export function firstIncompleteEntryPage(model, entry) {
-  return relevantEntryPages(model, entry).find(
-    (page) => !isEntryPageComplete(model, page, entry)
-  )
+export function firstIncompleteEntryPage(model, entry, before) {
+  const pages = relevantEntryPages(model, entry)
+  const stopAt = before ? pages.indexOf(before) : -1
+  const checked = stopAt === -1 ? pages : pages.slice(0, stopAt)
+
+  return checked.find((page) => !isEntryPageComplete(model, page, entry))
 }
 
 /**
@@ -430,36 +440,41 @@ export function isEntryComplete(model, entry) {
 }
 
 /**
- * Whether a page's answers differ from those the entry already holds. A page
- * never answered counts as changed.
- * @param {{ collection: { keys: string[] } }} page - an entry page
- * @param {object} [before] - the entry as stored
- * @param {object} [after] - the page's new answers
- */
-export function entryPageAnswersChanged(page, before = {}, after = {}) {
-  return page.collection.keys.some((key) => !isEqual(before[key], after[key]))
-}
-
-/**
- * Drops from an entry the answers of every page after the given one, so
- * that once an answer is changed the questions that followed it are asked
- * again rather than kept from before the change.
+ * Drops from an entry every list answer that is no longer among the options
+ * offered to it, so a pathogen changed to one the species is not reported
+ * for loses the species, while the country and counts stay. The pages are
+ * walked in order and the entry re-evaluated after each drop, since a
+ * dropped answer can change which options later pages offer. Pages no
+ * longer relevant to what is left are pruned as well.
+ *
+ * The answers of the page just answered are left alone: an answer the user
+ * has just given that is not offered is refused with an error rather than
+ * dropped (see ReportEntryPageController.makePostRouteHandler).
  * @param {{ pages?: object[] }} model - the form model
- * @param {object} page - the entry page whose answer changed
  * @param {object} entry - the entry
+ * @param {object} [answeredPage] - the entry page just answered
  * @returns {object} a new entry
  */
-export function clearAnswersAfter(model, page, entry) {
-  const pages = entryPagesOf(model)
-  const laterKeys = new Set(
-    pages
-      .slice(pages.indexOf(page) + 1)
-      .flatMap((later) => later.collection.keys)
-  )
+export function dropDisallowedAnswers(model, entry, answeredPage) {
+  let kept = { ...entry }
 
-  return Object.fromEntries(
-    Object.entries(entry).filter(([key]) => !laterKeys.has(key))
-  )
+  for (const page of entryPagesOf(model)) {
+    if (page === answeredPage) {
+      continue
+    }
+
+    const disallowed = disallowedListAnswers(model, page, kept)
+
+    if (disallowed.length) {
+      kept = Object.fromEntries(
+        Object.entries(kept).filter(
+          ([key]) => !disallowed.some((field) => field.name === key)
+        )
+      )
+    }
+  }
+
+  return pruneEntry(model, kept)
 }
 
 /**

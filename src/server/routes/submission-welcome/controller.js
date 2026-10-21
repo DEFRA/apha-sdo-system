@@ -5,8 +5,8 @@ import {
 } from '#/server/auth/report-access.js'
 import { reportTypesBySlug } from '#/server/forms/report-types.js'
 import { howToReportPath } from '../report-method/controller.js'
-import { DIAGNOSTIC_TESTS_PATH } from '../diagnostic-tests/controller.js'
 import { isHeldBackForDiagnosticTests } from '../diagnostic-tests/diagnostic-tests-gate.js'
+import { LABORATORY_DETAILS_PATH } from '../diagnostic-tests/laboratory-details.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
@@ -110,8 +110,10 @@ async function renderWelcome(request, h, error) {
  * Post-sign-in welcome screen. Selecting a report type continues into that
  * form journey, e.g. /bat-rabies (report date page), or, for a report type
  * that can also be entered as a web form, to the screen asking which of the
- * two the user wants. "Update your diagnostic tests in use" opens the page
- * where a lab defines the qualifying tests it uses. Until it has, Animal
+ * two the user wants (where a web form report saved part-way through is
+ * offered to continue). "Update your diagnostic tests in use" opens the
+ * laboratory details page, the first step of defining the qualifying tests
+ * a lab uses. Until it has, Animal
  * Health Regulations is not offered and a banner says why. A user whose
  * roles grant no report type is told so here rather than being turned away
  * at sign-in.
@@ -147,7 +149,7 @@ export const submissionWelcomePostController = {
       submissionAction === UPDATE_DIAGNOSTIC_TESTS &&
       canUpdateDiagnosticTests(request.auth.credentials?.user)
     ) {
-      return h.redirect(DIAGNOSTIC_TESTS_PATH)
+      return h.redirect(LABORATORY_DETAILS_PATH)
     }
 
     // Submission history has no journey to send the user to yet, so Continue

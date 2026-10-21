@@ -33,6 +33,8 @@ const azureDefaults = {
   'azure.storage.connectionString': '',
   'azure.storage.accountName': '',
   'azure.storage.accountKey': '',
+  'azure.storage.containerName': 'sdo',
+  'azure.storage.blobPrefix': 'landingzone',
   'azure.identity.tenantId': '',
   'azure.identity.clientId': '',
   'azure.identity.clientSecret': '',
@@ -51,6 +53,20 @@ function setConfig(overrides = {}) {
 describe('#UploadConfig', () => {
   afterEach(() => {
     setConfig()
+  })
+
+  describe('azureConfig', () => {
+    test('carries the container and the folder within it', () => {
+      setConfig({
+        'azure.storage.containerName': 'sdo',
+        'azure.storage.blobPrefix': 'landingzone'
+      })
+
+      expect(new UploadConfig().azureConfig).toMatchObject({
+        containerName: 'sdo',
+        blobPrefix: 'landingzone'
+      })
+    })
   })
 
   describe('getAzureBlobClient', () => {

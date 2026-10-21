@@ -18,6 +18,7 @@ import {
   parseDiagnosticTestsPayload,
   validateDiagnosticTests
 } from './controller.js'
+import { LABORATORY_DETAILS_PATH } from './laboratory-details.js'
 import {
   ACCREDITATION_OPTIONS,
   pathogens,
@@ -41,6 +42,23 @@ const user = {
   name: 'A Person',
   organisationId: 'TestLab1',
   journeys: ['BR', 'AHR']
+}
+
+// The laboratory details page's answers, as kept once validated
+const LABORATORY_DETAILS = {
+  addressLine1: 'Y Buarth',
+  addressLine2: null,
+  townOrCity: 'Aberystwyth',
+  county: 'Ceredigion',
+  postcode: 'SY23 1ND',
+  ukasAccreditationNumber: '9934'
+}
+
+// ... and as the record carries them, with who reports for which lab
+const LABORATORY_DETAILS_RECORD = {
+  reportingPerson: 'A Person',
+  laboratoryName: 'TestLab1',
+  ...LABORATORY_DETAILS
 }
 
 /**
@@ -208,7 +226,7 @@ describe('diagnostic tests helpers', () => {
   describe('buildDiagnosticTestsSubmission', () => {
     const now = new Date('2026-09-24T14:04:00.000Z')
 
-    test('Should record who, for which lab, when, and one row per ticked test', () => {
+    test("Should record who, for which lab, when, the lab's details, and one row per ticked test", () => {
       expect(
         buildDiagnosticTestsSubmission(
           user,
@@ -216,6 +234,7 @@ describe('diagnostic tests helpers', () => {
             { test: mycoplasmaPcr, accreditation: 'Yes' },
             { test: bhvFat, accreditation: 'No' }
           ],
+          LABORATORY_DETAILS,
           { referenceNumber: 'ABC-DEF-GHJ', now }
         )
       ).toEqual({
@@ -225,6 +244,7 @@ describe('diagnostic tests helpers', () => {
         userId: 'user-id',
         organisationId: 'TestLab1',
         submittedAt: '2026-09-24T14:04:00.000Z',
+        laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
           {
             pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
@@ -245,11 +265,33 @@ describe('diagnostic tests helpers', () => {
       expect(DIAGNOSTIC_TESTS_PROCESS_NAME).toBe('DT')
     })
 
+    test('Should name the lab after its Customer Identity organisation when the user has one', () => {
+      const submission = buildDiagnosticTestsSubmission(
+        {
+          ...user,
+          organisationId: '6b2a1c0e-0000-4000-8000-000000000000',
+          organisationName: 'Wales Veterinary Science Centre'
+        },
+        [],
+        LABORATORY_DETAILS,
+        { referenceNumber: 'ABC-DEF-GHJ', now }
+      )
+
+      expect(submission.organisationName).toBe(
+        'Wales Veterinary Science Centre'
+      )
+      expect(submission.laboratoryDetails.laboratoryName).toBe(
+        'Wales Veterinary Science Centre'
+      )
+    })
+
     test('Should carry only the fields that apply, in the order of a report record', () => {
-      const submission = buildDiagnosticTestsSubmission(user, [], {
-        referenceNumber: 'ABC-DEF-GHJ',
-        now
-      })
+      const submission = buildDiagnosticTestsSubmission(
+        user,
+        [],
+        LABORATORY_DETAILS,
+        { referenceNumber: 'ABC-DEF-GHJ', now }
+      )
 
       expect(Object.keys(submission)).toEqual([
         'referenceNumber',
@@ -258,7 +300,18 @@ describe('diagnostic tests helpers', () => {
         'userId',
         'organisationId',
         'submittedAt',
+        'laboratoryDetails',
         'diagnosticTestsData'
+      ])
+      expect(Object.keys(submission.laboratoryDetails)).toEqual([
+        'reportingPerson',
+        'laboratoryName',
+        'addressLine1',
+        'addressLine2',
+        'townOrCity',
+        'county',
+        'postcode',
+        'ukasAccreditationNumber'
       ])
       expect(submission).not.toHaveProperty('fileName')
       expect(submission).not.toHaveProperty('fileNames')
@@ -267,7 +320,11 @@ describe('diagnostic tests helpers', () => {
 
     test('Should generate a reference number and timestamp by default', () => {
       const before = Date.now()
-      const submission = buildDiagnosticTestsSubmission(user, [])
+      const submission = buildDiagnosticTestsSubmission(
+        user,
+        [],
+        LABORATORY_DETAILS
+      )
 
       expect(submission.referenceNumber).toMatch(
         /^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}$/
@@ -275,11 +332,21 @@ describe('diagnostic tests helpers', () => {
       expect(Date.parse(submission.submittedAt)).toBeGreaterThanOrEqual(before)
     })
 
-    test('Should record null for a user without an id or lab', () => {
-      const submission = buildDiagnosticTestsSubmission(undefined, [], { now })
+    test('Should record null for a user without an id, name or lab', () => {
+      const submission = buildDiagnosticTestsSubmission(
+        undefined,
+        [],
+        LABORATORY_DETAILS,
+        { now }
+      )
 
       expect(submission.userId).toBeNull()
       expect(submission.organisationId).toBeNull()
+      expect(submission.laboratoryDetails).toEqual({
+        ...LABORATORY_DETAILS_RECORD,
+        reportingPerson: null,
+        laboratoryName: null
+      })
     })
   })
 })
@@ -324,7 +391,8 @@ describe('diagnostic tests routes', () => {
 
   /**
    * The cookies a browser would hold across requests: the CSRF crumb, the
-   * session holding the confirmation, and the lab's diagnostic tests.
+   * session holding the laboratory details and the confirmation, and the
+   * lab's diagnostic tests and laboratory details.
    */
   function cookieJar() {
     const cookies = new Map()
@@ -354,7 +422,58 @@ describe('diagnostic tests routes', () => {
     }
   }
 
-  async function getDiagnosticTests(authOverride = auth, jar = cookieJar()) {
+  async function getLaboratoryDetails(authOverride = auth, jar = cookieJar()) {
+    return jar.remember(
+      await server.inject({
+        method: 'GET',
+        url: LABORATORY_DETAILS_PATH,
+        auth: authOverride,
+        headers: { cookie: jar.header() }
+      })
+    )
+  }
+
+  // The laboratory details page answered, as a user would
+  const LABORATORY_DETAILS_PAYLOAD = {
+    addressLine1: 'Y Buarth',
+    addressLine2: '',
+    townOrCity: 'Aberystwyth',
+    county: 'Ceredigion',
+    postcode: 'sy231nd',
+    ukasAccreditationNumber: '9934'
+  }
+
+  // The step before the tests, which keeps its answers in the session
+  async function enterLaboratoryDetails(
+    authOverride = auth,
+    jar = cookieJar()
+  ) {
+    await getLaboratoryDetails(authOverride, jar)
+
+    return jar.remember(
+      await server.inject({
+        method: 'POST',
+        url: LABORATORY_DETAILS_PATH,
+        auth: authOverride,
+        headers: { cookie: jar.header() },
+        payload: { ...LABORATORY_DETAILS_PAYLOAD, crumb: jar.get('crumb') }
+      })
+    )
+  }
+
+  /**
+   * The tests page, by default opened as a user reaches it: once the
+   * laboratory details page is answered
+   */
+  async function getDiagnosticTests(
+    authOverride = auth,
+    jar = cookieJar(),
+    { withLaboratoryDetails = true } = {}
+  ) {
+    if (withLaboratoryDetails) {
+      await enterLaboratoryDetails(authOverride, jar)
+    }
+
     return jar.remember(
       await server.inject({
         method: 'GET',
@@ -521,7 +640,7 @@ describe('diagnostic tests routes', () => {
       )
     })
 
-    test('Should post back to itself with a crumb, and offer Continue and Go back', async () => {
+    test('Should post back to itself with a crumb, and offer Continue and Go back to the laboratory details', async () => {
       const { result } = await getDiagnosticTests()
 
       expect(result).toEqual(
@@ -531,10 +650,21 @@ describe('diagnostic tests routes', () => {
       expect(result).toEqual(expect.stringContaining('Continue'))
       expect(result).toEqual(
         expect.stringContaining(
-          '<a class="govuk-link" href="/submission-welcome">Go back</a>'
+          `<a class="govuk-link" href="${LABORATORY_DETAILS_PATH}">Go back</a>`
         )
       )
       expect(result).not.toEqual(expect.stringContaining('Save and exit'))
+    })
+
+    test('Should send the user to the laboratory details page first', async () => {
+      const { statusCode, headers } = await getDiagnosticTests(
+        auth,
+        cookieJar(),
+        { withLaboratoryDetails: false }
+      )
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
     test('Should sit under Submission Welcome in the breadcrumbs', async () => {
@@ -748,6 +878,7 @@ describe('diagnostic tests routes', () => {
       expect(statusCode).toBe(statusCodes.seeOther)
       expect(headers.location).toBe(DIAGNOSTIC_TESTS_CONFIRMATION_PATH)
       expect(jar.get('diagnosticTests')).toEqual(expect.any(String))
+      expect(jar.get('laboratoryDetails')).toEqual(expect.any(String))
 
       const [submission, ...others] = loggedSubmissions()
 
@@ -761,6 +892,8 @@ describe('diagnostic tests routes', () => {
         userId: user.id,
         organisationId: user.organisationId,
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        // Blank answers as null, the postcode as written on a letter
+        laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
           {
             pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
@@ -806,10 +939,11 @@ describe('diagnostic tests routes', () => {
         referenceNumber
       })
 
-      // The record itself carries the tests
+      // The record itself carries the lab's details and tests
       const written = JSON.parse(record.toString())
 
       expect(written).toEqual(submission)
+      expect(written.laboratoryDetails).toEqual(LABORATORY_DETAILS_RECORD)
       expect(written.diagnosticTestsData).toEqual([
         {
           pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
@@ -843,10 +977,45 @@ describe('diagnostic tests routes', () => {
       expect(statusCode).toBe(statusCodes.internalServerError)
       expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
       expect(jar.get('diagnosticTests')).toBeUndefined()
+      expect(jar.get('laboratoryDetails')).toBeUndefined()
 
       const confirmation = await getConfirmation(auth, jar)
 
-      expect(confirmation.headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+      expect(confirmation.headers.location).toBe(LABORATORY_DETAILS_PATH)
+    })
+
+    test('Should send the user back to the laboratory details page, delivering nothing, when the session no longer holds them', async () => {
+      const jar = cookieJar()
+
+      await getLaboratoryDetails(auth, jar)
+
+      const { statusCode, headers } = jar.remember(
+        await server.inject({
+          method: 'POST',
+          url: DIAGNOSTIC_TESTS_PATH,
+          auth,
+          headers: { cookie: jar.header() },
+          payload: { ...VALID_PAYLOAD, crumb: jar.get('crumb') }
+        })
+      )
+
+      expect(statusCode).toBe(statusCodes.seeOther)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
+      expect(loggedSubmissions()).toEqual([])
+      expect(jar.get('diagnosticTests')).toBeUndefined()
+    })
+
+    test('Should start the next update from the laboratory details page', async () => {
+      const jar = cookieJar()
+
+      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+
+      const { statusCode, headers } = await getDiagnosticTests(auth, jar, {
+        withLaboratoryDetails: false
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
     test('Should send a signed-out user to sign in', async () => {
@@ -913,24 +1082,37 @@ describe('diagnostic tests routes', () => {
       expect(result).toEqual(expect.stringContaining(referenceNumber))
     })
 
-    test('Should send the user to the page when nothing was submitted', async () => {
+    test('Should send the user to the start of the journey when nothing was submitted', async () => {
       const { statusCode, headers } = await getConfirmation()
 
       expect(statusCode).toBe(statusCodes.redirect)
-      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
-    test('Should end the confirmation once the page is opened again', async () => {
-      const jar = cookieJar()
+    test.each([
+      ['the laboratory details page', LABORATORY_DETAILS_PATH],
+      ['the tests page', DIAGNOSTIC_TESTS_PATH]
+    ])(
+      'Should end the confirmation once %s is opened again',
+      async (_page, url) => {
+        const jar = cookieJar()
 
-      await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
-      await getDiagnosticTests(auth, jar)
+        await postDiagnosticTests(VALID_PAYLOAD, auth, jar)
+        jar.remember(
+          await server.inject({
+            method: 'GET',
+            url,
+            auth,
+            headers: { cookie: jar.header() }
+          })
+        )
 
-      const { statusCode, headers } = await getConfirmation(auth, jar)
+        const { statusCode, headers } = await getConfirmation(auth, jar)
 
-      expect(statusCode).toBe(statusCodes.redirect)
-      expect(headers.location).toBe(DIAGNOSTIC_TESTS_PATH)
-    })
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
+      }
+    )
 
     test('Should send a user without Animal Health Regulations back to Submission Welcome', async () => {
       const { statusCode, headers } = await getConfirmation(

@@ -32,6 +32,9 @@ const numbers = pageOf(model, ENTRY_PATHS.numbers)
 
 const href = (path) => `/${WEB_FORM_SLUG}${path}`
 const entryHref = (page, itemId) => href(`${page.path}/${itemId}`)
+
+// A pathogen reported for poultry, not cattle
+const MYCOPLASMA = 'Mycoplasma gallisepticum / M. meleagridis'
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 // The context the engine builds for a request, as far as these pages read it:
@@ -221,7 +224,9 @@ describe('ReportEntryPageController', () => {
       expect(entry.added).toBe(true)
     })
 
-    test('Should keep an entry added once its later answers are dropped by a change', () => {
+    test('Should keep the answers that followed when an earlier answer is changed', () => {
+      // Another pathogen reported for cattle: the species, country and
+      // counts all still fit, and the entry stays added
       const request = buildRequest({
         itemId: FIRST_ENTRY_ID,
         payload: { pathogen: 'Bovine Herpes Virus 1 (BHV-1)' }
@@ -233,11 +238,63 @@ describe('ReportEntryPageController', () => {
         { pathogen: 'Bovine Herpes Virus 1 (BHV-1)' }
       )[ENTRIES_KEY]
 
-      expect(entry).toEqual({
+      expect(entry).toEqual(
+        buildEntry({ pathogen: 'Bovine Herpes Virus 1 (BHV-1)', added: true })
+      )
+    })
+
+    test('Should drop only a species the new pathogen is not reported for', () => {
+      const request = buildRequest({
         itemId: FIRST_ENTRY_ID,
-        added: true,
-        pathogen: 'Bovine Herpes Virus 1 (BHV-1)'
+        payload: { pathogen: MYCOPLASMA }
       })
+
+      const [entry] = pathogen.getStateFromValidForm(
+        request,
+        buildState([buildEntry({ added: true })]),
+        { pathogen: MYCOPLASMA }
+      )[ENTRIES_KEY]
+
+      // The species page has to be answered again; the entry is still
+      // added, so it is edited rather than aborted
+      const { species: _dropped, ...kept } = buildEntry({
+        pathogen: MYCOPLASMA,
+        added: true
+      })
+
+      expect(entry).toEqual(kept)
+    })
+
+    test("Should keep this page's own answer for the post handler to refuse", () => {
+      // A species not reported for the pathogen is refused with an error
+      // (see makePostRouteHandler), not dropped
+      const request = buildRequest({
+        itemId: FIRST_ENTRY_ID,
+        payload: { species: 'Chicken' }
+      })
+
+      const [entry] = species.getStateFromValidForm(
+        request,
+        buildState([buildEntry()]),
+        { species: 'Chicken' }
+      )[ENTRIES_KEY]
+
+      expect(entry.species).toBe('Chicken')
+    })
+
+    test('Should keep the country and counts when the species becomes Other', () => {
+      const request = buildRequest({
+        itemId: FIRST_ENTRY_ID,
+        payload: { species: 'Other' }
+      })
+
+      const [entry] = species.getStateFromValidForm(
+        request,
+        buildState([buildEntry({ added: true })]),
+        { species: 'Other' }
+      )[ENTRIES_KEY]
+
+      expect(entry).toEqual(buildEntry({ species: 'Other', added: true }))
     })
 
     test('Should drop the other species once the species is on the list', () => {
@@ -267,24 +324,6 @@ describe('ReportEntryPageController', () => {
       })
     })
 
-    test('Should ask the questions that followed again once an answer is changed', () => {
-      const request = buildRequest({
-        itemId: FIRST_ENTRY_ID,
-        payload: { pathogen: 'Bovine Herpes Virus 1 (BHV-1)' }
-      })
-
-      expect(
-        pathogen.getStateFromValidForm(request, buildState([buildEntry()]), {
-          pathogen: 'Bovine Herpes Virus 1 (BHV-1)'
-        })
-      ).toEqual({
-        [ENTRIES_KEY]: [
-          { itemId: FIRST_ENTRY_ID, pathogen: 'Bovine Herpes Virus 1 (BHV-1)' }
-        ]
-      })
-      expect(request.app.reportEntryAnswersChanged).toBe(true)
-    })
-
     test('Should keep the answers that followed when an answer is given again unchanged', () => {
       const entry = buildOtherSpeciesEntry()
       const request = buildRequest({
@@ -297,7 +336,6 @@ describe('ReportEntryPageController', () => {
           species: 'Other'
         })
       ).toEqual({ [ENTRIES_KEY]: [{ ...entry, added: true }] })
-      expect(request.app.reportEntryAnswersChanged).toBe(false)
     })
 
     test('Should refuse a post that names no entry', () => {
@@ -745,44 +783,67 @@ describe('ReportEntryPageController', () => {
       )
     })
 
-    test('Should still return to another page once a changed entry is complete', async () => {
-      stubSavedState(numbers, buildState([buildEntry()]))
-      const h = buildToolkit()
-      const request = postRequest(FIRST_ENTRY_ID, {
-        returnUrl: href('/summary')
+    test('Should ask for a species the new pathogen is not reported for before returning', async () => {
+      // The species was dropped with the pathogen change; the country and
+      // counts were kept, so only the species is asked
+      const { species: _dropped, ...entry } = buildEntry({
+        pathogen: MYCOPLASMA,
+        added: true
       })
+      stubSavedState(pathogen, buildState([entry]))
+      const h = buildToolkit()
+      const returnUrl = href(ENTRIES_PATH)
 
-      request.app.reportEntryAnswersChanged = true
+      await pathogen.proceed(postRequest(FIRST_ENTRY_ID, { returnUrl }), h)
 
-      await numbers.proceed(request, h)
-
-      expect(h.redirect).toHaveBeenCalledWith(href('/summary'))
+      expect(h.redirect).toHaveBeenCalledWith(
+        `${entryHref(species, FIRST_ENTRY_ID)}?returnUrl=${encodeURIComponent(returnUrl)}`
+      )
     })
 
-    test('Should return to a later page of the entry when nothing was changed', async () => {
-      // Even when that page has not been answered yet
+    test('Should return to a later page of the entry once the pages before it are answered', async () => {
+      // Even when that later page has not been answered yet
       stubSavedState(
         species,
         buildState([buildEntry({ positiveSamples: undefined })])
       )
       const h = buildToolkit()
       const returnUrl = entryHref(numbers, FIRST_ENTRY_ID)
-      const request = postRequest(FIRST_ENTRY_ID, { returnUrl })
 
-      request.app.reportEntryAnswersChanged = false
-
-      await species.proceed(request, h)
+      await species.proceed(postRequest(FIRST_ENTRY_ID, { returnUrl }), h)
 
       expect(h.redirect).toHaveBeenCalledWith(returnUrl)
     })
 
-    test('Should walk the entry forward again instead of returning to a later page once changed', async () => {
-      // The later page's answers were dropped with the change
+    test('Should ask for what a later page of the entry needs before returning to it', async () => {
+      // Species changed to Other from the counts page: the other species
+      // is asked first, keeping where to return to
+      stubSavedState(
+        species,
+        buildState([
+          buildOtherSpeciesEntry({
+            otherSpecies: undefined,
+            positiveSamples: undefined
+          })
+        ])
+      )
+      const h = buildToolkit()
+      const returnUrl = entryHref(numbers, SECOND_ENTRY_ID)
+
+      await species.proceed(postRequest(SECOND_ENTRY_ID, { returnUrl }), h)
+
+      expect(h.redirect).toHaveBeenCalledWith(
+        `${entryHref(otherSpecies, SECOND_ENTRY_ID)}?returnUrl=${encodeURIComponent(returnUrl)}`
+      )
+    })
+
+    test('Should not mind a later page of the entry being unanswered when returning to it', async () => {
+      // Back to the country page with the counts never answered: the
+      // counts come after the country, so they are not asked first
       stubSavedState(
         species,
         buildState([
           buildEntry({
-            country: undefined,
             submissionsWithQualifyingTest: undefined,
             submissionsWithPositiveSamples: undefined,
             positiveSamples: undefined
@@ -790,17 +851,58 @@ describe('ReportEntryPageController', () => {
         ])
       )
       const h = buildToolkit()
-      const request = postRequest(FIRST_ENTRY_ID, {
-        returnUrl: entryHref(numbers, FIRST_ENTRY_ID)
-      })
+      const returnUrl = entryHref(country, FIRST_ENTRY_ID)
 
-      request.app.reportEntryAnswersChanged = true
+      await species.proceed(postRequest(FIRST_ENTRY_ID, { returnUrl }), h)
 
-      await species.proceed(request, h)
+      expect(h.redirect).toHaveBeenCalledWith(returnUrl)
+    })
+
+    test('Should finish the whole entry before returning to check your answers', async () => {
+      stubSavedState(
+        species,
+        buildState([buildEntry({ positiveSamples: undefined })])
+      )
+      const h = buildToolkit()
+      const returnUrl = href('/summary')
+
+      await species.proceed(postRequest(FIRST_ENTRY_ID, { returnUrl }), h)
 
       expect(h.redirect).toHaveBeenCalledWith(
-        entryHref(country, FIRST_ENTRY_ID)
+        `${entryHref(numbers, FIRST_ENTRY_ID)}?returnUrl=${encodeURIComponent(returnUrl)}`
       )
+    })
+  })
+
+  describe('#entryPageReturnedTo', () => {
+    test('Should find the page of this entry a return URL goes back to', () => {
+      expect(
+        species.entryPageReturnedTo(
+          entryHref(numbers, FIRST_ENTRY_ID),
+          FIRST_ENTRY_ID
+        )
+      ).toBe(numbers)
+      expect(
+        species.entryPageReturnedTo(
+          `${entryHref(country, FIRST_ENTRY_ID)}?returnUrl=${encodeURIComponent(href(ENTRIES_PATH))}`,
+          FIRST_ENTRY_ID
+        )
+      ).toBe(country)
+    })
+
+    test('Should find nothing for the entries page, check your answers or another entry', () => {
+      expect(
+        species.entryPageReturnedTo(href(ENTRIES_PATH), FIRST_ENTRY_ID)
+      ).toBeUndefined()
+      expect(
+        species.entryPageReturnedTo(href('/summary'), FIRST_ENTRY_ID)
+      ).toBeUndefined()
+      expect(
+        species.entryPageReturnedTo(
+          entryHref(numbers, SECOND_ENTRY_ID),
+          FIRST_ENTRY_ID
+        )
+      ).toBeUndefined()
     })
   })
 

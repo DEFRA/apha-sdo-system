@@ -3,7 +3,7 @@ import { SummaryPageController } from '@defra/forms-engine-plugin/controllers/Su
 import { redirectPath } from '@defra/forms-engine-plugin/engine/helpers.js'
 
 import { statusCodes } from '#/server/common/constants/status-codes.js'
-import { DIAGNOSTIC_TESTS_PATH } from '#/server/routes/diagnostic-tests/controller.js'
+import { LABORATORY_DETAILS_PATH } from '#/server/routes/diagnostic-tests/laboratory-details.js'
 import { reportTypesBySlug } from '../report-types.js'
 import { uploadedFileName } from '../validation/report-file-name.js'
 import { findReportFileUploadPage } from './report-file-upload-page-controller.js'
@@ -62,7 +62,7 @@ export class SummaryPageWithConfirmationEmailController extends SummaryPageContr
     // journeys, upload and web form, ask the laboratory to confirm them.
     if (isAnimalHealthRegulations(this.model)) {
       viewModel.showQualifyingTestsConfirmation = true
-      viewModel.qualifyingTestsChangeHref = DIAGNOSTIC_TESTS_PATH
+      viewModel.qualifyingTestsChangeHref = LABORATORY_DETAILS_PATH
     }
 
     return viewModel

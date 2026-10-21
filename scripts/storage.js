@@ -2,7 +2,7 @@
  * Dev utility for inspecting the local docker storage emulators.
  *
  *   npm run storage:check - list the S3 staging bucket (localstack) and the
- *                           Azure submissions container (azurite)
+ *                           Azure submissions folder (azurite)
  *   npm run storage:clean - same, then delete everything listed
  *
  * Reads the same .env-backed config as the app, so it shows exactly what the
@@ -11,6 +11,7 @@
 import { ListObjectsV2Command, DeleteObjectsCommand } from '@aws-sdk/client-s3'
 
 import { uploadConfig } from '../src/config/upload-config.js'
+import { submissionsFolderPrefix } from '../src/server/upload/services/azure-storage-service.js'
 
 const clean = process.argv[2] === 'clean'
 
@@ -50,8 +51,9 @@ async function checkS3StagingBucket() {
 
 async function checkAzureContainer() {
   const { enabled, containerName } = uploadConfig.azureConfig
+  const prefix = submissionsFolderPrefix()
 
-  console.log(`\nAzure submissions container: ${containerName}`)
+  console.log(`\nAzure submissions folder: ${containerName}/${prefix}`)
 
   if (!enabled) {
     console.log('  (AZURE_STORAGE_ENABLED is false, skipping)')
@@ -68,7 +70,9 @@ async function checkAzureContainer() {
     }
 
     const blobs = []
-    for await (const blob of container.listBlobsFlat()) {
+    for await (const blob of container.listBlobsFlat(
+      prefix ? { prefix } : {}
+    )) {
       blobs.push(blob)
     }
 

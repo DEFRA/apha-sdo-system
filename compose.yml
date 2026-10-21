@@ -186,7 +186,8 @@ services:
       # Azure Blob Storage transfer (Azurite emulator, well-known dev credentials)
       AZURE_STORAGE_ENABLED: true
       AZURE_STORAGE_CONNECTION_STRING: 'DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;'
-      AZURE_CONTAINER_NAME: apha-sdo-submissions
+      AZURE_CONTAINER_NAME: sdo
+      AZURE_BLOB_PREFIX: landingzone
     networks:
       - cdp-tenant
 

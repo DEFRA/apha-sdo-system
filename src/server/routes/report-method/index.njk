@@ -3,6 +3,7 @@
 {% from "govuk/components/radios/macro.njk" import govukRadios %}
 {% from "govuk/components/button/macro.njk" import govukButton %}
 {% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
+{% from "govuk/components/notification-banner/macro.njk" import govukNotificationBanner %}
 
 {% block content %}
   {% if error %}
@@ -19,7 +20,22 @@
   {% endif %}
 
   <div class="govuk-grid-row">
-    <div class="govuk-grid-column-two-thirds">
+    <div class="govuk-grid-column-full">
+      {# A web form report saved part-way through, offered first below (see
+         src/server/forms/services/report-draft-cache-service.js) #}
+      {% if webFormDraft %}
+        {% set webFormDraftBannerHtml %}
+          <p class="govuk-notification-banner__heading">You have a saved {{ webFormDraft.title }} that has not been submitted.</p>
+          <p class="govuk-body">{{ webFormDraft.description }} Select ‘{{ webFormDraft.continueText }}’ to carry on where you left off.</p>
+        {% endset %}
+        {# The text runs the full width of the banner, as on the entry pages #}
+        <div class="app-notification-banner-full-width">
+          {{ govukNotificationBanner({
+            html: webFormDraftBannerHtml
+          }) }}
+        </div>
+      {% endif %}
+
       <form method="post" action="{{ formAction }}" novalidate>
         <input type="hidden" name="crumb" value="{{ crumb }}">
         {{ govukRadios({

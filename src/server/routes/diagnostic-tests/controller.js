@@ -13,8 +13,15 @@ import {
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
 import {
   getLabDiagnosticTests,
+  saveLabDetails,
   saveLabDiagnosticTests
 } from './lab-diagnostic-tests.js'
+import {
+  LABORATORY_DETAILS_PATH,
+  buildLaboratoryDetailsRecord,
+  clearJourneyLaboratoryDetails,
+  getJourneyLaboratoryDetails
+} from './laboratory-details.js'
 
 export const DIAGNOSTIC_TESTS_PATH = '/diagnostic-tests'
 export const DIAGNOSTIC_TESTS_TITLE = 'Define your qualifying tests in use'
@@ -119,18 +126,20 @@ export function validateDiagnosticTests(selections) {
 }
 
 /**
- * The record of a lab's qualifying tests, shaped like the submission.json of
- * a report (see src/server/forms/services/output-service.js) with only the
- * fields that apply: no report month and no file. The tests are one row
- * each, in catalogue order, so they can be written out as lines of a
- * spreadsheet downstream.
- * @param {{ id?: string, organisationId?: string, organisationName?: string }} [user] - the session user
+ * The record of a lab's details and qualifying tests, shaped like the
+ * submission.json of a report (see src/server/forms/services/output-service.js)
+ * with only the fields that apply: no report month and no file. The tests
+ * are one row each, in catalogue order, so they can be written out as lines
+ * of a spreadsheet downstream.
+ * @param {{ id?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
+ * @param {Record<string, string | null>} [laboratoryDetails] - the laboratory details page's answers
  * @param {{ referenceNumber?: string, now?: Date }} [options] - fixed for tests
  */
 export function buildDiagnosticTestsSubmission(
   user,
   selections,
+  laboratoryDetails,
   { referenceNumber = generateUniqueReference(), now = new Date() } = {}
 ) {
   return {
@@ -145,6 +154,7 @@ export function buildDiagnosticTestsSubmission(
       ? { organisationName: user.organisationName }
       : {}),
     submittedAt: now.toISOString(),
+    laboratoryDetails: buildLaboratoryDetailsRecord(user, laboratoryDetails),
     diagnosticTestsData: selections.map(({ test, accreditation }) => ({
       pathogen: test.pathogen.name,
       test: test.name,
@@ -212,6 +222,7 @@ function buildViewModel(selections = [], errors = []) {
   return {
     pageTitle: DIAGNOSTIC_TESTS_TITLE,
     diagnosticTestsPath: DIAGNOSTIC_TESTS_PATH,
+    laboratoryDetailsPath: LABORATORY_DETAILS_PATH,
     testsGroupId: TESTS_GROUP_ID,
     testsField: TESTS_FIELD,
     testsError: errorsByHref.get(`#${TESTS_GROUP_ID}`) ?? null,
@@ -225,12 +236,13 @@ function renderDiagnosticTests(h, selections, errors) {
 }
 
 /**
- * A user without Animal Health Regulations is not offered this page. They
- * go back to Submission Welcome rather than seeing tests they cannot report.
+ * A user without Animal Health Regulations is not offered the diagnostic
+ * tests pages. They go back to Submission Welcome rather than seeing tests
+ * they cannot report.
  * @param {import('@hapi/hapi').Request} request
  * @param {import('@hapi/hapi').ResponseToolkit} h
  */
-function redirectWithoutAnimalHealthRegulations(request, h) {
+export function redirectWithoutAnimalHealthRegulations(request, h) {
   if (canUpdateDiagnosticTests(request.auth.credentials?.user)) {
     return null
   }
@@ -239,9 +251,21 @@ function redirectWithoutAnimalHealthRegulations(request, h) {
 }
 
 /**
+ * Opening the journey again ends the previous submission's confirmation.
+ * @param {import('@hapi/hapi').Request} request
+ */
+export function endDiagnosticTestsConfirmation(request) {
+  // Only cleared when set: clearing marks the session for saving
+  if (request.yar.get(CONFIRMATION_SESSION_KEY)) {
+    request.yar.clear(CONFIRMATION_SESSION_KEY)
+  }
+}
+
+/**
  * "Define your qualifying tests in use": the tests a lab uses for each
- * pathogen and whether each is UKAS accredited. Reached from Submission
- * Welcome by a user who can submit Animal Health Regulations. The lab's
+ * pathogen and whether each is UKAS accredited. Reached from the laboratory
+ * details page by a user who can submit Animal Health Regulations; without
+ * its answers in the session the user is sent there first. The lab's
  * current tests, when it has defined them, are already ticked. Opening the
  * page ends the previous submission's confirmation.
  */
@@ -253,9 +277,10 @@ export const diagnosticTestsGetController = {
       return refused
     }
 
-    // Only cleared when set: clearing marks the session for saving
-    if (request.yar.get(CONFIRMATION_SESSION_KEY)) {
-      request.yar.clear(CONFIRMATION_SESSION_KEY)
+    endDiagnosticTestsConfirmation(request)
+
+    if (!getJourneyLaboratoryDetails(request)) {
+      return h.redirect(LABORATORY_DETAILS_PATH)
     }
 
     return renderDiagnosticTests(
@@ -266,11 +291,13 @@ export const diagnosticTestsGetController = {
 }
 
 /**
- * Continue: the ticked tests are validated and, once they pass, delivered to
- * the Azure container under the reference number, as a report's record is,
- * and kept as the lab's current tests. The user is then sent to the
- * confirmation. A failed delivery surfaces as the service's error page, as
- * it does for a report, and nothing is kept.
+ * Continue: the ticked tests are validated and, once they pass, delivered
+ * with the laboratory details to the Azure container under the reference
+ * number, as a report's record is, and kept as the lab's current tests and
+ * details. The user is then sent to the confirmation. A failed delivery
+ * surfaces as the service's error page, as it does for a report, and
+ * nothing is kept. Without the laboratory details in the session (it
+ * expired) the user is sent back to give them.
  */
 export const diagnosticTestsPostController = {
   async handler(request, h) {
@@ -278,6 +305,12 @@ export const diagnosticTestsPostController = {
 
     if (refused) {
       return refused
+    }
+
+    const laboratoryDetails = getJourneyLaboratoryDetails(request)
+
+    if (!laboratoryDetails) {
+      return h.redirect(LABORATORY_DETAILS_PATH).code(statusCodes.seeOther)
     }
 
     const selections = parseDiagnosticTestsPayload(request.payload ?? {})
@@ -289,7 +322,8 @@ export const diagnosticTestsPostController = {
 
     const submission = buildDiagnosticTestsSubmission(
       request.auth.credentials?.user,
-      selections
+      selections,
+      laboratoryDetails
     )
 
     await deliverDiagnosticTestsSubmission({
@@ -297,7 +331,9 @@ export const diagnosticTestsPostController = {
       logger: request.logger
     })
     await saveLabDiagnosticTests(request, h, selections)
+    await saveLabDetails(request, h, laboratoryDetails)
 
+    clearJourneyLaboratoryDetails(request)
     request.yar.set(CONFIRMATION_SESSION_KEY, {
       referenceNumber: submission.referenceNumber
     })
@@ -312,7 +348,8 @@ export const diagnosticTestsPostController = {
  * Shown once the tests are submitted, like the report journeys'
  * confirmation: the reference to quote and what happens next. Without a
  * submission in this session there is nothing to confirm, so the user is
- * sent to the page itself, as the report journeys send them to their start.
+ * sent to the laboratory details page, as the report journeys send them to
+ * their start.
  */
 export const diagnosticTestsConfirmationGetController = {
   handler(request, h) {
@@ -325,7 +362,7 @@ export const diagnosticTestsConfirmationGetController = {
     const confirmation = request.yar.get(CONFIRMATION_SESSION_KEY)
 
     if (!confirmation?.referenceNumber) {
-      return h.redirect(DIAGNOSTIC_TESTS_PATH)
+      return h.redirect(LABORATORY_DETAILS_PATH)
     }
 
     return h.view('diagnostic-tests/confirmation', {

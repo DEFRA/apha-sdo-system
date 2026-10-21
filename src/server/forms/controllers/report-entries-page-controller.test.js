@@ -103,6 +103,7 @@ describe('ReportEntriesPageController', () => {
           pageTitle: 'You have added 2 entries to the report',
           showTitle: true,
           errors: undefined,
+          canAddAnother: true,
           addAnotherText: 'Add another entry to the report',
           continueText: 'Continue',
           backLink: { text: 'Back', href: href(REPORT_DATE_PATH) }
@@ -133,6 +134,20 @@ describe('ReportEntriesPageController', () => {
       )
 
       expect(context.pageTitle).toBe('You have added 1 entry to the report')
+    })
+
+    test('Should not offer another entry while one is incomplete', async () => {
+      const incomplete = buildOtherSpeciesEntry({ country: undefined })
+
+      const { context } = await page.makeGetRouteHandler()(
+        buildRequest(),
+        buildContext(buildState([buildEntry(), incomplete])),
+        buildToolkit()
+      )
+
+      expect(context.canAddAnother).toBe(false)
+      // The entry is still listed, to be completed or removed
+      expect(context.entryCards).toHaveLength(2)
     })
 
     test('Should ask for confirmation before removing an entry', async () => {
@@ -181,6 +196,27 @@ describe('ReportEntriesPageController', () => {
 
       expect(h.redirect.mock.calls[0][0]).toMatch(NEW_ENTRY)
       expect(response.statusCode).toBe(statusCodes.seeOther)
+    })
+
+    test('Should refuse another entry while one is incomplete, and link to what it needs', async () => {
+      const incomplete = buildOtherSpeciesEntry({ country: undefined })
+      const h = buildToolkit()
+
+      const { name, context } = await page.makePostRouteHandler()(
+        post({ action: 'add-another' }),
+        buildContext(buildState([buildEntry(), incomplete])),
+        h
+      )
+
+      expect(h.redirect).not.toHaveBeenCalled()
+      expect(name).toBe('report-entries')
+      expect(context.canAddAnother).toBe(false)
+      expect(context.errors).toEqual([
+        expect.objectContaining({
+          text: 'Complete entry 2 or remove it',
+          href: `${href(ENTRY_PATHS.country)}/${SECOND_ENTRY_ID}?returnUrl=${encodeURIComponent(href(ENTRIES_PATH))}`
+        })
+      ])
     })
 
     test('Should refuse another entry beyond the limit', async () => {
