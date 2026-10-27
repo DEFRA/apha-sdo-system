@@ -82,6 +82,14 @@ export function journeySlugsOf(reportType) {
   return [reportType.slug, reportType.webFormSlug].filter(Boolean)
 }
 
+/**
+ * Where a report type asks how the user would like to report.
+ * @param {{ slug: string }} reportType - an entry of the registry
+ */
+export function howToReportPath(reportType) {
+  return `/${reportType.slug}/how-to-report`
+}
+
 // Every journey slug, upload or web form, resolves to its report type
 export const reportTypesBySlug = new Map(
   reportTypes.flatMap((reportType) =>

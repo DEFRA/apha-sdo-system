@@ -1,6 +1,8 @@
-import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 import { getLabDiagnosticTests } from './lab-diagnostic-tests.js'
 
 /**
@@ -11,6 +13,15 @@ import { getLabDiagnosticTests } from './lab-diagnostic-tests.js'
  */
 
 const HELD_BACK_REPORT_TYPE_CODE = 'AHR'
+
+/**
+ * Whether the report type's qualifying tests are the lab's diagnostic tests,
+ * so updating them is offered alongside reporting it.
+ * @param {{ code: string }} [reportType] - an entry of the report type registry
+ */
+export function carriesDiagnosticTests(reportType) {
+  return reportType?.code === HELD_BACK_REPORT_TYPE_CODE
+}
 
 /**
  * The user can define the diagnostic tests but their lab has not yet.
@@ -32,23 +43,25 @@ export async function isAwaitingDiagnosticTests(request) {
  */
 export async function isHeldBackForDiagnosticTests(request, reportType) {
   return (
-    reportType?.code === HELD_BACK_REPORT_TYPE_CODE &&
-    isAwaitingDiagnosticTests(request)
+    carriesDiagnosticTests(reportType) && isAwaitingDiagnosticTests(request)
   )
 }
 
 /**
  * onPostAuth extension, after restrictReportJourneys: a held-back report
- * journey opened directly (/{slug}, /{slug}/{path}, /{slug}/how-to-report
- * and the engine's preview routes) sends the user to Submission Welcome,
- * whose banner says why. Requests without a session are left to the cookie
- * strategy, and the lab's tests are only looked up for such a journey.
+ * journey opened directly (/{slug}, /{slug}/{path}, the web form journey,
+ * /{slug}/how-to-report/start-new and the engine's preview routes) sends the
+ * user to the report type's "How would you like to report" screen, whose
+ * banner says why and which offers only defining the tests. That screen is
+ * let through. Requests without a session are left to the cookie strategy,
+ * and the lab's tests are only looked up for such a journey.
  */
 export async function requireDiagnosticTestsFirst(request, h) {
   const reportType = reportTypesBySlug.get(request.params?.slug)
 
   if (
-    reportType?.code !== HELD_BACK_REPORT_TYPE_CODE ||
+    !carriesDiagnosticTests(reportType) ||
+    request.path === howToReportPath(reportType) ||
     !request.auth.isAuthenticated ||
     !(await isHeldBackForDiagnosticTests(request, reportType))
   ) {
@@ -63,5 +76,5 @@ export async function requireDiagnosticTestsFirst(request, h) {
     'User opened a report journey before defining their diagnostic tests'
   )
 
-  return h.redirect(POST_SIGN_IN_PATH).takeover()
+  return h.redirect(howToReportPath(reportType)).takeover()
 }

@@ -1,12 +1,24 @@
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  howToReportPath,
+  reportTypesByCode,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 
 const HOME = { text: 'Home', href: '/' }
 const SUBMISSION_WELCOME_PATH = '/submission-welcome'
 const SUBMISSION_WELCOME_TEXT = 'Submission Welcome'
 
+// The diagnostic tests are updated from within the Animal Health Regulations
+// report, so they sit under it
+const diagnosticTestsReportType = reportTypesByCode.get('AHR')
+
 const DIAGNOSTIC_TESTS_TRAIL = [
   HOME,
   { text: SUBMISSION_WELCOME_TEXT, href: SUBMISSION_WELCOME_PATH },
+  {
+    text: diagnosticTestsReportType.title,
+    href: howToReportPath(diagnosticTestsReportType)
+  },
   { text: 'Update diagnostic tests' }
 ]
 

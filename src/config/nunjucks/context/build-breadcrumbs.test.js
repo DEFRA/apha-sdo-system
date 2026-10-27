@@ -20,6 +20,10 @@ describe('#buildBreadcrumbs', () => {
     expect(buildBreadcrumbs(mockRequest({ path }))).toEqual([
       { text: 'Home', href: '/' },
       { text: 'Submission Welcome', href: '/submission-welcome' },
+      {
+        text: 'Animal Health Regulations report',
+        href: '/animal-health-regulations/how-to-report'
+      },
       { text: 'Update diagnostic tests' }
     ])
   })

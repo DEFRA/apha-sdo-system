@@ -1,13 +1,21 @@
 import Boom from '@hapi/boom'
 
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 import {
   describeWebFormDraft,
   discardWebFormDraft,
   getWebFormDraft,
   webFormResumePath
 } from '#/server/forms/services/report-draft-cache-service.js'
+import {
+  carriesDiagnosticTests,
+  isHeldBackForDiagnosticTests
+} from '../diagnostic-tests/diagnostic-tests-gate.js'
+import { LABORATORY_DETAILS_PATH } from '../diagnostic-tests/laboratory-details.js'
 
 const REPORT_METHOD_ERROR_FLASH_KEY = 'reportMethodError'
 
@@ -15,7 +23,9 @@ export const REPORT_METHOD = {
   FILE_UPLOAD: 'file-upload',
   WEB_FORM: 'web-form',
   // Only offered while the user has a saved web form report
-  CONTINUE_WEB_FORM: 'continue-web-form'
+  CONTINUE_WEB_FORM: 'continue-web-form',
+  // Only offered for the report type the diagnostic tests belong to
+  UPDATE_DIAGNOSTIC_TESTS: 'update-diagnostic-tests'
 }
 
 export const CONTINUE_WEB_FORM_TEXT = 'Continue your saved web form report'
@@ -51,6 +61,17 @@ const startNewWebFormItem = {
   }
 }
 
+// The hint is the diagnostic tests page's warning, as one sentence: a radio
+// hint is not the place for the bullet list that page shows in full.
+const updateDiagnosticTestsItem = {
+  value: REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS,
+  text: 'Update your diagnostic tests in use',
+  label: optionLabel,
+  hint: {
+    text: 'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
+  }
+}
+
 /**
  * The first option when the user has a saved web form report: carry on with
  * it, described as on Submission Welcome
@@ -67,21 +88,25 @@ function continueWebFormItem(draft) {
 
 /**
  * The options offered: with a saved web form report, continuing it comes
- * first and the web form is offered as a new report
+ * first and the web form is offered as a new report. Updating the diagnostic
+ * tests comes last for the report type they belong to, and is the only
+ * option until the lab has defined them.
+ * @param {{ code: string }} reportType - an entry of the report type registry
  * @param {object | null} draft - the saved report's form state, if any
+ * @param {boolean} heldBack - the lab has not defined its diagnostic tests
  */
-function reportMethodItems(draft) {
-  return draft
+function reportMethodItems(reportType, draft, heldBack) {
+  if (heldBack) {
+    return [updateDiagnosticTestsItem]
+  }
+
+  const reportingItems = draft
     ? [continueWebFormItem(draft), fileUploadItem, startNewWebFormItem]
     : [fileUploadItem, webFormItem]
-}
 
-/**
- * Where a report type asks how the user would like to report.
- * @param {{ slug: string }} reportType - an entry of the report type registry
- */
-export function howToReportPath(reportType) {
-  return `/${reportType.slug}/how-to-report`
+  return carriesDiagnosticTests(reportType)
+    ? [...reportingItems, updateDiagnosticTestsItem]
+    : reportingItems
 }
 
 /**
@@ -105,6 +130,15 @@ function reportTypeOfferingChoice(slug) {
   return reportType?.slug === slug && reportType.webFormSlug ? reportType : null
 }
 
+function askAgain(request, h, reportType) {
+  request.yar.flash(
+    REPORT_METHOD_ERROR_FLASH_KEY,
+    'Select how you would like to report'
+  )
+
+  return h.redirect(howToReportPath(reportType))
+}
+
 /**
  * Screen between Submission Welcome and a report type's journeys: the user
  * picks whether to upload a data file or to complete a web form, and is sent
@@ -112,6 +146,10 @@ function reportTypeOfferingChoice(slug) {
  * through (see src/server/forms/services/report-draft-cache-service.js) is
  * told so in a banner and offered to continue it first; the web form is
  * then offered as a new report, confirmed before it discards the saved one.
+ * For the report type the diagnostic tests belong to, "Update your
+ * diagnostic tests in use" opens the laboratory details page, the first step
+ * of defining them. Until the lab has, it is the only option and a banner
+ * says why (see src/server/routes/diagnostic-tests/diagnostic-tests-gate.js).
  */
 export const reportMethodGetController = {
   async handler(request, h) {
@@ -122,12 +160,15 @@ export const reportMethodGetController = {
     }
 
     const [error] = request.yar.flash(REPORT_METHOD_ERROR_FLASH_KEY)
-    const draft = await getWebFormDraft(request, reportType)
+    const heldBack = await isHeldBackForDiagnosticTests(request, reportType)
+    // A saved report cannot be continued until the tests are defined
+    const draft = heldBack ? null : await getWebFormDraft(request, reportType)
 
     return h.view('report-method/index', {
       pageTitle: 'How would you like to report?',
       formAction: howToReportPath(reportType),
-      reportMethodItems: reportMethodItems(draft),
+      reportMethodItems: reportMethodItems(reportType, draft, heldBack),
+      awaitingDiagnosticTests: heldBack,
       webFormDraft: draft && {
         title: reportType.title,
         continueText: CONTINUE_WEB_FORM_TEXT,
@@ -148,6 +189,18 @@ export const reportMethodPostController = {
     }
 
     const { reportMethod } = request.payload ?? {}
+
+    if (
+      reportMethod === REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS &&
+      carriesDiagnosticTests(reportType)
+    ) {
+      return h.redirect(LABORATORY_DETAILS_PATH)
+    }
+
+    // Reporting was never offered: the only option was the diagnostic tests
+    if (await isHeldBackForDiagnosticTests(request, reportType)) {
+      return askAgain(request, h, reportType)
+    }
 
     if (reportMethod === REPORT_METHOD.FILE_UPLOAD) {
       return h.redirect(`/${reportType.slug}`)
@@ -171,12 +224,7 @@ export const reportMethodPostController = {
       }
     }
 
-    request.yar.flash(
-      REPORT_METHOD_ERROR_FLASH_KEY,
-      'Select how you would like to report'
-    )
-
-    return h.redirect(howToReportPath(reportType))
+    return askAgain(request, h, reportType)
   }
 }
 

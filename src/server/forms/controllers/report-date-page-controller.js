@@ -7,8 +7,10 @@ import { QuestionPageController } from '@defra/forms-engine-plugin/controllers/Q
 
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
-import { howToReportPath } from '#/server/routes/report-method/controller.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 
 const SAVE_AND_EXIT = 'save-and-exit'
 

@@ -123,9 +123,10 @@ What the user sees:
   journeys are guarded by the same `Lab.<LAB>.AHR` role.
 - Roles for more than one lab are refused (no lab, no journeys) and logged as a
   warning at sign-in; choosing a lab is not supported yet.
-- **Update diagnostic tests** is offered to every signed-in user, whatever
-  their roles, and opens `/diagnostic-tests/laboratory-details` (see
-  [Diagnostic tests](#diagnostic-tests)).
+- **Update your diagnostic tests in use** is offered on the Animal Health
+  Regulations "How would you like to report?" screen, so only to users who
+  hold that report type, and opens `/diagnostic-tests/laboratory-details`
+  (see [Diagnostic tests](#diagnostic-tests)).
 
 A group membership change takes effect at the next token refresh. The
 successful sign-in log line records `organisationId` and `journeys`, so a DEV
@@ -622,13 +623,18 @@ date was answered. The web form option becomes **Start a new web form
 report**, which asks for confirmation at
 `/animal-health-regulations/how-to-report/start-new` before the saved report
 is discarded; **Continue saved report** there picks it up instead. The upload
-option is unaffected.
+option and **Update your diagnostic tests in use**, which comes last, are
+unaffected. Until the lab has defined its diagnostic tests a saved report is
+not offered (see [First-time setup](#first-time-setup)).
 
 ## Diagnostic tests
 
 Before a lab reports, it gives its laboratory details and defines the
 qualifying tests it uses for each pathogen and whether each is UKAS
-accredited. **Update diagnostic tests** on Submission Welcome opens
+accredited. Choosing **Submit an Animal Health Regulations report** on
+Submission Welcome opens "How would you like to report?"
+(`/animal-health-regulations/how-to-report`), whose last option, **Update
+your diagnostic tests in use**, opens
 `/diagnostic-tests/laboratory-details`, then `/diagnostic-tests` ("Define
 your qualifying tests in use"): plain pages served by
 `src/server/routes/diagnostic-tests` rather than a forms-engine journey. The
@@ -652,7 +658,9 @@ postcode and is kept upper case with one space (`SY23 1ND`); the UKAS number,
 when given, must be up to 10 digits. Errors are shown in an error summary and
 next to their field. Valid answers are kept in the session
 (`diagnosticTestsLaboratoryDetails`) and the user goes on to the tests.
-**Back** returns to Submission Welcome. The page starts from what was
+**Back** returns to "How would you like to report?", and the breadcrumbs
+place the diagnostic tests pages under the Animal Health Regulations report.
+The page starts from what was
 answered earlier in the session, otherwise from the lab's last submitted
 details (see the store below), otherwise blank.
 
@@ -731,22 +739,28 @@ define its diagnostic tests, which are submitted together. Until it has,
 Animal Health Regulations reports cannot be submitted; other report types are
 not affected.
 
-- **Submission Welcome** leaves out Animal Health Regulations and shows a
-  GOV.UK notification banner asking the user to set up their diagnostic
-  tests. A user who only holds Animal Health Regulations is offered just
-  **Update your diagnostic tests in use** (no submission history yet); a user
-  who also holds Bat rabies keeps Bat rabies and submission history. Posting
-  Animal Health Regulations anyway gets "Select what you want to do".
+- **Submission Welcome** still offers **Submit an Animal Health Regulations
+  report**. A user who only holds Animal Health Regulations is offered just
+  that (no submission history yet); a user who also holds Bat rabies keeps
+  Bat rabies and submission history.
+- **How would you like to report?** shows a GOV.UK notification banner asking
+  the user to set up their diagnostic tests, and offers only **Update your
+  diagnostic tests in use**: no upload, no web form, and no saved web form
+  report to continue. Posting any of those anyway gets "Select how you would
+  like to report". Once the tests are defined, upload and web form are
+  offered as usual, with **Update your diagnostic tests in use** last.
 - **Journey URLs** opened directly (`/animal-health-regulations`,
   `/animal-health-regulations-web-form`, their pages,
-  `/animal-health-regulations/how-to-report` and the preview routes) send the
-  user to Submission Welcome. This is the `requireDiagnosticTestsFirst`
-  `onPostAuth` extension, which runs after `restrictReportJourneys`, so a
-  user without the role still gets `/no-access` first.
+  `/animal-health-regulations/how-to-report/start-new` and the preview routes)
+  send the user to `/animal-health-regulations/how-to-report`, which is let
+  through. This is the `requireDiagnosticTestsFirst` `onPostAuth` extension,
+  which runs after `restrictReportJourneys`, so a user without the role still
+  gets `/no-access` first.
 
 The rule lives in `src/server/routes/diagnostic-tests/diagnostic-tests-gate.js`
-(`isAwaitingDiagnosticTests`, `isHeldBackForDiagnosticTests`); it only asks
-the store below whether the lab has tests.
+(`carriesDiagnosticTests`, `isAwaitingDiagnosticTests`,
+`isHeldBackForDiagnosticTests`); it only asks the store below whether the lab
+has tests.
 
 ### Lab diagnostic tests store (temporary)
 
@@ -814,9 +828,9 @@ client will be mocked at too.
    browser's; nothing outside the store depends on where they come from.
 5. **Decide what an unreachable backend means.** Holding Animal Health
    Regulations back (fail closed) would show the "set up your diagnostic
-   tests" banner during an outage, so Submission Welcome would need its own
-   "we could not check" message; letting it through (fail open) skips the
-   first-time rule while the backend is down. Today an unreadable cookie
+   tests" banner during an outage, so "How would you like to report?" would
+   need its own "we could not check" message; letting it through (fail open)
+   skips the first-time rule while the backend is down. Today an unreadable cookie
    reads as never defined.
 6. **Freshness (optional).** If the backend returns when the tests were last
    updated, the Animal Health Regulations check your answers confirmation

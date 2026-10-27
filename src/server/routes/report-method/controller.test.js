@@ -1,20 +1,25 @@
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
+import { DEFINED_LAB_DIAGNOSTIC_TESTS } from '#/test-helpers/lab-diagnostic-tests.js'
 import {
   dropWebFormDraft,
   readWebFormDraft,
   saveWebFormDraft
 } from '#/test-helpers/web-form-draft.js'
 import { buildState } from '#/test-helpers/web-form-model.js'
+import { getLabDiagnosticTests } from '../diagnostic-tests/lab-diagnostic-tests.js'
+import { LABORATORY_DETAILS_PATH } from '../diagnostic-tests/laboratory-details.js'
 import {
   CONTINUE_SAVED_TEXT,
   CONTINUE_WEB_FORM_TEXT,
   REPORT_METHOD,
   START_NEW_CONFIRM_TEXT,
   START_NEW_HEADING,
-  howToReportPath,
   startNewWebFormPath
 } from './controller.js'
 
@@ -32,6 +37,11 @@ const batRabies = reportTypesBySlug.get('bat-rabies')
 
 const HOW_TO_REPORT = howToReportPath(ahr)
 const ERROR_MESSAGE = 'Select how you would like to report'
+const DIAGNOSTIC_TESTS_BANNER_HEADING =
+  'You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.'
+
+const valueOf = (method) => `value="${method}"`
+const radioCount = (html) => html.match(/name="reportMethod"/g).length
 
 /**
  * A signed-in session whose Entra roles grant the given journeys.
@@ -171,6 +181,29 @@ describe('report method routes', () => {
       )
     })
 
+    test('Should offer updating the diagnostic tests last, saying what it is for', async () => {
+      const { result } = await get(HOW_TO_REPORT)
+
+      expect(result).toEqual(
+        expect.stringContaining('Update your diagnostic tests in use')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
+        )
+      )
+
+      const positions = [
+        REPORT_METHOD.FILE_UPLOAD,
+        REPORT_METHOD.WEB_FORM,
+        REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS
+      ].map((method) => result.indexOf(valueOf(method)))
+
+      expect(positions.every((position) => position >= 0)).toBe(true)
+      expect(positions).toEqual([...positions].sort((a, b) => a - b))
+      expect(radioCount(result)).toBe(3)
+    })
+
     test('Should sit under the report type in the breadcrumbs', async () => {
       const { result } = await get(HOW_TO_REPORT)
 
@@ -239,6 +272,15 @@ describe('report method routes', () => {
 
       expect(statusCode).toBe(statusCodes.redirect)
       expect(headers.location).toBe(`/${ahr.webFormSlug}`)
+    })
+
+    test('Should open the laboratory details page, the first step of the diagnostic tests', async () => {
+      const { statusCode, headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
     test('Should ask again, with an error, when nothing is selected', async () => {
@@ -354,6 +396,21 @@ describe('report method routes', () => {
       expect(
         result.indexOf(`value="${REPORT_METHOD.CONTINUE_WEB_FORM}"`)
       ).toBeLessThan(result.indexOf(`value="${REPORT_METHOD.FILE_UPLOAD}"`))
+    })
+
+    test('Should still offer updating the diagnostic tests last', async () => {
+      const { result } = await get(HOW_TO_REPORT)
+
+      const positions = [
+        REPORT_METHOD.CONTINUE_WEB_FORM,
+        REPORT_METHOD.FILE_UPLOAD,
+        REPORT_METHOD.WEB_FORM,
+        REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS
+      ].map((method) => result.indexOf(valueOf(method)))
+
+      expect(positions.every((position) => position >= 0)).toBe(true)
+      expect(positions).toEqual([...positions].sort((a, b) => a - b))
+      expect(radioCount(result)).toBe(4)
     })
 
     test('Should offer a new web form report in place of the web form, with a warning', async () => {
@@ -535,6 +592,130 @@ describe('report method routes', () => {
 
         expect(statusCode).toBe(statusCodes.notFound)
       })
+    })
+  })
+
+  describe('before the lab has defined its diagnostic tests', () => {
+    const user = auth.credentials.user
+
+    beforeEach(() => {
+      getLabDiagnosticTests.mockResolvedValue(null)
+    })
+
+    afterEach(() => {
+      getLabDiagnosticTests.mockResolvedValue(DEFINED_LAB_DIAGNOSTIC_TESTS)
+    })
+
+    test('Should say why, and only offer updating the diagnostic tests', async () => {
+      const { result, statusCode } = await get(HOW_TO_REPORT)
+
+      expect(statusCode).toBe(statusCodes.ok)
+      expect(result).toEqual(
+        expect.stringContaining('How would you like to report?')
+      )
+      expect(result).toEqual(
+        expect.stringContaining('govuk-notification-banner')
+      )
+      expect(result).toEqual(
+        expect.stringContaining('app-notification-banner-full-width')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(DIAGNOSTIC_TESTS_BANNER_HEADING)
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Select ‘Update your diagnostic tests in use’ to tell us which qualifying tests your laboratory uses and their UKAS accreditation.'
+        )
+      )
+      // Above the question it is about
+      expect(result.indexOf(DIAGNOSTIC_TESTS_BANNER_HEADING)).toBeLessThan(
+        result.indexOf('govuk-fieldset__heading')
+      )
+
+      expect(result).toEqual(
+        expect.stringContaining(valueOf(REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS))
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(valueOf(REPORT_METHOD.FILE_UPLOAD))
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(valueOf(REPORT_METHOD.WEB_FORM))
+      )
+      expect(radioCount(result)).toBe(1)
+    })
+
+    test('Should not offer to continue a saved web form report', async () => {
+      await saveWebFormDraft(server, user)
+
+      try {
+        const { result } = await get(HOW_TO_REPORT)
+
+        expect(result).not.toEqual(
+          expect.stringContaining(
+            `You have a saved ${ahr.title} that has not been submitted.`
+          )
+        )
+        expect(result).not.toEqual(
+          expect.stringContaining(valueOf(REPORT_METHOD.CONTINUE_WEB_FORM))
+        )
+        expect(radioCount(result)).toBe(1)
+      } finally {
+        await dropWebFormDraft(server, user)
+      }
+    })
+
+    test('Should not show the diagnostic tests banner once they are defined', async () => {
+      getLabDiagnosticTests.mockResolvedValue(DEFINED_LAB_DIAGNOSTIC_TESTS)
+
+      const { result } = await get(HOW_TO_REPORT)
+
+      expect(result).not.toEqual(
+        expect.stringContaining(DIAGNOSTIC_TESTS_BANNER_HEADING)
+      )
+    })
+
+    test('Should open the laboratory details page when updating the diagnostic tests', async () => {
+      const { statusCode, headers } = await post(HOW_TO_REPORT, {
+        reportMethod: REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS
+      })
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
+    })
+
+    test.each([
+      REPORT_METHOD.FILE_UPLOAD,
+      REPORT_METHOD.WEB_FORM,
+      REPORT_METHOD.CONTINUE_WEB_FORM
+    ])(
+      'Should ask again, with an error, when %s is posted anyway',
+      async (reportMethod) => {
+        await saveWebFormDraft(server, user)
+
+        try {
+          const { statusCode, headers } = await post(HOW_TO_REPORT, {
+            reportMethod
+          })
+
+          expect(statusCode).toBe(statusCodes.redirect)
+          expect(headers.location).toBe(HOW_TO_REPORT)
+
+          const errorPage = await get(HOW_TO_REPORT)
+
+          expect(errorPage.result).toEqual(
+            expect.stringContaining(ERROR_MESSAGE)
+          )
+        } finally {
+          await dropWebFormDraft(server, user)
+        }
+      }
+    )
+
+    test('Should send the user back here from the new web form confirmation', async () => {
+      const { statusCode, headers } = await get(startNewWebFormPath(ahr))
+
+      expect(statusCode).toBe(statusCodes.redirect)
+      expect(headers.location).toBe(HOW_TO_REPORT)
     })
   })
 })
