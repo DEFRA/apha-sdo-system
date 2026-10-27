@@ -667,12 +667,17 @@ describe('diagnostic tests routes', () => {
       expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
-    test('Should sit under Submission Welcome in the breadcrumbs', async () => {
+    test('Should sit under the Animal Health Regulations report in the breadcrumbs', async () => {
       const { result } = await getDiagnosticTests()
 
       expect(result).toEqual(expect.stringContaining('govuk-breadcrumbs'))
       expect(result).toEqual(
         expect.stringContaining('href="/submission-welcome"')
+      )
+      expect(result).toEqual(
+        expect.stringContaining(
+          'href="/animal-health-regulations/how-to-report"'
+        )
       )
       expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
     })

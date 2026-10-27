@@ -1,35 +1,22 @@
 import {
   canSubmitReportType,
-  canUpdateDiagnosticTests,
   getAllowedReportTypes
 } from '#/server/auth/report-access.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
-import { howToReportPath } from '../report-method/controller.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
 import { isHeldBackForDiagnosticTests } from '../diagnostic-tests/diagnostic-tests-gate.js'
-import { LABORATORY_DETAILS_PATH } from '../diagnostic-tests/laboratory-details.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
 export const SUBMISSION_WELCOME_HEADING = 'What would you like to do?'
 
-export const UPDATE_DIAGNOSTIC_TESTS = 'update-diagnostic-tests'
 export const VIEW_SUBMISSION_HISTORY = 'view-submission-history'
 
 // The Design System's default radio label is regular weight. This service
 // bolds the options, as on the sign-in page, so each choice reads as an action.
 const optionLabel = { classes: 'govuk-!-font-weight-bold' }
-
-// Only a user who can submit Animal Health Regulations is offered this.
-// The hint is the diagnostic tests page's warning, as one sentence: a radio
-// hint is not the place for the bullet list that page shows in full.
-const updateDiagnosticTestsItem = {
-  value: UPDATE_DIAGNOSTIC_TESTS,
-  text: 'Update your diagnostic tests in use',
-  label: optionLabel,
-  hint: {
-    text: 'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
-  }
-}
 
 // Placeholder until submission history has a store to read the real last
 // report from. Continue still re-renders this page.
@@ -51,34 +38,33 @@ function submitReportText(title) {
 }
 
 /**
- * The report types the user can submit now: those their roles grant, less
- * any held back until their lab has defined its diagnostic tests.
+ * Whether every report type the user holds is held back until their lab has
+ * defined its diagnostic tests. Holding none is not being held back.
  * @param {import('@hapi/hapi').Request} request
+ * @param {{ code: string }[]} allowedReportTypes - those the user's roles grant
  */
-async function getOpenReportTypes(request) {
-  const allowed = getAllowedReportTypes(request.auth.credentials?.user)
+async function isEveryReportTypeHeldBack(request, allowedReportTypes) {
   const heldBack = await Promise.all(
-    allowed.map((reportType) =>
+    allowedReportTypes.map((reportType) =>
       isHeldBackForDiagnosticTests(request, reportType)
     )
   )
 
-  return allowed.filter((_reportType, index) => !heldBack[index])
+  return heldBack.length > 0 && heldBack.every(Boolean)
 }
 
 /**
- * The radios a user sees: the report types they can submit now, then
- * submission history, then diagnostic tests when they hold Animal Health
- * Regulations. A user whose only report type is held back has no history to
- * look at yet, so defining the tests is the one thing offered. Built per
- * request because it depends on who is signed in.
+ * The radios a user sees: the report types they hold, then submission
+ * history. A user whose only report type is held back has no history to look
+ * at yet, so their report type is the one thing offered. Built per request
+ * because it depends on who is signed in.
  */
-function buildSubmissionActionItems(user, openReportTypes) {
-  const everyReportTypeHeldBack =
-    openReportTypes.length === 0 && getAllowedReportTypes(user).length > 0
-
+function buildSubmissionActionItems(
+  allowedReportTypes,
+  everyReportTypeHeldBack
+) {
   return [
-    ...openReportTypes.map((reportType) => ({
+    ...allowedReportTypes.map((reportType) => ({
       value: reportType.slug,
       text: submitReportText(reportType.title),
       label: optionLabel,
@@ -86,22 +72,23 @@ function buildSubmissionActionItems(user, openReportTypes) {
         ? { hint: { text: reportType.welcomeHint } }
         : {})
     })),
-    ...(everyReportTypeHeldBack ? [] : [viewSubmissionHistoryItem]),
-    ...(canUpdateDiagnosticTests(user) ? [updateDiagnosticTestsItem] : [])
+    ...(everyReportTypeHeldBack ? [] : [viewSubmissionHistoryItem])
   ]
 }
 
 async function renderWelcome(request, h, error) {
-  const user = request.auth.credentials?.user
-  const allowedReportTypes = getAllowedReportTypes(user)
-  const openReportTypes = await getOpenReportTypes(request)
+  const allowedReportTypes = getAllowedReportTypes(
+    request.auth.credentials?.user
+  )
 
   return h.view('submission-welcome/index', {
     pageTitle: SUBMISSION_WELCOME_HEADING,
     heading: SUBMISSION_WELCOME_HEADING,
-    submissionActionItems: buildSubmissionActionItems(user, openReportTypes),
+    submissionActionItems: buildSubmissionActionItems(
+      allowedReportTypes,
+      await isEveryReportTypeHeldBack(request, allowedReportTypes)
+    ),
     hasReportTypes: allowedReportTypes.length > 0,
-    awaitingDiagnosticTests: openReportTypes.length < allowedReportTypes.length,
     error
   })
 }
@@ -111,12 +98,9 @@ async function renderWelcome(request, h, error) {
  * form journey, e.g. /bat-rabies (report date page), or, for a report type
  * that can also be entered as a web form, to the screen asking which of the
  * two the user wants (where a web form report saved part-way through is
- * offered to continue). "Update your diagnostic tests in use" opens the
- * laboratory details page, the first step of defining the qualifying tests
- * a lab uses. Until it has, Animal
- * Health Regulations is not offered and a banner says why. A user whose
- * roles grant no report type is told so here rather than being turned away
- * at sign-in.
+ * offered to continue, and the lab's diagnostic tests are updated). A user
+ * whose roles grant no report type is told so here rather than being turned
+ * away at sign-in.
  */
 export const submissionWelcomeGetController = {
   handler(request, h) {
@@ -127,29 +111,18 @@ export const submissionWelcomeGetController = {
 }
 
 export const submissionWelcomePostController = {
-  async handler(request, h) {
+  handler(request, h) {
     const { submissionAction } = request.payload ?? {}
     const reportType = reportTypesBySlug.get(submissionAction)
 
-    // A report type the user's roles do not grant, or one held back until
-    // the lab defines its diagnostic tests, is treated like an unknown value:
-    // it was never offered, so there is nothing more specific to say.
-    if (
-      canSubmitReportType(request.auth.credentials?.user, reportType) &&
-      !(await isHeldBackForDiagnosticTests(request, reportType))
-    ) {
+    // A report type the user's roles do not grant is treated like an unknown
+    // value: it was never offered, so there is nothing more specific to say.
+    if (canSubmitReportType(request.auth.credentials?.user, reportType)) {
       return h.redirect(
         reportType.webFormSlug
           ? howToReportPath(reportType)
           : `/${reportType.slug}`
       )
-    }
-
-    if (
-      submissionAction === UPDATE_DIAGNOSTIC_TESTS &&
-      canUpdateDiagnosticTests(request.auth.credentials?.user)
-    ) {
-      return h.redirect(LABORATORY_DETAILS_PATH)
     }
 
     // Submission history has no journey to send the user to yet, so Continue

@@ -4,7 +4,6 @@
 {% from "govuk/components/button/macro.njk" import govukButton %}
 {% from "govuk/components/error-summary/macro.njk" import govukErrorSummary %}
 {% from "govuk/components/inset-text/macro.njk" import govukInsetText %}
-{% from "govuk/components/notification-banner/macro.njk" import govukNotificationBanner %}
 
 {% block content %}
   <div class="govuk-grid-row">
@@ -39,18 +38,6 @@
             text: "Your account is not assigned to any report type. Ask your APHA administrator to request access."
           }) }}
         {% endif %}
-      {% endif %}
-
-      {# A lab's first step: Animal Health Regulations is not offered until
-         its diagnostic tests are defined #}
-      {% if awaitingDiagnosticTests %}
-        {% set diagnosticTestsBannerHtml %}
-          <p class="govuk-notification-banner__heading">You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.</p>
-          <p class="govuk-body">Select ‘Update your diagnostic tests in use’ to tell us which qualifying tests your laboratory uses and their UKAS accreditation.</p>
-        {% endset %}
-        {{ govukNotificationBanner({
-          html: diagnosticTestsBannerHtml
-        }) }}
       {% endif %}
 
       <form method="post" action="/submission-welcome" novalidate>

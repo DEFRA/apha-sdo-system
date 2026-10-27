@@ -2,9 +2,14 @@ import { config } from '#/config/config.js'
 import { createServer } from '#/server/server.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
-import { reportTypesBySlug } from '#/server/forms/report-types.js'
+import {
+  howToReportPath,
+  reportTypesBySlug
+} from '#/server/forms/report-types.js'
+import { REPORT_METHOD } from '../report-method/controller.js'
 import { DIAGNOSTIC_TESTS_PATH, accreditationFieldId } from './controller.js'
 import {
+  carriesDiagnosticTests,
   isAwaitingDiagnosticTests,
   isHeldBackForDiagnosticTests,
   requireDiagnosticTestsFirst
@@ -14,6 +19,7 @@ import { testsByKey } from './qualifying-tests.js'
 
 const ahr = reportTypesBySlug.get('animal-health-regulations')
 const batRabies = reportTypesBySlug.get('bat-rabies')
+const HOW_TO_REPORT = howToReportPath(ahr)
 
 // The lab's tests as the store keeps them, for a lab that has defined them
 const DEFINED = [['TestLab1', { 'bhv-fat': 'Yes' }]]
@@ -24,12 +30,14 @@ const DEFINED = [['TestLab1', { 'bhv-fat': 'Yes' }]]
  */
 function createRequest({
   slug,
+  path = slug === undefined ? '/' : `/${slug}`,
   journeys = ['BR', 'AHR'],
   isAuthenticated = true,
   defined = false
 } = {}) {
   return {
     params: slug === undefined ? {} : { slug },
+    path,
     auth: {
       isAuthenticated,
       credentials: isAuthenticated
@@ -74,6 +82,14 @@ describe('isAwaitingDiagnosticTests', () => {
   })
 })
 
+describe('carriesDiagnosticTests', () => {
+  test('is true only for Animal Health Regulations', () => {
+    expect(carriesDiagnosticTests(ahr)).toBe(true)
+    expect(carriesDiagnosticTests(batRabies)).toBe(false)
+    expect(carriesDiagnosticTests(undefined)).toBe(false)
+  })
+})
+
 describe('isHeldBackForDiagnosticTests', () => {
   test('holds back Animal Health Regulations until the lab has defined its tests', async () => {
     expect(await isHeldBackForDiagnosticTests(createRequest(), ahr)).toBe(true)
@@ -93,14 +109,18 @@ describe('isHeldBackForDiagnosticTests', () => {
 })
 
 describe('requireDiagnosticTestsFirst', () => {
-  test.each([ahr.slug, ahr.webFormSlug])(
-    'sends a user to Submission Welcome from %s before their lab has defined its tests',
-    async (slug) => {
-      const request = createRequest({ slug })
+  test.each([
+    [ahr.slug, `/${ahr.slug}`],
+    [ahr.webFormSlug, `/${ahr.webFormSlug}`],
+    [ahr.slug, `${HOW_TO_REPORT}/start-new`]
+  ])(
+    'sends a user to how to report from %s (%s) before their lab has defined its tests',
+    async (slug, path) => {
+      const request = createRequest({ slug, path })
       const h = createToolkit()
 
       expect(await requireDiagnosticTestsFirst(request, h)).toBe(h.response)
-      expect(h.redirect).toHaveBeenCalledWith('/submission-welcome')
+      expect(h.redirect).toHaveBeenCalledWith(HOW_TO_REPORT)
       expect(h.response.takeover).toHaveBeenCalled()
       expect(request.logger.info).toHaveBeenCalledWith(
         { userId: 'user-id', reportType: 'AHR' },
@@ -108,6 +128,18 @@ describe('requireDiagnosticTestsFirst', () => {
       )
     }
   )
+
+  test('lets how to report through, where defining the tests is offered', async () => {
+    const h = createToolkit()
+
+    expect(
+      await requireDiagnosticTestsFirst(
+        createRequest({ slug: ahr.slug, path: HOW_TO_REPORT }),
+        h
+      )
+    ).toBe(h.continue)
+    expect(h.redirect).not.toHaveBeenCalled()
+  })
 
   test('lets a user in once their lab has defined its tests', async () => {
     const h = createToolkit()
@@ -156,7 +188,6 @@ describe('diagnostic tests first (end to end)', () => {
 
   const AHR_URLS = [
     `/${ahr.slug}/report-date`,
-    `/${ahr.slug}/how-to-report`,
     `/${ahr.webFormSlug}/what-month-does-your-report-cover`
   ]
 
@@ -252,13 +283,13 @@ describe('diagnostic tests first (end to end)', () => {
     await server.stop({ timeout: 0 })
   })
 
-  test.each(AHR_URLS)(
-    'Should send the user from %s to Submission Welcome until the lab has defined its tests',
+  test.each([...AHR_URLS, `${HOW_TO_REPORT}/start-new`])(
+    'Should send the user from %s to how to report until the lab has defined its tests',
     async (url) => {
       const { statusCode, headers } = await open(url)
 
       expect(statusCode).toBe(statusCodes.redirect)
-      expect(headers.location).toBe('/submission-welcome')
+      expect(headers.location).toBe(HOW_TO_REPORT)
     }
   )
 
@@ -272,15 +303,37 @@ describe('diagnostic tests first (end to end)', () => {
     }
   )
 
-  test('Should offer Animal Health Regulations on Submission Welcome once the lab has defined its tests', async () => {
-    const before = await open('/submission-welcome')
-    const cookie = await defineDiagnosticTests()
-    const after = await open('/submission-welcome', authFor(), cookie)
+  test('Should offer Animal Health Regulations on Submission Welcome before the lab has defined its tests', async () => {
+    const { result } = await open('/submission-welcome')
 
+    expect(result).toEqual(expect.stringContaining(`value="${ahr.slug}"`))
+  })
+
+  test('Should offer reporting on how to report once the lab has defined its tests', async () => {
+    const before = await open(HOW_TO_REPORT)
+    const cookie = await defineDiagnosticTests()
+    const after = await open(HOW_TO_REPORT, authFor(), cookie)
+
+    expect(before.statusCode).toBe(statusCodes.ok)
     expect(before.result).not.toEqual(
-      expect.stringContaining(`value="${ahr.slug}"`)
+      expect.stringContaining(`value="${REPORT_METHOD.FILE_UPLOAD}"`)
     )
-    expect(after.result).toEqual(expect.stringContaining(`value="${ahr.slug}"`))
+    expect(before.result).toEqual(
+      expect.stringContaining(
+        `value="${REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS}"`
+      )
+    )
+    expect(after.result).toEqual(
+      expect.stringContaining(`value="${REPORT_METHOD.FILE_UPLOAD}"`)
+    )
+    expect(after.result).toEqual(
+      expect.stringContaining(`value="${REPORT_METHOD.WEB_FORM}"`)
+    )
+    expect(after.result).toEqual(
+      expect.stringContaining(
+        `value="${REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS}"`
+      )
+    )
   })
 
   test("Should still hold back another lab's user in the same browser", async () => {
@@ -292,7 +345,7 @@ describe('diagnostic tests first (end to end)', () => {
     )
 
     expect(statusCode).toBe(statusCodes.redirect)
-    expect(headers.location).toBe('/submission-welcome')
+    expect(headers.location).toBe(HOW_TO_REPORT)
   })
 
   test('Should never hold back Bat rabies', async () => {

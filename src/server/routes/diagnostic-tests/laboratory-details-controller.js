@@ -1,5 +1,8 @@
-import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import {
+  howToReportPath,
+  reportTypesByCode
+} from '#/server/forms/report-types.js'
 
 import {
   DIAGNOSTIC_TESTS_PATH,
@@ -18,6 +21,10 @@ import {
   parseLaboratoryDetails,
   validateLaboratoryDetails
 } from './laboratory-details.js'
+
+// Updating the tests is offered where the Animal Health Regulations report
+// asks how the user would like to report
+const BACK_HREF = howToReportPath(reportTypesByCode.get('AHR'))
 
 /**
  * What the template needs: each input's id, name, value and error, and the
@@ -45,7 +52,7 @@ function buildViewModel(values, errors = []) {
   return {
     pageTitle: LABORATORY_DETAILS_TITLE,
     formAction: LABORATORY_DETAILS_PATH,
-    backLink: { text: 'Back', href: POST_SIGN_IN_PATH },
+    backLink: { text: 'Back', href: BACK_HREF },
     fields,
     errors
   }
@@ -59,10 +66,11 @@ function renderLaboratoryDetails(h, values, errors) {
 }
 
 /**
- * The first step of updating the diagnostic tests, reached from Submission
- * Welcome. It starts from what was answered earlier in this session (the
- * user came back from the tests), otherwise from the lab's last submitted
- * details. Opening it ends the previous submission's confirmation.
+ * The first step of updating the diagnostic tests, reached from the Animal
+ * Health Regulations report's "How would you like to report". It starts from
+ * what was answered earlier in this session (the user came back from the
+ * tests), otherwise from the lab's last submitted details. Opening it ends
+ * the previous submission's confirmation.
  */
 export const laboratoryDetailsGetController = {
   async handler(request, h) {

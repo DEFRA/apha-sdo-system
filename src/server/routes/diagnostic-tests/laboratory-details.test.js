@@ -400,7 +400,7 @@ describe('laboratory details routes', () => {
       expect(result).toEqual(expect.stringContaining('Caroline Ford'))
     })
 
-    test('Should post back to itself with a crumb, and go back to Submission Welcome', async () => {
+    test('Should post back to itself with a crumb, and go back to how to report Animal Health Regulations', async () => {
       const { result } = await get(LABORATORY_DETAILS_PATH)
 
       expect(result).toEqual(
@@ -410,15 +410,20 @@ describe('laboratory details routes', () => {
       expect(result).toEqual(expect.stringContaining('Continue'))
       expect(result).toEqual(
         expect.stringContaining(
-          'href="/submission-welcome" class="govuk-back-link"'
+          'href="/animal-health-regulations/how-to-report" class="govuk-back-link"'
         )
       )
     })
 
-    test('Should sit under Submission Welcome in the breadcrumbs', async () => {
+    test('Should sit under the Animal Health Regulations report in the breadcrumbs', async () => {
       const { result } = await get(LABORATORY_DETAILS_PATH)
 
       expect(result).toEqual(expect.stringContaining('govuk-breadcrumbs'))
+      expect(result).toEqual(
+        expect.stringContaining(
+          'href="/animal-health-regulations/how-to-report"'
+        )
+      )
       expect(result).toEqual(expect.stringContaining('Update diagnostic tests'))
     })
 
