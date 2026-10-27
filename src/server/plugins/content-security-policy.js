@@ -22,7 +22,7 @@ const localUploaderOrigins = isLocalUploader
  * through has to be listed, as the Entra origin is. Customer Identity
  * publishes its discovery document from one host but authorizes and signs
  * out on others, so those come from the discovery document; the GOV.UK One
- * Login and Government Gateway hops it then makes are configuration
+ * Login hops it then makes are configuration
  * (`auth.defraId.redirectHosts`), already CSP source expressions.
  * @param {object} [settings] - auth.defraId configuration
  * @param {{ logger?: object }} [options]

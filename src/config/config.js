@@ -294,8 +294,7 @@ export const config = convict({
       }
     },
     // External (laboratory) users sign in with Defra Customer Identity, which
-    // offers GOV.UK One Login or Government Gateway according to the service's
-    // configuration there. Locally the cdp-defra-id-stub stands in for it.
+    // offers GOV.UK One Login. Locally the cdp-defra-id-stub stands in for it.
     defraId: {
       enabled: {
         doc: 'Offer Defra Customer Identity sign-in to external users',
@@ -360,10 +359,7 @@ export const config = convict({
       redirectHosts: {
         doc: 'Further origins the sign-in redirect chain may pass through, allowed as CSP form-action',
         format: Array,
-        default: [
-          'https://*.account.gov.uk',
-          'https://*.access.service.gov.uk'
-        ],
+        default: ['https://*.account.gov.uk'],
         env: 'AUTH_DEFRA_ID_REDIRECT_HOSTS'
       },
       earlyRefreshMs: {

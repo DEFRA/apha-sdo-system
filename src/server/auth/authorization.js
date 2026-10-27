@@ -115,8 +115,8 @@ export function getUserProfile(claims = {}, options = {}) {
  * person is `contactId` (their customer record) rather than the B2C subject,
  * and the lab is the organisation they picked at sign-in, named by
  * `organisationName` since the Customer Identity ID is an opaque GUID.
- * `amr` records how they signed in: `one` for GOV.UK One Login, `scp` for
- * Government Gateway.
+ * `amr` records how they signed in. This service supports GOV.UK One Login
+ * (`one`).
  * @param {object} [claims] - ID token claims
  * @param {{ logger?: object, roleNames?: Record<string, string> }} [options] - the request logger at sign-in; role names default to configuration
  */

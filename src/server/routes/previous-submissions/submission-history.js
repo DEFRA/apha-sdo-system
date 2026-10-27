@@ -110,6 +110,8 @@ function storedLabs(request) {
 // A report is kept as [code, referenceNumber, reportMonthYear, submittedAt,
 // fileName, decision], with a null fileName for a web form report: tuples
 // rather than objects, so more reports fit
+const DECISION_INDEX = 5
+
 function storedEntryOf(submission, decision) {
   const fileName = Array.from(submission.fileName ?? '')
     .slice(0, MAX_FILE_NAME_LENGTH)
@@ -127,7 +129,7 @@ function storedEntryOf(submission, decision) {
 
 // Reports kept before decisions were read as accepted
 function decisionOf(entry) {
-  return entry[5] === SUBMISSION_STATUS.REJECTED
+  return entry[DECISION_INDEX] === SUBMISSION_STATUS.REJECTED
     ? SUBMISSION_STATUS.REJECTED
     : SUBMISSION_STATUS.ACCEPTED
 }
@@ -244,9 +246,9 @@ export async function getSubmissionHistory(request) {
  */
 export async function recordSubmission(request, submission) {
   const lab = labOf(request)
-  const labs = storedLabs(request).map(([id, entries]) => [
+  const labs = storedLabs(request).map(([id, storedEntries]) => [
     id,
-    reportEntriesOf(entries)
+    reportEntriesOf(storedEntries)
   ])
   const entries = labs.find(([id]) => id === lab)?.[1] ?? []
   const entry = storedEntryOf(submission, nextDecision(entries))

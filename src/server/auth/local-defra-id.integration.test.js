@@ -274,7 +274,7 @@ describe('local Defra ID stand-in', () => {
   test('offers the external option as available', async () => {
     const { result } = await appServer.inject('/sign-in-choose')
 
-    expect(result).toContain('GOV.UK One Login or Government Gateway')
+    expect(result).toContain('GOV.UK One Login')
     expect(result).toContain('For laboratory users')
     expect(result).not.toContain('not available yet')
   })

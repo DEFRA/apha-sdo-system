@@ -123,7 +123,7 @@ export const signInChoosePostController = {
 
 /**
  * Starts the Defra Customer Identity sign-in, through which the user is
- * offered GOV.UK One Login or Government Gateway. A placeholder page stands
+ * offered GOV.UK One Login. A placeholder page stands
  * in until the environment has been onboarded to Customer Identity.
  */
 export const signInExternalController = {

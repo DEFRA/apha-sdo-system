@@ -21,7 +21,7 @@ import { getSafeRedirect } from '#/server/auth/safe-redirect.js'
  * The journey starts at /sign-in-choose where the user picks a provider:
  *
  * - Defra Single Sign-on (internal users): Entra ID OIDC
- * - GOV.UK One Login or Government Gateway (external laboratory users):
+ * - GOV.UK One Login (external laboratory users):
  *   Defra Customer Identity OIDC, a placeholder page until the environment
  *   is onboarded to it.
  */

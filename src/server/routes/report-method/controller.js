@@ -140,6 +140,38 @@ function askAgain(request, h, reportType) {
 }
 
 /**
+ * Where the chosen way of reporting leads, or null when it was not offered.
+ * @param {import('@hapi/hapi').Request} request
+ * @param {{ slug: string, webFormSlug: string }} reportType - an entry of the report type registry
+ * @param {string} [reportMethod] - the posted choice, one of REPORT_METHOD
+ */
+async function reportingPath(request, reportType, reportMethod) {
+  if (reportMethod === REPORT_METHOD.FILE_UPLOAD) {
+    return `/${reportType.slug}`
+  }
+
+  if (reportMethod === REPORT_METHOD.WEB_FORM) {
+    const draft = await getWebFormDraft(request, reportType)
+
+    return draft
+      ? startNewWebFormPath(reportType)
+      : `/${reportType.webFormSlug}`
+  }
+
+  // Only offered while there is a saved report; posted with none, it was
+  // never offered
+  if (reportMethod === REPORT_METHOD.CONTINUE_WEB_FORM) {
+    const draft = await getWebFormDraft(request, reportType)
+
+    if (draft) {
+      return webFormResumePath(reportType, draft)
+    }
+  }
+
+  return null
+}
+
+/**
  * Screen between Submission Welcome and a report type's journeys: the user
  * picks whether to upload a data file or to complete a web form, and is sent
  * into the matching journey. A user with a web form report saved part-way
@@ -202,29 +234,9 @@ export const reportMethodPostController = {
       return askAgain(request, h, reportType)
     }
 
-    if (reportMethod === REPORT_METHOD.FILE_UPLOAD) {
-      return h.redirect(`/${reportType.slug}`)
-    }
+    const path = await reportingPath(request, reportType, reportMethod)
 
-    if (reportMethod === REPORT_METHOD.WEB_FORM) {
-      const draft = await getWebFormDraft(request, reportType)
-
-      return h.redirect(
-        draft ? startNewWebFormPath(reportType) : `/${reportType.webFormSlug}`
-      )
-    }
-
-    // Only offered while there is a saved report; posted with none, it was
-    // never offered and falls through to the error below
-    if (reportMethod === REPORT_METHOD.CONTINUE_WEB_FORM) {
-      const draft = await getWebFormDraft(request, reportType)
-
-      if (draft) {
-        return h.redirect(webFormResumePath(reportType, draft))
-      }
-    }
-
-    return askAgain(request, h, reportType)
+    return path ? h.redirect(path) : askAgain(request, h, reportType)
   }
 }
 

@@ -137,9 +137,7 @@ describe('auth routes', () => {
         expect.stringContaining('How do you want to sign in?')
       )
       expect(result).toEqual(expect.stringContaining('Defra Single Sign-on'))
-      expect(result).toEqual(
-        expect.stringContaining('GOV.UK One Login or Government Gateway')
-      )
+      expect(result).toEqual(expect.stringContaining('GOV.UK One Login'))
     })
 
     test('carries the requested page through the form', async () => {

@@ -16,7 +16,7 @@ export const AUTH_PATHS = {
 /**
  * Which identity provider a session came from. Internal (Defra/APHA) users
  * sign in with Entra ID; external laboratory users with Defra Customer
- * Identity, which offers GOV.UK One Login or Government Gateway.
+ * Identity, which offers GOV.UK One Login.
  */
 export const AUTH_PROVIDERS = {
   ENTRA_ID: 'entraId',

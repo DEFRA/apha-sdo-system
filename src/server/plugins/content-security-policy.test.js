@@ -47,11 +47,7 @@ describe('getDefraIdFormActionOrigins', () => {
     enabled: true,
     discoveryUrl:
       'https://your-account.example/idphub/b2c/policy/.well-known/openid-configuration',
-    redirectHosts: [
-      ' https://*.account.gov.uk ',
-      'https://*.access.service.gov.uk',
-      ''
-    ]
+    redirectHosts: [' https://*.account.gov.uk ', 'https://*.login.example', '']
   }
 
   beforeEach(() => {
@@ -75,7 +71,7 @@ describe('getDefraIdFormActionOrigins', () => {
       'https://your-account.example',
       'https://tenant.b2clogin.example',
       'https://*.account.gov.uk',
-      'https://*.access.service.gov.uk'
+      'https://*.login.example'
     ])
   })
 
@@ -88,7 +84,7 @@ describe('getDefraIdFormActionOrigins', () => {
     ).resolves.toEqual([
       'https://your-account.example',
       'https://*.account.gov.uk',
-      'https://*.access.service.gov.uk'
+      'https://*.login.example'
     ])
     expect(logger.warn).toHaveBeenCalled()
   })
