@@ -1,14 +1,18 @@
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
-import { reportTypes } from '#/server/forms/report-types.js'
+import { reportTypes, reportTypesByCode } from '#/server/forms/report-types.js'
 import { getLabDiagnosticTests } from '../diagnostic-tests/lab-diagnostic-tests.js'
+import { getSubmissionHistory } from '../previous-submissions/submission-history.js'
 import { REPORT_METHOD } from '../report-method/controller.js'
 import { DEFINED_LAB_DIAGNOSTIC_TESTS } from '#/test-helpers/lab-diagnostic-tests.js'
 import {
   dropWebFormDraft,
   saveWebFormDraft
 } from '#/test-helpers/web-form-draft.js'
-import { VIEW_SUBMISSION_HISTORY } from './controller.js'
+import {
+  NO_SUBMISSION_HISTORY_HINT,
+  VIEW_SUBMISSION_HISTORY
+} from './controller.js'
 
 // Labs have defined their diagnostic tests unless a test says otherwise
 vi.mock(
@@ -18,6 +22,30 @@ vi.mock(
       await import('#/test-helpers/lab-diagnostic-tests.js')
     ).mockLabDiagnosticTestsDefined(importOriginal)
 )
+
+// Labs have submitted nothing unless a test says otherwise
+vi.mock(
+  '#/server/routes/previous-submissions/submission-history.js',
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    getSubmissionHistory: vi.fn(async () => [])
+  })
+)
+
+/**
+ * A report as the submission history store reads it back
+ */
+function submittedReport(code, overrides = {}) {
+  return {
+    referenceNumber: `${code}-REF`,
+    reportType: reportTypesByCode.get(code),
+    reportMonthYear: 'February 2026',
+    submittedAt: '2026-03-03T10:15:00.000Z',
+    fileName: null,
+    status: 'processing',
+    ...overrides
+  }
+}
 
 const BANNER_HEADING =
   'You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.'
@@ -186,9 +214,70 @@ describe('submission welcome routes', () => {
       expect(result).toEqual(
         expect.stringContaining('View your laboratory submission history')
       )
+    })
+
+    test('Should say when the lab has submitted no report yet', async () => {
+      const { result } = await getSubmissionWelcome()
+
       expect(result).toEqual(
-        expect.stringContaining('Last report submitted: 2026-02 BR.xls')
+        expect.stringContaining(NO_SUBMISSION_HISTORY_HINT)
       )
+      expect(result).not.toEqual(
+        expect.stringContaining('Last report submitted')
+      )
+    })
+
+    test('Should name the last report submitted', async () => {
+      getSubmissionHistory.mockResolvedValueOnce([
+        submittedReport('AHR', { reportMonthYear: 'March 2026' }),
+        submittedReport('BR')
+      ])
+
+      const { result } = await getSubmissionWelcome()
+
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Last report submitted: Animal Health Regulations report for March 2026'
+        )
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(NO_SUBMISSION_HISTORY_HINT)
+      )
+    })
+
+    test('Should only name a report of a type the user holds', async () => {
+      getSubmissionHistory.mockResolvedValueOnce([
+        submittedReport('AHR', { reportMonthYear: 'March 2026' }),
+        submittedReport('BR')
+      ])
+
+      const { result } = await getSubmissionWelcome(authWithJourneys(['BR']))
+
+      expect(result).toEqual(
+        expect.stringContaining(
+          'Last report submitted: Bat rabies report for February 2026'
+        )
+      )
+    })
+
+    test('Should say none was submitted when the only reports are of a type the user does not hold', async () => {
+      getSubmissionHistory.mockResolvedValueOnce([submittedReport('AHR')])
+
+      const { result } = await getSubmissionWelcome(authWithJourneys(['BR']))
+
+      expect(result).toEqual(
+        expect.stringContaining(NO_SUBMISSION_HISTORY_HINT)
+      )
+    })
+
+    test('Should name the report type alone when the report month is not known', async () => {
+      getSubmissionHistory.mockResolvedValueOnce([
+        submittedReport('BR', { reportMonthYear: null })
+      ])
+
+      const { result } = await getSubmissionWelcome()
+
+      expect(result).toMatch(/Last report submitted: Bat rabies report\s*</)
     })
 
     test('Should offer each report type as submit a report', async () => {
@@ -289,24 +378,18 @@ describe('submission welcome routes', () => {
       }
     )
 
-    test('Should do nothing when submission history is selected', async () => {
-      const { statusCode, headers, result } = await postSubmissionWelcome({
-        submissionAction: VIEW_SUBMISSION_HISTORY
-      })
+    test.each([[['BR', 'AHR']], [['BR']], [[]]])(
+      'Should continue to the previous submissions page for %j',
+      async (journeys) => {
+        const { statusCode, headers } = await postSubmissionWelcome(
+          { submissionAction: VIEW_SUBMISSION_HISTORY },
+          authWithJourneys(journeys)
+        )
 
-      expect(statusCode).toBe(statusCodes.ok)
-      expect(headers.location).toBeUndefined()
-      expect(result).toEqual(
-        expect.stringContaining('What would you like to do?')
-      )
-      expect(result).not.toEqual(expect.stringContaining('There is a problem'))
-      expect(result).not.toEqual(
-        expect.stringContaining('govuk-notification-banner')
-      )
-      // The page is re-rendered rather than redirected to, so the form must
-      // still carry a crumb for the user's next submission to pass CSRF.
-      expect(/name="crumb" value="[^"]+"/.test(result)).toBe(true)
-    })
+        expect(statusCode).toBe(statusCodes.redirect)
+        expect(headers.location).toBe('/previous-submissions')
+      }
+    )
 
     test('Should redirect back when no option is selected', async () => {
       const { statusCode, headers } = await postSubmissionWelcome()

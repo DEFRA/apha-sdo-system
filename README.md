@@ -511,6 +511,8 @@ diagnostic tests declaration included, goes under that folder.
 - No notification email is recorded or sent. The journey definitions still
   name one (`notificationEmail` in their metadata) because the forms engine
   only runs a live form's submission when it is set.
+- Once delivered, the report is added to the lab's submission history (see
+  [Previous submissions](#previous-submissions)).
 
 An Animal Health Regulations report entered as a web form goes through the
 same output service and produces the same record, so `userId`,
@@ -835,6 +837,105 @@ client will be mocked at too.
 6. **Freshness (optional).** If the backend returns when the tests were last
    updated, the Animal Health Regulations check your answers confirmation
    ("used this reporting month") could show it.
+
+## Previous submissions
+
+Choosing **View your laboratory submission history** on Submission Welcome
+opens `/previous-submissions` ("Previous submissions"), which lists the
+lab's reports for the report types the user holds, newest first, one line
+each, under the headings **Period**, **Submitted** (DD/MM/YYYY), **Method**
+(the file name for an upload, "Web form" otherwise), **Reference**,
+**Status** and **Actions**. The tables use 16px text and closer columns so
+all the columns fit; only a file name too long for the page wraps. Reports
+of a type the user no longer holds are not shown.
+
+- **One report type held:** a single table.
+- **Bat rabies and Animal Health Regulations held:** GOV.UK tabs, **All
+  submissions** first (the only table with a **Type** column, which reads
+  `BR` or `AHR`), then
+  **Bat rabies** and **Animal Health Regulations**. Without JavaScript, or
+  on a small screen, the tabs read as a list of links to each section.
+- **Nothing submitted:** "You have not submitted any reports yet." in place
+  of the tables; a tab of a report type with no reports says so for that
+  type.
+
+The radio's hint on Submission Welcome names the newest of those reports
+("Last report submitted: Bat rabies report for February 2026"), or says "You
+have not submitted any reports yet". The option is still left out while
+every report type the user holds is held back for the diagnostic tests (see
+[First-time setup](#first-time-setup)).
+
+**Status** is a GOV.UK tag: blue **Processing**, green **Accepted** or red
+**Rejected**. Whether a report was accepted or rejected is only known
+downstream, so until the backend is in place, for showcasing, a report is
+**Processing** for two minutes after it was submitted and then **Accepted**
+or **Rejected**, alternately for each lab (its first report accepted, the
+next rejected, and so on). The page does not refresh itself: reload it to
+see the change.
+
+**Actions** offers **Resubmit** on accepted and rejected reports; a report
+still processing has nothing to resubmit yet. The link is not wired to a
+journey yet (`#`).
+
+### Submission history store (temporary)
+
+`src/server/routes/previous-submissions/submission-history.js` answers "what
+has this lab submitted?" for the page and Submission Welcome:
+
+- `getSubmissionHistory(request)` resolves to the reports of the user's lab
+  (`organisationId`), newest first, as `{ referenceNumber, reportType,
+reportMonthYear, submittedAt, fileName, status }`, with `reportType` the
+  registry entry, `fileName` `null` for a web form report and `status` one of
+  `SUBMISSION_STATUS` (`processing`, `accepted`, `rejected`), worked out as
+  above (`SHOWCASE_DECISION_DELAY_MS`); an empty list when there are none. It
+  is read once per request and memoised on `request.app`.
+- `recordSubmission(request, submission)` adds a report, taking the record
+  written as `submission.json`. The output service calls it once the report is
+  delivered, so a failed delivery is not listed, and also when Azure storage
+  is disabled locally. Diagnostic tests declarations are not reports and are
+  not recorded.
+- `registerSubmissionHistoryStore(server)` runs when the previous submissions
+  routes are registered.
+
+Until the backend can be queried, the store keeps the reports in an encrypted
+`submissionHistory` cookie (iron, the session cookie password, one year,
+`HttpOnly`, `SameSite=Lax`), as `[organisationId, reports]` pairs for the two
+most recently used labs, each report a
+`[code, referenceNumber, reportMonthYear, submittedAt, fileName, decision]`
+tuple (`fileName` `null` for a web form report, `decision` the showcase's
+`accepted` or `rejected`, decided when the report is recorded; reports kept
+before decisions read as accepted), newest first. The output service has no
+response toolkit, so a report recorded during a request is written by an
+`onPreResponse` extension. Each lab keeps its 10 latest reports; because file
+names are the user's own, older reports are also forgotten once the cookie
+would pass 2 KB before encryption (about 3 KB after), and names are cut to
+255 characters, which keeps it inside the 4 KB browser limit. Sign-out leaves
+it in place. Only the reports submitted from the same browser are known: a
+report submitted by another user of the lab, or from another browser, is not
+listed. To start over locally, delete the `submissionHistory` cookie.
+
+### Moving submission history to the backend
+
+1. **Only the store changes.** Re-implement `getSubmissionHistory` as a query
+   by `organisationId` returning every Bat rabies and Animal Health
+   Regulations report of the lab, whoever in the lab submitted it, mapped to
+   registry entries by `processName`. `recordSubmission` becomes a no-op if
+   the backend builds its data from the delivered `submission.json`. Delete
+   the cookie registration, the `onPreResponse` writer and the cookie-specific
+   cases in `submission-history.test.js`. The page and Submission Welcome
+   stay as they are; their tests mock `getSubmissionHistory` or record
+   through the store.
+2. **Status.** Map the backend's status to one of `SUBMISSION_STATUS`, and
+   remove the showcase (`SHOWCASE_DECISION_DELAY_MS`, the stored decision
+   and its tests); the page already tags each status and offers
+   **Resubmit** on accepted and rejected reports. Point `RESUBMIT_HREF` in
+   the page's controller at the resubmission journey once there is one.
+3. **Paging.** The cookie keeps the list short; a lab's full history may need
+   GOV.UK pagination.
+4. **Decide what an unreachable backend means.** Today an unreadable cookie
+   reads as nothing submitted. Against a backend, the page should say the
+   submissions could not be shown rather than that there are none, and the
+   Submission Welcome hint should fall back to no hint.
 
 ## CDP proxy
 

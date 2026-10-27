@@ -5,6 +5,7 @@ import { authRoutes } from '../routes/auth/index.js'
 import { submissionWelcome } from '../routes/submission-welcome/index.js'
 import { reportMethod } from '../routes/report-method/index.js'
 import { diagnosticTests } from '../routes/diagnostic-tests/index.js'
+import { previousSubmissions } from '../routes/previous-submissions/index.js'
 import { health } from '../routes/health/index.js'
 import { fileCallback } from '../routes/file-callback/index.js'
 import { serveFormAssets } from './serve-form-assets.js'
@@ -35,6 +36,9 @@ export const router = {
 
       // The qualifying tests a lab uses and their accreditation
       await server.register([diagnosticTests])
+
+      // The lab's submitted reports, and the store each report is recorded in
+      await server.register([previousSubmissions])
 
       // cdp-uploader scan-completion callback
       await server.register([fileCallback])

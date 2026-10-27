@@ -12,6 +12,16 @@ describe('#buildBreadcrumbs', () => {
     ).toEqual([{ text: 'Home', href: '/' }, { text: 'Submission Welcome' }])
   })
 
+  test('Should provide expected breadcrumbs for the previous submissions page', () => {
+    expect(
+      buildBreadcrumbs(mockRequest({ path: '/previous-submissions' }))
+    ).toEqual([
+      { text: 'Home', href: '/' },
+      { text: 'Submission Welcome', href: '/submission-welcome' },
+      { text: 'Previous submissions' }
+    ])
+  })
+
   test.each([
     '/diagnostic-tests/laboratory-details',
     '/diagnostic-tests',

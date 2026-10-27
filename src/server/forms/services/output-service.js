@@ -2,6 +2,7 @@ import { config } from '#/config/config.js'
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
+import { recordSubmission } from '#/server/routes/previous-submissions/submission-history.js'
 import { reportTypesBySlug } from '../report-types.js'
 import {
   reportDateFromState,
@@ -272,6 +273,10 @@ export async function uploadSubmissionJson(submission) {
  * {referenceNumber}/submission.json holding the form answers and the
  * submission metadata (see buildSubmission).
  *
+ * Once delivered, the report is added to the lab's submission history (see
+ * src/server/routes/previous-submissions/submission-history.js). A failed
+ * delivery throws first, so it is not listed as submitted.
+ *
  * The engine passes the form's notification email as well; no email is sent
  * and it is not recorded, so it is not used here.
  */
@@ -315,33 +320,38 @@ export const outputService = {
       'Form submission received'
     )
 
-    if (!config.get('azure.storage.enabled')) {
-      return
+    if (config.get('azure.storage.enabled')) {
+      await deliverToAzure(submission, fileStates, request.logger)
     }
 
-    let transferredFiles = 0
-
-    for (const fileState of fileStates) {
-      const transferred = await transferFileToAzure(
-        fileState,
-        referenceNumber,
-        request.logger
-      )
-
-      if (transferred) {
-        transferredFiles += 1
-      }
-    }
-
-    await uploadSubmissionJson(submission)
-
-    request.logger.info(
-      {
-        referenceNumber,
-        transferredFiles,
-        totalFiles: fileStates.length
-      },
-      'Submission delivered to Azure Blob Storage'
-    )
+    await recordSubmission(request, submission)
   }
+}
+
+async function deliverToAzure(submission, fileStates, logger) {
+  const { referenceNumber } = submission
+  let transferredFiles = 0
+
+  for (const fileState of fileStates) {
+    const transferred = await transferFileToAzure(
+      fileState,
+      referenceNumber,
+      logger
+    )
+
+    if (transferred) {
+      transferredFiles += 1
+    }
+  }
+
+  await uploadSubmissionJson(submission)
+
+  logger.info(
+    {
+      referenceNumber,
+      transferredFiles,
+      totalFiles: fileStates.length
+    },
+    'Submission delivered to Azure Blob Storage'
+  )
 }
