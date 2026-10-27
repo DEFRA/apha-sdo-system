@@ -12,7 +12,7 @@ import { reportTypes } from '../report-types.js'
  * AHR web form is the alternative journey named by that report type's
  * `webFormSlug`.
  */
-const forms = [
+export const forms = [
   exampleApplication,
   ...reportTypes.map(createReportJourney),
   animalHealthRegulationsWebForm

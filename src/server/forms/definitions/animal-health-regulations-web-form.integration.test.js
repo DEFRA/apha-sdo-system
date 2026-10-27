@@ -266,6 +266,22 @@ describe('animal health regulations web form (end to end)', () => {
     )
     expect(reportDatePage.result).toContain(ahr.title)
 
+    // A report cannot cover a month that has not started yet
+    const futureMonth = await post(PAGES.reportDate, {
+      reportDate__month: '1',
+      reportDate__year: String(new Date().getFullYear() + 1)
+    })
+    expect(futureMonth.statusCode).toBe(statusCodes.ok)
+    expect(errorSummaryLinks(futureMonth.result)).toEqual([
+      {
+        href: '#reportDate__month',
+        text: 'Add report date must be this month or in the past'
+      }
+    ])
+    expect(futureMonth.result).toContain(
+      '<span class="govuk-visually-hidden">Error:</span> Add report date must be this month or in the past'
+    )
+
     await answer(
       PAGES.reportDate,
       { reportDate__month: '8', reportDate__year: '2026' },

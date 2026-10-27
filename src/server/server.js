@@ -21,11 +21,7 @@ import { metrics } from '@defra/cdp-metrics'
 import './forms/dev-nunjucks.js'
 import { services } from './forms/services/index.js'
 import { ReportDraftCacheService } from './forms/services/report-draft-cache-service.js'
-import { SummaryPageWithConfirmationEmailController } from './forms/controllers/summary-page-with-confirmation-email-controller.js'
-import { ReportDatePageController } from './forms/controllers/report-date-page-controller.js'
-import { ReportFileUploadPageController } from './forms/controllers/report-file-upload-page-controller.js'
-import { ReportEntryPageController } from './forms/controllers/report-entry-page-controller.js'
-import { ReportEntriesPageController } from './forms/controllers/report-entries-page-controller.js'
+import { controllers } from './forms/controllers/index.js'
 import { openId } from './plugins/auth/open-id.js'
 import { defraIdOpenId } from './plugins/auth/defra-id.js'
 import { sessionCookie } from './plugins/auth/session-cookie.js'
@@ -141,13 +137,7 @@ async function registerFormsEngine(server) {
        * submissions. See src/server/forms/services
        */
       services,
-      controllers: {
-        ReportDatePageController,
-        ReportFileUploadPageController,
-        ReportEntryPageController,
-        ReportEntriesPageController,
-        SummaryPageWithConfirmationEmailController
-      },
+      controllers,
       /**
        * View context made available to pages rendered by the plugin, reusing
        * the same context (assetPath, getAssetPath, serviceName, etc.) as the
