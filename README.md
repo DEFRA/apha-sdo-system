@@ -39,7 +39,7 @@ authorization-code flow with PKCE.
 - DEV uses the real `apha-sdo-system-dev` Entra registration.
 
 External laboratory users sign in with Defra Customer Identity (Defra ID),
-which offers them GOV.UK One Login or Government Gateway and returns their
+which offers them GOV.UK One Login and returns their
 laboratory and service roles; see [External sign-in](#external-sign-in-defra-customer-identity).
 
 - Local development uses the `cdp-defra-id-stub` container on
@@ -259,15 +259,13 @@ available.
 
 ## External sign-in (Defra Customer Identity)
 
-Laboratory users choose **GOV.UK One Login or Government Gateway** on
-`/sign-in-choose`. That starts one integration: OpenID Connect with Defra
-Customer Identity (Defra ID). Customer Identity itself offers the user One
-Login or Government Gateway according to the authentication methods GIO
-configured for this service (`one, scp`), handles registration of the
-laboratory as an organisation and the laboratory admin's team management, and
-returns a signed ID token naming the organisation the user picked and their
-roles in this service. Nothing in this service is specific to either sign-in
-method; the token's `amr` claim (`one` or `scp`) is logged at sign-in.
+Laboratory users choose **GOV.UK One Login** on `/sign-in-choose`. That
+starts one integration: OpenID Connect with Defra Customer Identity (Defra
+ID). Customer Identity offers the user GOV.UK One Login, handles registration
+of the laboratory as an organisation and the laboratory admin's team
+management, and returns a signed ID token naming the organisation the user
+picked and their roles in this service. The token's `amr` claim (`one`) is
+logged at sign-in.
 
 The flow lives in `src/server/auth/defra-id.js`. `@defra/hapi-auth-oidc`
 drives the Entra sign-in and can only be registered once, so the second
@@ -359,7 +357,7 @@ AUTH_DEFRA_ID_SCOPES=openid offline_access
 AUTH_DEFRA_ID_ACCOUNT_MANAGEMENT_URL=http://localhost:3200/cdp-defra-id-stub
 ```
 
-Start the app, select **GOV.UK One Login or Government Gateway**, pick an
+Start the app, select **GOV.UK One Login**, pick an
 identity on the stub's page and confirm you land on `/submission-welcome`
 with the expected report types. Re-seed with `npm run defra-id:register` if
 the stub container is recreated. With the stub down, the app still starts
@@ -407,14 +405,13 @@ The content security policy's `form-action` must allow every origin the
 sign-in redirect chain passes through. The Customer Identity discovery,
 authorize (`*.b2clogin.com`) and sign-out origins are read from the discovery
 document at start-up; `AUTH_DEFRA_ID_REDIRECT_HOSTS` (default
-`https://*.account.gov.uk,https://*.access.service.gov.uk`) covers the One
-Login and Government Gateway hops.
+`https://*.account.gov.uk`) covers the GOV.UK One Login hops.
 
 #### CPDEV smoke-test steps
 
 1. Open <https://apha-sdo-system.dev.cdp-int.defra.cloud> and select
-   **GOV.UK One Login or Government Gateway**.
-2. Create or use a GOV.UK One Login (or Government Gateway) account when
+   **GOV.UK One Login**.
+2. Create or use a GOV.UK One Login account when
    Customer Identity offers the choice, register yourself and a test
    laboratory as the organisation, and complete auto-enrolment.
 3. Confirm you land on `/submission-welcome`. With only the `Default` role

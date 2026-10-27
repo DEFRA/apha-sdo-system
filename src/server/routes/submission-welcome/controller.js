@@ -31,7 +31,7 @@ const optionLabel = { classes: 'govuk-!-font-weight-bold' }
  */
 async function submissionHistoryHint(request, allowedReportTypes) {
   const allowedCodes = new Set(allowedReportTypes.map(({ code }) => code))
-  const [latest] = (await getSubmissionHistory(request)).filter((submission) =>
+  const latest = (await getSubmissionHistory(request)).find((submission) =>
     allowedCodes.has(submission.reportType.code)
   )
 

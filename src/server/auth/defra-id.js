@@ -16,8 +16,7 @@ import {
 
 /**
  * External (laboratory) users sign in with Defra Customer Identity (Defra
- * ID), which offers GOV.UK One Login or Government Gateway according to the
- * service's configuration there and returns the user's organisation and
+ * ID), which offers GOV.UK One Login and returns the user's organisation and
  * service roles in the ID token.
  *
  * `@defra/hapi-auth-oidc` already drives the Entra sign-in and can only be
