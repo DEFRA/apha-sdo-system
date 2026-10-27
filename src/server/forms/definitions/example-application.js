@@ -90,6 +90,7 @@ export const definition = {
       path: '/application-details',
       title: 'Application details',
       section: 'application',
+      controller: 'NoFutureDatesPageController',
       components: [
         {
           id: '3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f',
@@ -111,8 +112,7 @@ export const definition = {
           shortDescription: 'Reporting period',
           hint: 'Month and year this application covers',
           options: {
-            required: true,
-            maxDaysInFuture: 0
+            required: true
           },
           schema: {}
         }

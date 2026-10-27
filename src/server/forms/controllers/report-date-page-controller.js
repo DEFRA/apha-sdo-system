@@ -1,9 +1,5 @@
-// Import order matters here. The engine's page controllers form a cycle
-// through its component barrel, so QuestionPageController.js throws unless a
-// module that pulls the components in first has already been evaluated —
-// FileUploadPageController, by way of the upload controller below.
+import { NoFutureDatesPageController } from './no-future-dates-page-controller.js'
 import { findReportFileUploadPage } from './report-file-upload-page-controller.js'
-import { QuestionPageController } from '@defra/forms-engine-plugin/controllers/QuestionPageController.js'
 
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
@@ -29,13 +25,15 @@ export function reportingPeriodBackHref(slug) {
 }
 
 /**
- * Report date page. Changing the date from a "Check your answers" change link
- * would otherwise return the user straight to the summary, leaving a file named
- * after the old date attached to the report. So once the new date is saved, any
- * file it invalidates is turned away and the user is sent to the upload page to
- * upload a correctly named one.
+ * Report date page. A report cannot cover a month that has not started yet.
+ *
+ * Changing the date from a "Check your answers" change link would otherwise
+ * return the user straight to the summary, leaving a file named after the old
+ * date attached to the report. So once the new date is saved, any file it
+ * invalidates is turned away and the user is sent to the upload page to upload
+ * a correctly named one.
  */
-export class ReportDatePageController extends QuestionPageController {
+export class ReportDatePageController extends NoFutureDatesPageController {
   /**
    * The engine only links back to an earlier page of the journey. A reporting
    * period page is the first page, so Back returns to wherever the journey
