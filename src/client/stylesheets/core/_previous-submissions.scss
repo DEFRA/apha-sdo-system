@@ -1,0 +1,33 @@
+@use "govuk-frontend" as *;
+
+// The tables of the previous submissions page
+// (src/server/routes/previous-submissions/index.njk) keep each report on one
+// line, in smaller text with closer columns so all seven fit. Only a file
+// name too long for the page wraps, rather than the table running off it.
+.app-submissions-table {
+  .govuk-table__header,
+  .govuk-table__cell {
+    @include govuk-font-size($size: 16);
+    padding-right: govuk-spacing(3);
+    white-space: nowrap;
+  }
+
+  .govuk-table__header:last-child,
+  .govuk-table__cell:last-child {
+    padding-right: 0;
+  }
+
+  // The panel's own border closes the table under the last report
+  .govuk-table__body .govuk-table__row:last-child .govuk-table__cell {
+    border-bottom: 0;
+  }
+
+  .govuk-tag {
+    @include govuk-font-size($size: 16);
+  }
+
+  .app-submissions-table__file-name {
+    overflow-wrap: anywhere;
+    white-space: normal;
+  }
+}

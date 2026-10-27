@@ -26,6 +26,14 @@ const DIAGNOSTIC_TESTS_TRAIL = [
 // report type registry, so they do not need an entry here.
 const trailsByPath = new Map([
   [SUBMISSION_WELCOME_PATH, [HOME, { text: SUBMISSION_WELCOME_TEXT }]],
+  [
+    '/previous-submissions',
+    [
+      HOME,
+      { text: SUBMISSION_WELCOME_TEXT, href: SUBMISSION_WELCOME_PATH },
+      { text: 'Previous submissions' }
+    ]
+  ],
   ['/diagnostic-tests/laboratory-details', DIAGNOSTIC_TESTS_TRAIL],
   ['/diagnostic-tests', DIAGNOSTIC_TESTS_TRAIL],
   // Like a report journey's confirmation, which keeps the journey's trail

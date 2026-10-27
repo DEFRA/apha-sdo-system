@@ -6,6 +6,11 @@ import {
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
+import { recordSubmission } from '#/server/routes/previous-submissions/submission-history.js'
+
+vi.mock('#/server/routes/previous-submissions/submission-history.js', () => ({
+  recordSubmission: vi.fn()
+}))
 
 vi.mock('#/server/common/helpers/s3-client.js', () => ({
   downloadFromS3: vi.fn()
@@ -144,6 +149,67 @@ describe('#outputService.submit', () => {
     expect(downloadFromS3).not.toHaveBeenCalled()
     expect(azureStorageService.uploadFile).not.toHaveBeenCalled()
     expect(request.logger.info).toHaveBeenCalled()
+  })
+
+  describe('submission history', () => {
+    test('adds the report to the lab history once it is delivered', async () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: {
+          reportDate__month: 3,
+          reportDate__year: 2024,
+          supportingDocuments: [buildFileState({ filename: 'March2024.xlsx' })]
+        }
+      }
+      const request = buildRequest()
+
+      await outputService.submit(...submitArgs(context, request))
+
+      expect(recordSubmission).toHaveBeenCalledTimes(1)
+      expect(recordSubmission).toHaveBeenCalledWith(
+        request,
+        uploadedSubmissionJson()
+      )
+      expect(recordSubmission.mock.invocationCallOrder[0]).toBeGreaterThan(
+        azureStorageService.uploadFile.mock.invocationCallOrder.at(-1)
+      )
+    })
+
+    test('adds the report when Azure storage is disabled', async () => {
+      config.set('azure.storage.enabled', false)
+
+      const request = buildRequest()
+
+      await outputService.submit(
+        ...submitArgs({ referenceNumber: 'REF-1', relevantState: {} }, request)
+      )
+
+      expect(recordSubmission).toHaveBeenCalledWith(
+        request,
+        expect.objectContaining({
+          referenceNumber: 'REF-1',
+          processName: 'BR',
+          reportMonthYear: 'March 2024'
+        })
+      )
+    })
+
+    test('does not add a report whose delivery failed', async () => {
+      azureStorageService.uploadFile.mockRejectedValue(
+        new Error('Azure unavailable')
+      )
+
+      await expect(
+        outputService.submit(
+          ...submitArgs(
+            { referenceNumber: 'REF-1', relevantState: {} },
+            buildRequest()
+          )
+        )
+      ).rejects.toThrow('Azure unavailable')
+
+      expect(recordSubmission).not.toHaveBeenCalled()
+    })
   })
 
   test('transfers completed files from S3 to Azure and uploads submission JSON', async () => {

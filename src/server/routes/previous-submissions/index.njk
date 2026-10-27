@@ -1,0 +1,52 @@
+{#
+  "Previous submissions", rendered by the previous-submissions controller:
+  the lab's reports for each report type the user holds. With more than one,
+  the panels are GOV.UK tabs, all reports first; without JavaScript, or on a
+  small screen, the tabs read as a list of links to each panel.
+#}
+{% extends 'layouts/page.njk' %}
+
+{% from "govuk/components/table/macro.njk" import govukTable %}
+{% from "govuk/components/tabs/macro.njk" import govukTabs %}
+
+{% macro submissionsPanel(panel) %}
+  <h2 class="govuk-heading-m">{{ panel.heading }}</h2>
+  {% if panel.table %}
+    {{ govukTable(panel.table) }}
+  {% else %}
+    <p class="govuk-body">{{ panel.emptyText }}</p>
+  {% endif %}
+{% endmacro %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    {# Full width, like the report summary: the table has up to five columns #}
+    <div class="govuk-grid-column-full">
+      <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
+
+      {% if noSubmissionsText %}
+        <p class="govuk-body">{{ noSubmissionsText }}</p>
+      {% elif showTabs %}
+        {% set tabItems = [] %}
+        {% for panel in panels %}
+          {% set tabItems = (tabItems.push({
+            label: panel.label,
+            id: panel.id,
+            panel: {
+              html: submissionsPanel(panel)
+            }
+          }), tabItems) %}
+        {% endfor %}
+
+        {{ govukTabs({
+          title: "Submissions",
+          items: tabItems
+        }) }}
+      {% else %}
+        {% for panel in panels %}
+          {{ submissionsPanel(panel) }}
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}
