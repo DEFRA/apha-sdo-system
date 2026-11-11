@@ -1,5 +1,6 @@
 import { config } from '#/config/config.js'
 import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
+import { XLSX_CONTENT_TYPE } from '#/server/common/helpers/xlsx-template.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
 import { recordSubmission } from '#/server/routes/previous-submissions/submission-history.js'
@@ -9,6 +10,10 @@ import {
   reportMonthYearLabel,
   uploadedFileName
 } from '../validation/report-file-name.js'
+import {
+  animalHealthRegulationsFileName,
+  buildAnimalHealthRegulationsWorkbook
+} from './animal-health-regulations-workbook.js'
 
 // Every report journey names its MonthYearField this (see report-journey.js)
 const REPORT_DATE_ANSWER_NAME = 'reportDate'
@@ -199,6 +204,46 @@ function fileNameOf(fileStates) {
   )
 }
 
+// Whether the journey is the Animal Health Regulations web form, whose
+// report is delivered as APHA's workbook built from its entries
+function isAnimalHealthRegulationsWebForm(formMetadata) {
+  const reportType = reportTypesBySlug.get(formMetadata?.slug)
+
+  return (
+    reportType?.code === 'AHR' && formMetadata.slug === reportType.webFormSlug
+  )
+}
+
+/**
+ * The data file of a web form report: APHA's workbook filled in from the
+ * entries, named as an uploaded report's file would be (see
+ * animal-health-regulations-workbook.js). Null for any other journey, whose
+ * file, if any, the user uploaded.
+ * @returns {{ fileName: string, content: Buffer } | null}
+ */
+function buildWebFormFile({
+  referenceNumber,
+  formMetadata,
+  user,
+  entries,
+  state
+}) {
+  if (!isAnimalHealthRegulationsWebForm(formMetadata)) {
+    return null
+  }
+
+  const reportDate = reportDateFromState(state)
+
+  return {
+    fileName: animalHealthRegulationsFileName(referenceNumber, reportDate),
+    content: buildAnimalHealthRegulationsWorkbook({
+      preparedBy: user?.name,
+      reportDate,
+      entries
+    })
+  }
+}
+
 /**
  * The record written alongside the data file. Its top-level fields are the
  * ones the downstream submissions table is built from: who (userId), for
@@ -208,8 +253,8 @@ function fileNameOf(fileStates) {
  * A field that does not apply to the journey is left out rather than written
  * blank, the way the diagnostic tests record carries only the fields that
  * apply (see src/server/routes/diagnostic-tests/controller.js): an uploaded
- * report has a fileName and no entries, a web-form report has entries and no
- * file.
+ * report has a fileName and no entries, a web-form report has entries and
+ * the fileName of the workbook built from them.
  */
 function buildSubmission({
   referenceNumber,
@@ -218,9 +263,10 @@ function buildSubmission({
   answers,
   entries,
   fileStates,
+  webFormFile,
   state
 }) {
-  const fileName = fileNameOf(fileStates)
+  const fileName = fileNameOf(fileStates) ?? webFormFile?.fileName ?? null
 
   return {
     referenceNumber,
@@ -271,7 +317,9 @@ export async function uploadSubmissionJson(submission) {
  * staging bucket (where the cdp-uploader delivered it) to the Azure
  * container under {referenceNumber}/{filename}, together with a
  * {referenceNumber}/submission.json holding the form answers and the
- * submission metadata (see buildSubmission).
+ * submission metadata (see buildSubmission). A web form report has no
+ * uploaded file; APHA's workbook is built from its entries and written in
+ * its place (see buildWebFormFile), before the record that names it.
  *
  * Once delivered, the report is added to the lab's submission history (see
  * src/server/routes/previous-submissions/submission-history.js). A failed
@@ -291,15 +339,25 @@ export const outputService = {
     formMetadata
   ) {
     const { referenceNumber } = context
+    const user = request.auth?.credentials?.user
     const fileStates = extractFileStates(context.relevantState)
+    const entries = entriesOf(items)
+    const webFormFile = buildWebFormFile({
+      referenceNumber,
+      formMetadata,
+      user,
+      entries,
+      state: context.relevantState
+    })
 
     const submission = buildSubmission({
       referenceNumber,
       formMetadata,
-      user: request.auth?.credentials?.user,
+      user,
       answers: answersOf(items),
-      entries: entriesOf(items),
+      entries,
       fileStates,
+      webFormFile,
       state: context.relevantState
     })
 
@@ -321,14 +379,35 @@ export const outputService = {
     )
 
     if (config.get('azure.storage.enabled')) {
-      await deliverToAzure(submission, fileStates, request.logger)
+      await deliverToAzure(submission, fileStates, webFormFile, request.logger)
     }
 
     await recordSubmission(request, submission)
   }
 }
 
-async function deliverToAzure(submission, fileStates, logger) {
+/**
+ * Writes the workbook built from a web form report as
+ * {referenceNumber}/{fileName} in the Azure container, as an uploaded file
+ * is written
+ * @param {{ fileName: string, content: Buffer }} file - see buildWebFormFile
+ * @param {string} referenceNumber
+ */
+async function uploadWebFormFile(file, referenceNumber) {
+  await azureStorageService.uploadFile(
+    `${referenceNumber}-report`,
+    file.content,
+    {
+      blobPrefix: referenceNumber,
+      originalName: file.fileName,
+      contentType: XLSX_CONTENT_TYPE,
+      type: 'file',
+      referenceNumber
+    }
+  )
+}
+
+async function deliverToAzure(submission, fileStates, webFormFile, logger) {
   const { referenceNumber } = submission
   let transferredFiles = 0
 
@@ -344,13 +423,18 @@ async function deliverToAzure(submission, fileStates, logger) {
     }
   }
 
+  if (webFormFile) {
+    await uploadWebFormFile(webFormFile, referenceNumber)
+  }
+
   await uploadSubmissionJson(submission)
 
   logger.info(
     {
       referenceNumber,
       transferredFiles,
-      totalFiles: fileStates.length
+      totalFiles: fileStates.length,
+      builtFiles: webFormFile ? 1 : 0
     },
     'Submission delivered to Azure Blob Storage'
   )

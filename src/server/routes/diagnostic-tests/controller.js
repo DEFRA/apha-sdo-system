@@ -12,6 +12,10 @@ import {
 } from './qualifying-tests.js'
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
 import {
+  buildDiagnosticTestsWorkbook,
+  diagnosticTestsFileName
+} from './diagnostic-tests-workbook.js'
+import {
   getLabDiagnosticTests,
   saveLabDetails,
   saveLabDiagnosticTests
@@ -128,9 +132,11 @@ export function validateDiagnosticTests(selections) {
 /**
  * The record of a lab's details and qualifying tests, shaped like the
  * submission.json of a report (see src/server/forms/services/output-service.js)
- * with only the fields that apply: no report month and no file. The tests
- * are one row each, in catalogue order, so they can be written out as lines
- * of a spreadsheet downstream.
+ * with only the fields that apply: no report month and no notification
+ * email. It names the one file of the submission, APHA's workbook filled in
+ * from the ticks (see diagnostic-tests-workbook.js), and also carries the
+ * tests as one row each, in catalogue order, so they can be read without
+ * opening the workbook.
  * @param {{ id?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {Record<string, string | null>} [laboratoryDetails] - the laboratory details page's answers
@@ -154,6 +160,7 @@ export function buildDiagnosticTestsSubmission(
       ? { organisationName: user.organisationName }
       : {}),
     submittedAt: now.toISOString(),
+    fileName: diagnosticTestsFileName(referenceNumber),
     laboratoryDetails: buildLaboratoryDetailsRecord(user, laboratoryDetails),
     diagnosticTestsData: selections.map(({ test, accreditation }) => ({
       pathogen: test.pathogen.name,
@@ -291,10 +298,11 @@ export const diagnosticTestsGetController = {
 }
 
 /**
- * Continue: the ticked tests are validated and, once they pass, delivered
- * with the laboratory details to the Azure container under the reference
- * number, as a report's record is, and kept as the lab's current tests and
- * details. The user is then sent to the confirmation. A failed delivery
+ * Continue: the ticked tests are validated and, once they pass, written into
+ * APHA's workbook and delivered with the record of them and the laboratory
+ * details to the Azure container under the reference number, as a report
+ * is, and kept as the lab's current tests and details. The user is then
+ * sent to the confirmation. A failed delivery
  * surfaces as the service's error page, as it does for a report, and
  * nothing is kept. Without the laboratory details in the session (it
  * expired) the user is sent back to give them.
@@ -328,6 +336,7 @@ export const diagnosticTestsPostController = {
 
     await deliverDiagnosticTestsSubmission({
       submission,
+      workbook: buildDiagnosticTestsWorkbook(selections),
       logger: request.logger
     })
     await saveLabDiagnosticTests(request, h, selections)

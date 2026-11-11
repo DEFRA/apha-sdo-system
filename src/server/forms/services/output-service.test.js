@@ -1,3 +1,5 @@
+import { strFromU8, unzipSync } from 'fflate'
+
 import { config } from '#/config/config.js'
 import {
   outputService,
@@ -311,7 +313,7 @@ describe('#outputService.submit', () => {
       )
     })
 
-    test('records a web form report the same way, with its entries and no files', async () => {
+    describe('web form report', () => {
       const reportDate = {
         name: 'reportDate',
         title: 'Report Date',
@@ -367,55 +369,244 @@ describe('#outputService.submit', () => {
           }))
         }
       }
-      const request = buildRequest({
-        user: { ...signedInUser, journeys: ['AHR'] }
-      })
 
-      await outputService.submit(
-        ...submitArgs(context, request, {
-          items: [reportDate, entries],
-          formMetadata: { slug: 'animal-health-regulations-web-form' }
+      const WORKBOOK_FILE_NAME = 'REF-2-2026-08-animal-health-regulations.xlsx'
+
+      function submitWebForm(request = buildRequest({ user: ahrUser })) {
+        return outputService.submit(
+          ...submitArgs(context, request, {
+            items: [reportDate, entries],
+            formMetadata: { slug: 'animal-health-regulations-web-form' }
+          })
+        )
+      }
+
+      const ahrUser = { ...signedInUser, journeys: ['AHR'] }
+
+      function uploadOf(type) {
+        return azureStorageService.uploadFile.mock.calls.find(
+          ([, , metadata]) => metadata.type === type
+        )
+      }
+
+      test('records the report the same way, with its entries and the workbook built from them', async () => {
+        const request = buildRequest({ user: ahrUser })
+
+        await submitWebForm(request)
+
+        expect(downloadFromS3).not.toHaveBeenCalled()
+        expect(uploadedSubmissionJson()).toEqual({
+          referenceNumber: 'REF-2',
+          form: 'animal-health-regulations-web-form',
+          processName: 'AHR',
+          userId: 'entra-oid',
+          organisationId: 'TestLab1',
+          submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+          fileName: WORKBOOK_FILE_NAME,
+          reportMonthYear: 'August 2026',
+          // The repeated item itself is not an answer
+          answers: [reportDate],
+          entries: [
+            {
+              pathogen: 'Tritrichomonas foetus',
+              species: 'Other',
+              otherSpecies: 'Alpaca',
+              country: 'England',
+              submissionsWithQualifyingTest: '12',
+              submissionsWithPositiveSamples: '3',
+              positiveSamples: '5'
+            },
+            {
+              pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
+              species: 'Domestic cattle',
+              country: 'Wales',
+              submissionsWithQualifyingTest: '1',
+              submissionsWithPositiveSamples: '1',
+              positiveSamples: '0'
+            }
+          ]
         })
-      )
-
-      expect(downloadFromS3).not.toHaveBeenCalled()
-      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
-      expect(uploadedSubmissionJson()).toEqual({
-        referenceNumber: 'REF-2',
-        form: 'animal-health-regulations-web-form',
-        processName: 'AHR',
-        userId: 'entra-oid',
-        organisationId: 'TestLab1',
-        submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
-        reportMonthYear: 'August 2026',
-        // The repeated item itself is not an answer
-        answers: [reportDate],
-        entries: [
-          {
-            pathogen: 'Tritrichomonas foetus',
-            species: 'Other',
-            otherSpecies: 'Alpaca',
-            country: 'England',
-            submissionsWithQualifyingTest: '12',
-            submissionsWithPositiveSamples: '3',
-            positiveSamples: '5'
-          },
-          {
-            pathogen: 'Bovine Herpes Virus 1 (BHV-1)',
-            species: 'Domestic cattle',
-            country: 'Wales',
-            submissionsWithQualifyingTest: '1',
-            submissionsWithPositiveSamples: '1',
-            positiveSamples: '0'
-          }
-        ]
+        expect(request.logger.info).toHaveBeenCalledWith(
+          expect.objectContaining({ entries: 2, fileName: WORKBOOK_FILE_NAME }),
+          'Form submission received'
+        )
       })
-      // A web form report has no file, so the record names none
-      expect(uploadedSubmissionJson()).not.toHaveProperty('fileName')
-      expect(request.logger.info).toHaveBeenCalledWith(
-        expect.objectContaining({ entries: 2 }),
-        'Form submission received'
-      )
+
+      test("writes the workbook under the reference number as the report's file, then the record", async () => {
+        const request = buildRequest({ user: ahrUser })
+
+        await submitWebForm(request)
+
+        expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(2)
+        expect(
+          azureStorageService.uploadFile.mock.calls.map(
+            ([, , metadata]) => metadata.type
+          )
+        ).toEqual(['file', 'submission'])
+
+        const [uploadId, content, metadata] = uploadOf('file')
+
+        expect(uploadId).toBe('REF-2-report')
+        expect(Buffer.isBuffer(content)).toBe(true)
+        // PK\x03\x04: a local file header, so a zip, so a .xlsx
+        expect(content.subarray(0, 4)).toEqual(
+          Buffer.from([0x50, 0x4b, 0x03, 0x04])
+        )
+        expect(metadata).toEqual({
+          blobPrefix: 'REF-2',
+          originalName: WORKBOOK_FILE_NAME,
+          contentType:
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          type: 'file',
+          referenceNumber: 'REF-2'
+        })
+        expect(request.logger.info).toHaveBeenCalledWith(
+          {
+            referenceNumber: 'REF-2',
+            transferredFiles: 0,
+            totalFiles: 0,
+            builtFiles: 1
+          },
+          'Submission delivered to Azure Blob Storage'
+        )
+      })
+
+      test('fills the workbook from the report date, the entries and who prepared it', async () => {
+        await submitWebForm()
+
+        const sheet = strFromU8(
+          unzipSync(new Uint8Array(uploadOf('file')[1]))[
+            'xl/worksheets/sheet1.xml'
+          ]
+        )
+
+        // Who prepared it, the month and the year
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="B4" s="91" t="inlineStr"><is><t xml:space="preserve">A Person</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="B5" s="58" t="inlineStr"><is><t xml:space="preserve">August</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining('<c r="C5" s="47"><v>2026</v></c>')
+        )
+        // The first entry: an "Other" species spelt out, its name alongside
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="A11" s="21" t="inlineStr"><is><t xml:space="preserve">Tritrichomonas foetus</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="C11" s="8" t="inlineStr"><is><t xml:space="preserve">Other (please specify)</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="D11" s="8" t="inlineStr"><is><t xml:space="preserve">Alpaca</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="F11" s="71" t="inlineStr"><is><t xml:space="preserve">England</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining('<c r="G11" s="10"><v>12</v></c>')
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining('<c r="H11" s="10"><v>3</v></c>')
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining('<c r="I11" s="14"><v>5</v></c>')
+        )
+        // The second entry
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="A12" s="21" t="inlineStr"><is><t xml:space="preserve">Bovine Herpes Virus 1 (BHV-1)</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(
+          expect.stringContaining(
+            '<c r="C12" s="8" t="inlineStr"><is><t xml:space="preserve">Domestic cattle</t></is></c>'
+          )
+        )
+        expect(sheet).toEqual(expect.stringContaining('<c r="D12" s="8"/>'))
+        expect(sheet).toEqual(
+          expect.stringContaining('<c r="I12" s="14"><v>0</v></c>')
+        )
+      })
+
+      test('leaves who prepared the report blank when the user has no name', async () => {
+        await submitWebForm(
+          buildRequest({ user: { ...ahrUser, name: undefined } })
+        )
+
+        const sheet = strFromU8(
+          unzipSync(new Uint8Array(uploadOf('file')[1]))[
+            'xl/worksheets/sheet1.xml'
+          ]
+        )
+
+        expect(sheet).toEqual(expect.stringContaining('<c r="B4" s="91"/>'))
+      })
+
+      test('does not write the record when the workbook upload fails', async () => {
+        azureStorageService.uploadFile.mockRejectedValueOnce(
+          new Error('Azure upload failed: container unavailable')
+        )
+
+        await expect(submitWebForm()).rejects.toThrow(
+          'Azure upload failed: container unavailable'
+        )
+
+        expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+        expect(uploadOf('submission')).toBeUndefined()
+        expect(recordSubmission).not.toHaveBeenCalled()
+      })
+
+      test('names the workbook in the record, and builds it, when Azure storage is disabled', async () => {
+        config.set('azure.storage.enabled', false)
+        const request = buildRequest({ user: ahrUser })
+
+        await submitWebForm(request)
+
+        expect(azureStorageService.uploadFile).not.toHaveBeenCalled()
+        expect(recordSubmission).toHaveBeenCalledWith(
+          request,
+          expect.objectContaining({ fileName: WORKBOOK_FILE_NAME })
+        )
+      })
+
+      test('builds no workbook for the upload journey of the same report type', async () => {
+        await outputService.submit(
+          ...submitArgs(
+            {
+              referenceNumber: 'REF-3',
+              relevantState: {
+                reportDate__month: 8,
+                reportDate__year: 2026,
+                supportingDocuments: [
+                  buildFileState({ filename: '2026-08 AH regs.xlsx' })
+                ]
+              }
+            },
+            buildRequest({ user: ahrUser }),
+            { formMetadata: { slug: 'animal-health-regulations' } }
+          )
+        )
+
+        expect(
+          azureStorageService.uploadFile.mock.calls.map(
+            ([uploadId]) => uploadId
+          )
+        ).toEqual(['upload-1', 'REF-3-submission'])
+        expect(uploadedSubmissionJson().fileName).toBe('2026-08 AH regs.xlsx')
+      })
     })
 
     test('names only the file the uploader completed', async () => {

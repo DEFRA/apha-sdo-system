@@ -89,6 +89,17 @@ export function reportMonthYearLabel(reportDate) {
 }
 
 /**
+ * The month of a report date by its English name, e.g. "March", or undefined
+ * when the date is missing or unusable. APHA's report workbook holds the
+ * month this way (see
+ * src/server/forms/services/animal-health-regulations-workbook.js).
+ * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
+ */
+export function reportMonthName(reportDate) {
+  return reportDateParts(reportDate)?.monthName
+}
+
+/**
  * @param {string} [filename] - the uploaded file name, with or without extension
  * @param {{ month?: number|string, year?: number|string }} [reportDate] - the MonthYearField value from form state
  */
