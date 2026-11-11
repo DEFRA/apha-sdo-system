@@ -291,7 +291,7 @@ describe('report entries', () => {
       ])
       expect(
         offered(
-          'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)'
+          'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)'
         )
       ).toEqual([
         'Domestic cattle',
@@ -319,7 +319,7 @@ describe('report entries', () => {
       ])
       expect(
         offered(
-          'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)'
+          'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
         )
       ).toEqual([
         'Domestic pig',
@@ -746,7 +746,7 @@ describe('report entries', () => {
           `/${WEB_FORM_SLUG}${ENTRY_PATHS.otherSpecies}/${SECOND_ENTRY_ID}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
         [
-          'Country',
+          'Nation',
           'England',
           `/${WEB_FORM_SLUG}${ENTRY_PATHS.country}/${SECOND_ENTRY_ID}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ]
@@ -891,7 +891,7 @@ describe('report entries', () => {
         ],
         ['species', 'Species', 'Other (please specify on the next page)'],
         ['otherSpecies', 'Other species', 'Alpaca'],
-        ['country', 'Country', 'England'],
+        ['country', 'Nation', 'England'],
         [
           'submissionsWithQualifyingTest',
           'Submissions with at least one qualifying test',
@@ -941,7 +941,7 @@ describe('report entries', () => {
       expect(card.card).toEqual({ title: { text: 'Entry 2' } })
       expect(card.rows).toHaveLength(6)
       expect(card.rows[2]).toEqual({
-        key: { text: 'Country' },
+        key: { text: 'Nation' },
         value: { classes: 'app-prose-scope', html: 'England' },
         actions: {
           items: [
@@ -949,7 +949,7 @@ describe('report entries', () => {
               href: `/${WEB_FORM_SLUG}${ENTRY_PATHS.country}/${FIRST_ENTRY_ID}?returnUrl=%2Fback`,
               text: 'Change',
               classes: 'govuk-link--no-visited-state',
-              visuallyHiddenText: 'country'
+              visuallyHiddenText: 'nation'
             }
           ]
         }
@@ -981,7 +981,7 @@ describe('report entries', () => {
         translator
       )
 
-      expect(card.rows[2].key.text).toBe('Country')
+      expect(card.rows[2].key.text).toBe('Nation')
       expect(card.rows[2].value.html).toBe('Not provided')
     })
   })

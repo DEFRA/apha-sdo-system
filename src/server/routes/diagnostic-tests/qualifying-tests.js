@@ -50,7 +50,7 @@ export const pathogens = [
   },
   {
     key: 'bvdv',
-    name: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+    name: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
     disease: 'Bovine viral diarrhoea (BVD)',
     tests: [
       { key: 'bvdv-antigen-elisa', name: 'Antigen ELISA' },
@@ -97,7 +97,7 @@ export const pathogens = [
   },
   {
     key: 'prrsv',
-    name: 'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+    name: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
     disease: 'Porcine Reproductive and Respiratory Syndrome (PRRS)',
     tests: [
       {

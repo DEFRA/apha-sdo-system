@@ -193,10 +193,10 @@ describe('animal health regulations web form', () => {
     expect(pathogens.items.map((item) => item.text)).toEqual([
       'Mycoplasma gallisepticum / M. meleagridis',
       'Campylobacter fetus subsp. venerealis',
-      'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+      'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
       'Bovine Herpes Virus 1 (BHV-1)',
       'Mycobacterium avium subsp. paratuberculosis (Map)',
-      'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+      'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
       'Tritrichomonas foetus'
     ])
 

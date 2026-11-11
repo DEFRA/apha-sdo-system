@@ -203,7 +203,7 @@ export const definition = {
           type: 'NotificationBanner',
           title: 'Important',
           content:
-            'Do not include PRRSV-2 or BVDV-2 in this report if they have been differenciated from PRRSV-1 or BVBV-1.\n' +
+            'Do not include PRRSV-2 or BVDV-2 in this report if they have been differentiated from PRRSV-1 or BVDV-1.\n' +
             'Report them separately using the [immediate reporting protocol](https://www.gov.uk/example){:target="_blank"}',
           options: {},
           schema: {}
@@ -235,7 +235,7 @@ export const definition = {
           type: 'Markdown',
           content:
             'A submission may contain samples from multiple individual animals from the same premises as part of the investigation.\n' +
-            'You can add another country or species report after completing this one.',
+            'You can add another nation or species report after completing this one.',
           options: {},
           schema: {}
         },
@@ -287,7 +287,7 @@ export const definition = {
     {
       id: '65f121f0-c164-4d7c-ac5f-fadd1308c219',
       path: '/which-country-were-the-samples-collected-in',
-      title: 'Which country were the samples collected in?',
+      title: 'Which nation were the samples collected in?',
       section: ENTRIES_SECTION_ID,
       controller: ENTRY_PAGE_CONTROLLER,
       components: [
@@ -303,8 +303,8 @@ export const definition = {
           id: 'e2b41ec2-71d2-455a-bf50-a65fa478bada',
           type: 'SelectField',
           name: 'country',
-          title: 'Country',
-          shortDescription: 'Country',
+          title: 'Nation',
+          shortDescription: 'Nation',
           hint: 'Select where the samples were collected.',
           list: COUNTRIES_LIST_ID,
           options: {
@@ -325,7 +325,7 @@ export const definition = {
           id: '925f35f5-e94f-46ca-952d-0edc7d5868a0',
           type: 'Markdown',
           content:
-            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation. You can add another country or species report after completing this one.\n' +
+            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation. You can add another nation or species report after completing this one.\n' +
             '\n' +
             '# Enter number of submissions',
           options: {},
@@ -450,9 +450,9 @@ export const definition = {
         },
         {
           id: 'f41b569c-e86e-4661-9545-2df884d7a22a',
-          text: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+          text: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
           value:
-            'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)'
+            'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)'
         },
         {
           id: '693b205b-7805-457e-83eb-f9f565326a87',
@@ -466,9 +466,9 @@ export const definition = {
         },
         {
           id: 'cbdb34fe-4990-4c21-a3e6-d06802732ae2',
-          text: 'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+          text: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
           value:
-            'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)'
+            'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
         },
         {
           id: '67fec981-093e-4d7d-9565-9e290316dfa6',

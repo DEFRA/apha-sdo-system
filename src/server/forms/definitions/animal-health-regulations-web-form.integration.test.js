@@ -522,7 +522,7 @@ describe('animal health regulations web form (end to end)', () => {
         withReturnUrl(entryPage(PAGES.otherSpecies, first), backHere)
       ],
       [
-        'Country',
+        'Nation',
         'England',
         withReturnUrl(entryPage(PAGES.country, first), backHere)
       ]
@@ -567,7 +567,7 @@ describe('animal health regulations web form (end to end)', () => {
       ],
       ['Species', 'Other (please specify on the next page)'],
       ['Other species', 'Llama'],
-      ['Country', 'England']
+      ['Nation', 'England']
     ])
 
     // Every count is required, and is a whole number that is not negative
