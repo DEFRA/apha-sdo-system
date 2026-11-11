@@ -979,16 +979,33 @@ describe('animal health regulations web form (end to end)', () => {
       ]
     })
 
-    // Submitting delivers submission.json, and nothing else, to Azure
+    // Submitting delivers APHA's workbook, built from the entries, and then
+    // submission.json, and nothing else, to Azure
     const submitted = await post(PAGES.summary, {
       qualifyingTestsConfirmed: 'confirmed'
     })
     expect(submitted.statusCode).toBe(statusCodes.seeOther)
     expect(submitted.headers.location).toBe(PAGES.status)
 
-    expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+    expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(2)
 
     const submission = uploadedSubmissionJson()
+    const [workbookId, workbook, workbookMetadata] =
+      azureStorageService.uploadFile.mock.calls[0]
+
+    expect(workbookId).toBe(`${submission.referenceNumber}-report`)
+    // PK\x03\x04: a local file header, so a zip, so a .xlsx
+    expect(workbook.subarray(0, 4)).toEqual(
+      Buffer.from([0x50, 0x4b, 0x03, 0x04])
+    )
+    expect(workbookMetadata).toEqual({
+      blobPrefix: submission.referenceNumber,
+      originalName: `${submission.referenceNumber}-2026-08-animal-health-regulations.xlsx`,
+      contentType:
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      type: 'file',
+      referenceNumber: submission.referenceNumber
+    })
 
     expect(submission).toEqual({
       referenceNumber: expect.any(String),
@@ -997,6 +1014,8 @@ describe('animal health regulations web form (end to end)', () => {
       userId: 'user-id',
       organisationId: 'TestLab1',
       submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      // The workbook, named as an uploaded report's file would be
+      fileName: workbookMetadata.originalName,
       reportMonthYear: 'August 2026',
       answers: [
         expect.objectContaining({ name: 'reportDate', value: 'August 2026' })

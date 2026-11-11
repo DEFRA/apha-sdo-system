@@ -1,10 +1,16 @@
 import { config } from '#/config/config.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
+import {
+  XLSX_CONTENT_TYPE,
+  diagnosticTestsFileName
+} from './diagnostic-tests-workbook.js'
 
 vi.mock('#/server/upload/services/azure-storage-service.js', () => ({
   azureStorageService: { uploadFile: vi.fn() }
 }))
+
+const FILE_NAME = diagnosticTestsFileName('REF-1')
 
 const submission = {
   referenceNumber: 'REF-1',
@@ -13,6 +19,17 @@ const submission = {
   userId: 'entra-oid',
   organisationId: 'TestLab1',
   submittedAt: '2026-09-24T14:04:00.000Z',
+  fileName: FILE_NAME,
+  laboratoryDetails: {
+    reportingPerson: 'Caroline Ford',
+    laboratoryName: 'TestLab1',
+    addressLine1: 'Y Buarth',
+    addressLine2: null,
+    townOrCity: 'Aberystwyth',
+    county: null,
+    postcode: 'SY23 1ND',
+    ukasAccreditationNumber: null
+  },
   diagnosticTestsData: [
     {
       pathogen: 'Mycoplasma gallisepticum / M. meleagridis',
@@ -22,8 +39,16 @@ const submission = {
   ]
 }
 
+const workbook = Buffer.from('PK-workbook-bytes')
+
 function buildLogger() {
   return { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+}
+
+function uploadOf(type) {
+  return azureStorageService.uploadFile.mock.calls.find(
+    ([, , metadata]) => metadata.type === type
+  )
 }
 
 describe('deliverDiagnosticTestsSubmission', () => {
@@ -40,7 +65,7 @@ describe('deliverDiagnosticTestsSubmission', () => {
     config.set('azure.storage.enabled', false)
     const logger = buildLogger()
 
-    await deliverDiagnosticTestsSubmission({ submission, logger })
+    await deliverDiagnosticTestsSubmission({ submission, workbook, logger })
 
     expect(azureStorageService.uploadFile).not.toHaveBeenCalled()
     expect(logger.info).toHaveBeenCalledTimes(1)
@@ -50,16 +75,34 @@ describe('deliverDiagnosticTestsSubmission', () => {
     )
   })
 
-  test('Should write the record as submission.json under the reference number, and nothing else', async () => {
+  test('Should write the workbook under the reference number, named as the record names it', async () => {
     await deliverDiagnosticTestsSubmission({
       submission,
+      workbook,
       logger: buildLogger()
     })
 
-    expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+    const [uploadId, content, metadata] = uploadOf('file')
 
-    const [uploadId, content, metadata] =
-      azureStorageService.uploadFile.mock.calls[0]
+    expect(uploadId).toBe('REF-1-diagnostic-tests')
+    expect(content).toBe(workbook)
+    expect(metadata).toEqual({
+      blobPrefix: 'REF-1',
+      originalName: 'REF-1-diagnostic-tests.xlsx',
+      contentType: XLSX_CONTENT_TYPE,
+      type: 'file',
+      referenceNumber: 'REF-1'
+    })
+  })
+
+  test('Should write the record as submission.json alongside the workbook', async () => {
+    await deliverDiagnosticTestsSubmission({
+      submission,
+      workbook,
+      logger: buildLogger()
+    })
+
+    const [uploadId, content, metadata] = uploadOf('submission')
 
     expect(uploadId).toBe('REF-1-submission')
     expect(JSON.parse(content.toString())).toEqual(submission)
@@ -72,30 +115,62 @@ describe('deliverDiagnosticTestsSubmission', () => {
     })
   })
 
+  test('Should write the workbook before the record, and nothing else', async () => {
+    await deliverDiagnosticTestsSubmission({
+      submission,
+      workbook,
+      logger: buildLogger()
+    })
+
+    expect(
+      azureStorageService.uploadFile.mock.calls.map(
+        ([, , metadata]) => metadata.type
+      )
+    ).toEqual(['file', 'submission'])
+  })
+
   test('Should log the submission on receipt and again once delivered', async () => {
     const logger = buildLogger()
 
-    await deliverDiagnosticTestsSubmission({ submission, logger })
+    await deliverDiagnosticTestsSubmission({ submission, workbook, logger })
 
     expect(logger.info.mock.calls).toEqual([
       [{ submission }, 'Diagnostic tests submission received'],
       [
-        { referenceNumber: 'REF-1' },
+        { referenceNumber: 'REF-1', fileName: FILE_NAME },
         'Submission delivered to Azure Blob Storage'
       ]
     ])
   })
 
-  test('Should surface a failed upload and not log a delivery', async () => {
+  test('Should not write the record when the workbook upload fails', async () => {
     azureStorageService.uploadFile.mockRejectedValueOnce(
       new Error('Azure upload failed: container unavailable')
     )
     const logger = buildLogger()
 
     await expect(
-      deliverDiagnosticTestsSubmission({ submission, logger })
+      deliverDiagnosticTestsSubmission({ submission, workbook, logger })
     ).rejects.toThrow('Azure upload failed: container unavailable')
 
+    expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+    expect(uploadOf('submission')).toBeUndefined()
+    expect(logger.info).toHaveBeenCalledTimes(1)
+  })
+
+  test('Should surface a failed record upload and not log a delivery', async () => {
+    azureStorageService.uploadFile
+      .mockResolvedValueOnce({ success: true })
+      .mockRejectedValueOnce(
+        new Error('Azure upload failed: container unavailable')
+      )
+    const logger = buildLogger()
+
+    await expect(
+      deliverDiagnosticTestsSubmission({ submission, workbook, logger })
+    ).rejects.toThrow('Azure upload failed: container unavailable')
+
+    expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(2)
     expect(logger.info).toHaveBeenCalledTimes(1)
   })
 })

@@ -4,6 +4,7 @@ import {
   partitionFilesByName,
   reportDateFromState,
   reportFileNameErrorText,
+  reportMonthName,
   reportMonthYearLabel,
   uploadedFileName
 } from '#/server/forms/validation/report-file-name.js'
@@ -66,6 +67,19 @@ describe('#reportMonthYearLabel', () => {
   test('Should have no label for an unusable report date', () => {
     expect(reportMonthYearLabel(undefined)).toBeUndefined()
     expect(reportMonthYearLabel({ month: 13, year: 2024 })).toBeUndefined()
+  })
+})
+
+describe('#reportMonthName', () => {
+  test('Should name the month of the report date', () => {
+    expect(reportMonthName(MARCH_2024)).toBe('March')
+    expect(reportMonthName({ month: '11', year: '2023' })).toBe('November')
+  })
+
+  test('Should have no name for an unusable report date', () => {
+    expect(reportMonthName(undefined)).toBeUndefined()
+    expect(reportMonthName({ month: 13, year: 2024 })).toBeUndefined()
+    expect(reportMonthName({ month: 3 })).toBeUndefined()
   })
 })
 
