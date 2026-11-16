@@ -174,6 +174,7 @@ describe('animal health regulations web form (end to end)', () => {
       user: {
         id: 'user-id',
         name: 'A Person',
+        email: 'person@example.gov.uk',
         organisationId: 'TestLab1',
         journeys: ['AHR']
       },
@@ -1012,7 +1013,9 @@ describe('animal health regulations web form (end to end)', () => {
       form: SLUG,
       processName: ahr.code,
       userId: 'user-id',
-      organisationId: 'TestLab1',
+      userEmail: 'person@example.gov.uk',
+      organisationId: 'Test Lab 1',
+      organisationName: 'Test Lab 1',
       submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
       // The workbook, named as an uploaded report's file would be
       fileName: workbookMetadata.originalName,

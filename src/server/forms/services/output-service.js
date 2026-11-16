@@ -14,6 +14,7 @@ import {
   animalHealthRegulationsFileName,
   buildAnimalHealthRegulationsWorkbook
 } from './animal-health-regulations-workbook.js'
+import { submissionIdentity } from './submission-identity.js'
 
 // Every report journey names its MonthYearField this (see report-journey.js)
 const REPORT_DATE_ANSWER_NAME = 'reportDate'
@@ -246,9 +247,10 @@ function buildWebFormFile({
 
 /**
  * The record written alongside the data file. Its top-level fields are the
- * ones the downstream submissions table is built from: who (userId), for
- * which lab (organisationId), which process (BR/AHR), for which month, and
- * which file. `form` is the journey slug and predates `processName`.
+ * ones the downstream submissions table is built from: who (userId,
+ * userEmail), for which lab (organisationId; see submission-identity.js),
+ * which process (BR/AHR), for which month, and which file. `form` is the
+ * journey slug and predates `processName`.
  *
  * A field that does not apply to the journey is left out rather than written
  * blank, the way the diagnostic tests record carries only the fields that
@@ -272,13 +274,7 @@ function buildSubmission({
     referenceNumber,
     form: formMetadata?.slug ?? null,
     processName: reportTypesBySlug.get(formMetadata?.slug)?.code ?? null,
-    userId: user?.id ?? null,
-    organisationId: user?.organisationId ?? null,
-    // Customer Identity organisation IDs are opaque GUIDs, so the lab's name
-    // travels with them; Entra lab codes are readable on their own
-    ...(user?.organisationName
-      ? { organisationName: user.organisationName }
-      : {}),
+    ...submissionIdentity(user),
     submittedAt: new Date().toISOString(),
     ...(fileName ? { fileName } : {}),
     reportMonthYear: reportMonthYearOf(answers, state),

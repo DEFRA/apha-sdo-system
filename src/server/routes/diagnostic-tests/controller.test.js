@@ -44,6 +44,7 @@ const bhvPcr = testsByKey.get('bhv-pcr')
 const user = {
   id: 'user-id',
   name: 'A Person',
+  email: 'person@example.gov.uk',
   organisationId: 'TestLab1',
   journeys: ['BR', 'AHR']
 }
@@ -246,7 +247,9 @@ describe('diagnostic tests helpers', () => {
         form: DIAGNOSTIC_TESTS_FORM,
         processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
         userId: 'user-id',
-        organisationId: 'TestLab1',
+        userEmail: 'person@example.gov.uk',
+        organisationId: 'Test Lab 1',
+        organisationName: 'Test Lab 1',
         submittedAt: '2026-09-24T14:04:00.000Z',
         fileName: 'ABC-DEF-GHJ-diagnostic-tests.xlsx',
         laboratoryDetails: LABORATORY_DETAILS_RECORD,
@@ -270,10 +273,11 @@ describe('diagnostic tests helpers', () => {
       expect(DIAGNOSTIC_TESTS_PROCESS_NAME).toBe('DT')
     })
 
-    test('Should name the lab after its Customer Identity organisation when the user has one', () => {
+    test('Should name the lab after its Customer Identity organisation, and carry its ID, for an external user', () => {
       const submission = buildDiagnosticTestsSubmission(
         {
           ...user,
+          provider: 'defraId',
           organisationId: '6b2a1c0e-0000-4000-8000-000000000000',
           organisationName: 'Wales Veterinary Science Centre'
         },
@@ -282,12 +286,27 @@ describe('diagnostic tests helpers', () => {
         { referenceNumber: 'ABC-DEF-GHJ', now }
       )
 
-      expect(submission.organisationName).toBe(
-        'Wales Veterinary Science Centre'
+      expect(submission).toEqual(
+        expect.objectContaining({
+          organisationId: 'Wales Veterinary Science Centre',
+          organisationName: 'Wales Veterinary Science Centre',
+          organisationUniqueId: '6b2a1c0e-0000-4000-8000-000000000000'
+        })
       )
       expect(submission.laboratoryDetails.laboratoryName).toBe(
         'Wales Veterinary Science Centre'
       )
+    })
+
+    test('Should carry no organisationUniqueId for an internal user', () => {
+      const submission = buildDiagnosticTestsSubmission(
+        user,
+        [],
+        LABORATORY_DETAILS,
+        { referenceNumber: 'ABC-DEF-GHJ', now }
+      )
+
+      expect(submission).not.toHaveProperty('organisationUniqueId')
     })
 
     test('Should carry only the fields that apply, in the order of a report record', () => {
@@ -303,7 +322,9 @@ describe('diagnostic tests helpers', () => {
         'form',
         'processName',
         'userId',
+        'userEmail',
         'organisationId',
+        'organisationName',
         'submittedAt',
         'fileName',
         'laboratoryDetails',
@@ -358,7 +379,9 @@ describe('diagnostic tests helpers', () => {
       )
 
       expect(submission.userId).toBeNull()
+      expect(submission.userEmail).toBeNull()
       expect(submission.organisationId).toBeNull()
+      expect(submission.organisationName).toBeNull()
       expect(submission.laboratoryDetails).toEqual({
         ...LABORATORY_DETAILS_RECORD,
         reportingPerson: null,
@@ -912,7 +935,9 @@ describe('diagnostic tests routes', () => {
         form: DIAGNOSTIC_TESTS_FORM,
         processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
         userId: user.id,
-        organisationId: user.organisationId,
+        userEmail: user.email,
+        organisationId: 'Test Lab 1',
+        organisationName: 'Test Lab 1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         fileName: expect.stringMatching(
           /^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}-diagnostic-tests\.xlsx$/

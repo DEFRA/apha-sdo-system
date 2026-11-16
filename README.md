@@ -480,7 +480,9 @@ diagnostic tests declaration included, goes under that folder.
   "form": "bat-rabies",
   "processName": "BR",
   "userId": "<Entra object ID>",
-  "organisationId": "TestLab1",
+  "userEmail": "a.person@apha.gov.uk",
+  "organisationId": "Test Lab 1",
+  "organisationName": "Test Lab 1",
   "submittedAt": "2026-09-09T10:30:00.000Z",
   "fileName": "March2025.csv",
   "reportMonthYear": "March 2025",
@@ -497,9 +499,30 @@ diagnostic tests declaration included, goes under that folder.
 ```
 
 - `processName` is the report type `code` for the journey slug in `form`.
-- `userId` and `organisationId` come from the signed-in user's session:
-  the Entra object ID and the lab code from the app roles. For external users
-  they will be the Defra Customer Identity contact ID and organisation ID.
+- `userId`, `userEmail`, `organisationId`, `organisationName` and
+  `organisationUniqueId` come from the signed-in user
+  (`src/server/forms/services/submission-identity.js`), the same way for every
+  record this service writes:
+  - `userId` is the user's ID: the Entra object ID, or the Defra Customer
+    Identity contact ID for an external user. `userEmail` is their email
+    address.
+  - `organisationId` and `organisationName` are both the lab's name. For an
+    external user that is the name Customer Identity gives the organisation
+    they signed in for ("Local Test Laboratory" locally). For an internal user
+    it is read from the lab code in their app role: `Lab.TestLab1.AHR` gives
+    "Test Lab 1", `APHAWeybridge` would give "APHA Weybridge". A lab whose
+    code does not read as its name is named in `AUTH_ENTRA_ID_LAB_NAMES`, as
+    comma-separated `Code=Name` entries with the name percent-encoded, since
+    CDP configuration fields take no spaces
+    (`APHAVIC=APHA%20Veterinary%20Investigation%20Centre`); a configured name
+    wins.
+  - `organisationUniqueId` is the lab's Customer Identity organisation ID. It
+    is only present for external users, after `organisationName`; Entra does
+    not identify the lab beyond its code.
+  - The lab's saved reports, submission history and diagnostic tests are
+    still kept under the session's lab (the Entra lab code or Customer
+    Identity organisation ID), not the name, and the pages still show the
+    laboratory as before.
 - `fileName` is the data file the uploader completed or, for a web form
   report, the workbook built from its entries (below); it is left out when
   the report has neither.
@@ -513,9 +536,9 @@ diagnostic tests declaration included, goes under that folder.
   [Previous submissions](#previous-submissions)).
 
 An Animal Health Regulations report entered as a web form goes through the
-same output service and produces the same record, so `userId`,
-`organisationId`, `processName` (`AHR`) and `reportMonthYear` are filled in
-the same way. What differs is that the user uploads no data file: the
+same output service and produces the same record, so the user and lab
+fields, `processName` (`AHR`) and `reportMonthYear` are filled in the same
+way. What differs is that the user uploads no data file: the
 report itself is in `entries`, `form` is
 `animal-health-regulations-web-form`, `answers` holds only the `reportDate`,
 and the data file is built here. APHA's "Monthly disease reporting for labs"
@@ -749,7 +772,9 @@ the tests can be read without opening the workbook:
   "form": "diagnostic-tests",
   "processName": "DT",
   "userId": "<Entra object ID>",
-  "organisationId": "TestLab1",
+  "userEmail": "caroline.ford@apha.gov.uk",
+  "organisationId": "Test Lab 1",
+  "organisationName": "Test Lab 1",
   "submittedAt": "2026-09-24T14:04:00.000Z",
   "fileName": "ABC-DEF-GHJ-diagnostic-tests.xlsx",
   "laboratoryDetails": {
