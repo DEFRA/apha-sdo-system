@@ -291,6 +291,12 @@ export const config = convict({
         format: 'nat',
         default: 300000,
         env: 'AUTH_ENTRA_ID_EARLY_REFRESH_MS'
+      },
+      labNames: {
+        doc: 'Names for lab codes whose name cannot be read from the code itself, as comma-separated Code=Name entries with the name percent-encoded (CDP configuration fields take no spaces), e.g. APHAVIC=APHA%20Veterinary%20Investigation%20Centre',
+        format: Array,
+        default: [],
+        env: 'AUTH_ENTRA_ID_LAB_NAMES'
       }
     },
     // External (laboratory) users sign in with Defra Customer Identity, which

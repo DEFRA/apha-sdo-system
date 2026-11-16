@@ -3,6 +3,7 @@ import { generateUniqueReference } from '@defra/forms-engine-plugin/engine/refer
 import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { submissionIdentity } from '#/server/forms/services/submission-identity.js'
 
 import {
   ACCREDITATION_OPTIONS,
@@ -137,7 +138,7 @@ export function validateDiagnosticTests(selections) {
  * from the ticks (see diagnostic-tests-workbook.js), and also carries the
  * tests as one row each, in catalogue order, so they can be read without
  * opening the workbook.
- * @param {{ id?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
+ * @param {{ provider?: string, id?: string, email?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {Record<string, string | null>} [laboratoryDetails] - the laboratory details page's answers
  * @param {{ referenceNumber?: string, now?: Date }} [options] - fixed for tests
@@ -152,13 +153,7 @@ export function buildDiagnosticTestsSubmission(
     referenceNumber,
     form: DIAGNOSTIC_TESTS_FORM,
     processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
-    userId: user?.id ?? null,
-    organisationId: user?.organisationId ?? null,
-    // Customer Identity organisation IDs are opaque GUIDs, so the lab's name
-    // travels with them; Entra lab codes are readable on their own
-    ...(user?.organisationName
-      ? { organisationName: user.organisationName }
-      : {}),
+    ...submissionIdentity(user),
     submittedAt: now.toISOString(),
     fileName: diagnosticTestsFileName(referenceNumber),
     laboratoryDetails: buildLaboratoryDetailsRecord(user, laboratoryDetails),

@@ -279,7 +279,9 @@ describe('#outputService.submit', () => {
         form: 'bat-rabies',
         processName: 'BR',
         userId: 'entra-oid',
-        organisationId: 'TestLab1',
+        userEmail: 'person@example.gov.uk',
+        organisationId: 'Test Lab 1',
+        organisationName: 'Test Lab 1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
         fileName: 'March2024.xlsx',
         reportMonthYear: 'March 2024',
@@ -400,7 +402,9 @@ describe('#outputService.submit', () => {
           form: 'animal-health-regulations-web-form',
           processName: 'AHR',
           userId: 'entra-oid',
-          organisationId: 'TestLab1',
+          userEmail: 'person@example.gov.uk',
+          organisationId: 'Test Lab 1',
+          organisationName: 'Test Lab 1',
           submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
           fileName: WORKBOOK_FILE_NAME,
           reportMonthYear: 'August 2026',
@@ -652,7 +656,9 @@ describe('#outputService.submit', () => {
         'form',
         'processName',
         'userId',
+        'userEmail',
         'organisationId',
+        'organisationName',
         'submittedAt',
         'fileName',
         'reportMonthYear',
@@ -702,10 +708,80 @@ describe('#outputService.submit', () => {
           form: null,
           processName: null,
           userId: null,
+          userEmail: null,
           organisationId: null,
+          organisationName: null,
           reportMonthYear: null
         })
       )
+      expect(uploadedSubmissionJson()).not.toHaveProperty(
+        'organisationUniqueId'
+      )
+    })
+
+    describe('who submitted, for which lab', () => {
+      const context = {
+        referenceNumber: 'REF-1',
+        relevantState: { supportingDocuments: [buildFileState()] }
+      }
+
+      test('records an internal user with the name of the lab in their role, and no organisationUniqueId', async () => {
+        await outputService.submit(...submitArgs(context, buildRequest()))
+
+        const submission = uploadedSubmissionJson()
+
+        expect(submission).toEqual(
+          expect.objectContaining({
+            userId: 'entra-oid',
+            userEmail: 'person@example.gov.uk',
+            organisationId: 'Test Lab 1',
+            organisationName: 'Test Lab 1'
+          })
+        )
+        expect(submission).not.toHaveProperty('organisationUniqueId')
+      })
+
+      test("records an external user with their lab's Customer Identity name and organisation ID", async () => {
+        const externalUser = {
+          provider: 'defraId',
+          id: 'defra-id-contact-id',
+          name: 'An External Person',
+          email: 'person@lab.example.com',
+          organisationId: '6b2a1c0e-0000-4000-8000-000000000000',
+          organisationName: 'Local Test Laboratory',
+          journeys: ['BR']
+        }
+
+        await outputService.submit(
+          ...submitArgs(context, buildRequest({ user: externalUser }))
+        )
+
+        const submission = uploadedSubmissionJson()
+
+        expect(submission).toEqual(
+          expect.objectContaining({
+            userId: 'defra-id-contact-id',
+            userEmail: 'person@lab.example.com',
+            organisationId: 'Local Test Laboratory',
+            organisationName: 'Local Test Laboratory',
+            organisationUniqueId: '6b2a1c0e-0000-4000-8000-000000000000'
+          })
+        )
+        expect(Object.keys(submission)).toEqual([
+          'referenceNumber',
+          'form',
+          'processName',
+          'userId',
+          'userEmail',
+          'organisationId',
+          'organisationName',
+          'organisationUniqueId',
+          'submittedAt',
+          'fileName',
+          'reportMonthYear',
+          'answers'
+        ])
+      })
     })
   })
 
