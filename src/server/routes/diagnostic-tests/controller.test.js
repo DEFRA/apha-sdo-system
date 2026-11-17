@@ -2,6 +2,7 @@ import { createServer } from '#/server/server.js'
 import { config } from '#/config/config.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
+import { reportMonthYearLabel } from '#/server/forms/validation/report-file-name.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import {
   DIAGNOSTIC_TESTS_CONFIRMATION_PATH,
@@ -252,6 +253,7 @@ describe('diagnostic tests helpers', () => {
         organisationName: 'Test Lab 1',
         submittedAt: '2026-09-24T14:04:00.000Z',
         fileName: 'ABC-DEF-GHJ-diagnostic-tests.xlsx',
+        reportMonthYear: 'September 2026',
         laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
           {
@@ -327,6 +329,7 @@ describe('diagnostic tests helpers', () => {
         'organisationName',
         'submittedAt',
         'fileName',
+        'reportMonthYear',
         'laboratoryDetails',
         'diagnosticTestsData'
       ])
@@ -341,7 +344,6 @@ describe('diagnostic tests helpers', () => {
         'ukasAccreditationNumber'
       ])
       expect(submission).not.toHaveProperty('fileNames')
-      expect(submission).not.toHaveProperty('reportMonthYear')
       expect(submission).not.toHaveProperty('notificationEmail')
     })
 
@@ -942,6 +944,10 @@ describe('diagnostic tests routes', () => {
         fileName: expect.stringMatching(
           /^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}-diagnostic-tests\.xlsx$/
         ),
+        reportMonthYear: reportMonthYearLabel({
+          month: new Date().getUTCMonth() + 1,
+          year: new Date().getUTCFullYear()
+        }),
         // Blank answers as null, the postcode as written on a letter
         laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
