@@ -4,6 +4,7 @@ import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { submissionIdentity } from '#/server/forms/services/submission-identity.js'
+import { reportMonthYearLabel } from '#/server/forms/validation/report-file-name.js'
 
 import {
   ACCREDITATION_OPTIONS,
@@ -130,14 +131,25 @@ export function validateDiagnosticTests(selections) {
     }))
 }
 
+// The month the declaration was submitted, as a report records its month
+// ("November 2026"). Taken from the same instant as submittedAt, in UTC, so
+// the two cannot name different months.
+function submissionMonthYear(now) {
+  return reportMonthYearLabel({
+    month: now.getUTCMonth() + 1,
+    year: now.getUTCFullYear()
+  })
+}
+
 /**
  * The record of a lab's details and qualifying tests, shaped like the
  * submission.json of a report (see src/server/forms/services/output-service.js)
- * with only the fields that apply: no report month and no notification
- * email. It names the one file of the submission, APHA's workbook filled in
- * from the ticks (see diagnostic-tests-workbook.js), and also carries the
- * tests as one row each, in catalogue order, so they can be read without
- * opening the workbook.
+ * with only the fields that apply: no notification email. It names the one
+ * file of the submission, APHA's workbook filled in from the ticks (see
+ * diagnostic-tests-workbook.js), and also carries the tests as one row each,
+ * in catalogue order, so they can be read without opening the workbook.
+ * `reportMonthYear` is the month of submission (see submissionMonthYear): a
+ * diagnostic tests declaration has no report date of its own.
  * @param {{ provider?: string, id?: string, email?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {Record<string, string | null>} [laboratoryDetails] - the laboratory details page's answers
@@ -156,6 +168,7 @@ export function buildDiagnosticTestsSubmission(
     ...submissionIdentity(user),
     submittedAt: now.toISOString(),
     fileName: diagnosticTestsFileName(referenceNumber),
+    reportMonthYear: submissionMonthYear(now),
     laboratoryDetails: buildLaboratoryDetailsRecord(user, laboratoryDetails),
     diagnosticTestsData: selections.map(({ test, accreditation }) => ({
       pathogen: test.pathogen.name,

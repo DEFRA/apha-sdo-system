@@ -764,7 +764,9 @@ row of the sheet.
 The record follows the shape of `submission.json` with just the fields that
 apply: it names the workbook (`fileName`), carries the laboratory details as
 one block (a blank optional field is `null`), and one row per ticked test so
-the tests can be read without opening the workbook:
+the tests can be read without opening the workbook. `reportMonthYear` is the
+month the declaration was submitted, written the way a report writes its
+month ("November 2026"), taken from the same instant as `submittedAt`:
 
 ```json
 {
@@ -777,6 +779,7 @@ the tests can be read without opening the workbook:
   "organisationName": "Test Lab 1",
   "submittedAt": "2026-09-24T14:04:00.000Z",
   "fileName": "ABC-DEF-GHJ-diagnostic-tests.xlsx",
+  "reportMonthYear": "September 2026",
   "laboratoryDetails": {
     "reportingPerson": "Caroline Ford",
     "laboratoryName": "TestLab1",
