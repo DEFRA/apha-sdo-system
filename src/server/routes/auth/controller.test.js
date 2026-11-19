@@ -19,7 +19,10 @@ const { config } = await import('#/config/config.js')
 const { createServer } = await import('#/server/server.js')
 const { statusCodes } =
   await import('#/server/common/constants/status-codes.js')
-const { buildEndSessionUrl } = await import('./controller.js')
+const { buildEndSessionUrl, describeSignInFailure } =
+  await import('./controller.js')
+const { AuthorizationResponseError, ResponseBodyError } =
+  await import('openid-client')
 
 function getCookieValue(response, name) {
   const setCookieHeaders = [response.headers['set-cookie']].flat()
@@ -891,5 +894,48 @@ describe('buildEndSessionUrl', () => {
     expect(result.searchParams.get('post_logout_redirect_uri')).toBe(
       'http://localhost:3000/signed-out'
     )
+  })
+})
+
+describe('describeSignInFailure', () => {
+  test('names the error a token endpoint rejected the code with', () => {
+    const error = new ResponseBodyError(
+      'server responded with an error in the response body',
+      {
+        cause: {
+          error: 'invalid_client',
+          error_description:
+            'AADB2C90081: The specified client_secret does not match the expected value for this client.'
+        },
+        response: new Response(null, { status: 401 })
+      }
+    )
+
+    expect(describeSignInFailure('Sign-in failed', error)).toBe(
+      'Sign-in failed: invalid_client (HTTP 401) - AADB2C90081: The specified client_secret does not match the expected value for this client.'
+    )
+  })
+
+  test('names the error the provider sent back to the callback', () => {
+    const error = new AuthorizationResponseError(
+      'authorization response from the server is an error',
+      {
+        cause: new URLSearchParams({
+          error: 'access_denied',
+          error_description:
+            'AADB2C90091: The user has cancelled entering self-asserted information.'
+        })
+      }
+    )
+
+    expect(describeSignInFailure('Sign-in failed', error)).toBe(
+      'Sign-in failed: access_denied - AADB2C90091: The user has cancelled entering self-asserted information.'
+    )
+  })
+
+  test('leaves the message alone for other errors', () => {
+    expect(
+      describeSignInFailure('Sign-in failed', new Error('state mismatch'))
+    ).toBe('Sign-in failed')
   })
 })
