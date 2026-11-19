@@ -85,6 +85,128 @@ export function getReportAccess(claims = {}, { logger } = {}) {
   }
 }
 
+// A percent-encoded name that does not decode is taken as written
+function decodeLabName(value) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function configuredLabName(code, labNames) {
+  for (const entry of Array.isArray(labNames) ? labNames : []) {
+    const separator = typeof entry === 'string' ? entry.indexOf('=') : -1
+
+    if (separator > 0 && entry.slice(0, separator).trim() === code) {
+      const name = decodeLabName(entry.slice(separator + 1)).trim()
+
+      if (name) {
+        return name
+      }
+    }
+  }
+
+  return null
+}
+
+function isAsciiUpper(character) {
+  return character >= 'A' && character <= 'Z'
+}
+
+function isAsciiLower(character) {
+  return character >= 'a' && character <= 'z'
+}
+
+function isAsciiDigit(character) {
+  return character >= '0' && character <= '9'
+}
+
+// A hyphen, an underscore or any whitespace becomes the space between words
+function isLabCodeBreak(character) {
+  return character === '-' || character === '_' || character.trim() === ''
+}
+
+// TestLab, and 1Lab: a capital after a lower-case letter or a digit
+function capitalFollowsWord(previous, character) {
+  const wordCharacter = isAsciiLower(previous) || isAsciiDigit(previous)
+
+  return wordCharacter && isAsciiUpper(character)
+}
+
+// APHAWeybridge: the capital that starts a word after a run of capitals
+function wordFollowsCapitals(previous, character, next) {
+  return isAsciiUpper(previous) && isAsciiUpper(character) && isAsciiLower(next)
+}
+
+// Lab12: a digit after a letter
+function digitFollowsLetter(previous, character) {
+  const letter = isAsciiUpper(previous) || isAsciiLower(previous)
+
+  return letter && isAsciiDigit(character)
+}
+
+// Where a space goes in a lab code, judged from the character before it.
+// Read in one pass; a regular expression for the run of capitals backtracks
+// over it.
+function splitsLabCodeBefore(code, index) {
+  const previous = code[index - 1]
+
+  if (previous === undefined || isLabCodeBreak(previous)) {
+    return false
+  }
+
+  const character = code[index]
+
+  return (
+    capitalFollowsWord(previous, character) ||
+    wordFollowsCapitals(previous, character, code[index + 1]) ||
+    digitFollowsLetter(previous, character)
+  )
+}
+
+// The lab code with its words separated: TestLab1 is "Test Lab 1"
+function labCodeAsWords(code) {
+  let words = ''
+
+  for (let index = 0; index < code.length; index++) {
+    const character = code[index]
+
+    if (isLabCodeBreak(character)) {
+      if (words && !words.endsWith(' ')) {
+        words += ' '
+      }
+      continue
+    }
+
+    if (words && !words.endsWith(' ') && splitsLabCodeBefore(code, index)) {
+      words += ' '
+    }
+
+    words += character
+  }
+
+  return words.trim()
+}
+
+/**
+ * The name of the lab an Entra lab code stands for. The token carries only
+ * the code, so the name is its words: `TestLab1` is "Test Lab 1",
+ * `APHAWeybridge` "APHA Weybridge". A lab whose name cannot be read that way
+ * is named in configuration (`auth.entraId.labNames`, `Code=Name` entries),
+ * which takes priority.
+ * @param {string | null | undefined} code - the lab code from the app role
+ * @param {string[]} [labNames] - configured `Code=Name` entries
+ * @returns {string | null}
+ */
+export function labNameOf(code, labNames = []) {
+  if (typeof code !== 'string' || !code.trim()) {
+    return null
+  }
+
+  return configuredLabName(code, labNames) ?? labCodeAsWords(code)
+}
+
 /**
  * Defra Customer Identity packs the user's organisations and service roles
  * into colon-delimited strings (Technical Onboarding Guide, section 7.1):

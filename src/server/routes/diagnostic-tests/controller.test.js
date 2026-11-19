@@ -2,6 +2,7 @@ import { createServer } from '#/server/server.js'
 import { config } from '#/config/config.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { AUTH_PATHS } from '#/server/auth/auth-constants.js'
+import { reportMonthYearLabel } from '#/server/forms/validation/report-file-name.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import {
   DIAGNOSTIC_TESTS_CONFIRMATION_PATH,
@@ -19,6 +20,10 @@ import {
   validateDiagnosticTests
 } from './controller.js'
 import { LABORATORY_DETAILS_PATH } from './laboratory-details.js'
+import {
+  XLSX_CONTENT_TYPE,
+  diagnosticTestsFileName
+} from './diagnostic-tests-workbook.js'
 import {
   ACCREDITATION_OPTIONS,
   pathogens,
@@ -40,6 +45,7 @@ const bhvPcr = testsByKey.get('bhv-pcr')
 const user = {
   id: 'user-id',
   name: 'A Person',
+  email: 'person@example.gov.uk',
   organisationId: 'TestLab1',
   journeys: ['BR', 'AHR']
 }
@@ -226,7 +232,7 @@ describe('diagnostic tests helpers', () => {
   describe('buildDiagnosticTestsSubmission', () => {
     const now = new Date('2026-09-24T14:04:00.000Z')
 
-    test("Should record who, for which lab, when, the lab's details, and one row per ticked test", () => {
+    test("Should record who, for which lab, when, the workbook, the lab's details, and one row per ticked test", () => {
       expect(
         buildDiagnosticTestsSubmission(
           user,
@@ -242,8 +248,12 @@ describe('diagnostic tests helpers', () => {
         form: DIAGNOSTIC_TESTS_FORM,
         processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
         userId: 'user-id',
-        organisationId: 'TestLab1',
+        userEmail: 'person@example.gov.uk',
+        organisationId: 'Test Lab 1',
+        organisationName: 'Test Lab 1',
         submittedAt: '2026-09-24T14:04:00.000Z',
+        fileName: 'ABC-DEF-GHJ-diagnostic-tests.xlsx',
+        reportMonthYear: 'September 2026',
         laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
           {
@@ -265,10 +275,11 @@ describe('diagnostic tests helpers', () => {
       expect(DIAGNOSTIC_TESTS_PROCESS_NAME).toBe('DT')
     })
 
-    test('Should name the lab after its Customer Identity organisation when the user has one', () => {
+    test('Should name the lab after its Customer Identity organisation, and carry its ID, for an external user', () => {
       const submission = buildDiagnosticTestsSubmission(
         {
           ...user,
+          provider: 'defraId',
           organisationId: '6b2a1c0e-0000-4000-8000-000000000000',
           organisationName: 'Wales Veterinary Science Centre'
         },
@@ -277,12 +288,27 @@ describe('diagnostic tests helpers', () => {
         { referenceNumber: 'ABC-DEF-GHJ', now }
       )
 
-      expect(submission.organisationName).toBe(
-        'Wales Veterinary Science Centre'
+      expect(submission).toEqual(
+        expect.objectContaining({
+          organisationId: 'Wales Veterinary Science Centre',
+          organisationName: 'Wales Veterinary Science Centre',
+          organisationUniqueId: '6b2a1c0e-0000-4000-8000-000000000000'
+        })
       )
       expect(submission.laboratoryDetails.laboratoryName).toBe(
         'Wales Veterinary Science Centre'
       )
+    })
+
+    test('Should carry no organisationUniqueId for an internal user', () => {
+      const submission = buildDiagnosticTestsSubmission(
+        user,
+        [],
+        LABORATORY_DETAILS,
+        { referenceNumber: 'ABC-DEF-GHJ', now }
+      )
+
+      expect(submission).not.toHaveProperty('organisationUniqueId')
     })
 
     test('Should carry only the fields that apply, in the order of a report record', () => {
@@ -298,8 +324,12 @@ describe('diagnostic tests helpers', () => {
         'form',
         'processName',
         'userId',
+        'userEmail',
         'organisationId',
+        'organisationName',
         'submittedAt',
+        'fileName',
+        'reportMonthYear',
         'laboratoryDetails',
         'diagnosticTestsData'
       ])
@@ -313,9 +343,19 @@ describe('diagnostic tests helpers', () => {
         'postcode',
         'ukasAccreditationNumber'
       ])
-      expect(submission).not.toHaveProperty('fileName')
       expect(submission).not.toHaveProperty('fileNames')
       expect(submission).not.toHaveProperty('notificationEmail')
+    })
+
+    test('Should name the workbook after the reference number', () => {
+      const submission = buildDiagnosticTestsSubmission(
+        user,
+        [],
+        LABORATORY_DETAILS,
+        { referenceNumber: 'ABC-DEF-GHJ', now }
+      )
+
+      expect(submission.fileName).toBe(diagnosticTestsFileName('ABC-DEF-GHJ'))
     })
 
     test('Should generate a reference number and timestamp by default', () => {
@@ -341,7 +381,9 @@ describe('diagnostic tests helpers', () => {
       )
 
       expect(submission.userId).toBeNull()
+      expect(submission.userEmail).toBeNull()
       expect(submission.organisationId).toBeNull()
+      expect(submission.organisationName).toBeNull()
       expect(submission.laboratoryDetails).toEqual({
         ...LABORATORY_DETAILS_RECORD,
         reportingPerson: null,
@@ -895,8 +937,17 @@ describe('diagnostic tests routes', () => {
         form: DIAGNOSTIC_TESTS_FORM,
         processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
         userId: user.id,
-        organisationId: user.organisationId,
+        userEmail: user.email,
+        organisationId: 'Test Lab 1',
+        organisationName: 'Test Lab 1',
         submittedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        fileName: expect.stringMatching(
+          /^[A-Z0-9]{3}-[A-Z0-9]{3}-[A-Z0-9]{3}-diagnostic-tests\.xlsx$/
+        ),
+        reportMonthYear: reportMonthYearLabel({
+          month: new Date().getUTCMonth() + 1,
+          year: new Date().getUTCFullYear()
+        }),
         // Blank answers as null, the postcode as written on a letter
         laboratoryDetails: LABORATORY_DETAILS_RECORD,
         diagnosticTestsData: [
@@ -912,11 +963,14 @@ describe('diagnostic tests routes', () => {
           }
         ]
       })
+      expect(submission.fileName).toBe(
+        diagnosticTestsFileName(submission.referenceNumber)
+      )
       // Azure storage is off in this test, so nothing was delivered
       expect(azureStorageService.uploadFile).not.toHaveBeenCalled()
     })
 
-    test('Should deliver the record, and nothing else, to Azure under the reference number', async () => {
+    test('Should deliver the workbook and then the record, and nothing else, to Azure under the reference number', async () => {
       config.set('azure.storage.enabled', true)
 
       const { statusCode } = await postDiagnosticTests({
@@ -930,10 +984,27 @@ describe('diagnostic tests routes', () => {
       const [submission] = loggedSubmissions()
       const { referenceNumber } = submission
 
-      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(2)
 
-      const [recordId, record, recordMetadata] =
-        azureStorageService.uploadFile.mock.calls[0]
+      const [
+        [workbookId, workbook, workbookMetadata],
+        [recordId, record, recordMetadata]
+      ] = azureStorageService.uploadFile.mock.calls
+
+      // The filled-in workbook, under the name the record carries
+      expect(workbookId).toBe(`${referenceNumber}-diagnostic-tests`)
+      expect(Buffer.isBuffer(workbook)).toBe(true)
+      // PK\x03\x04: a local file header, so a zip, so a .xlsx
+      expect(workbook.subarray(0, 4)).toEqual(
+        Buffer.from([0x50, 0x4b, 0x03, 0x04])
+      )
+      expect(workbookMetadata).toEqual({
+        blobPrefix: referenceNumber,
+        originalName: `${referenceNumber}-diagnostic-tests.xlsx`,
+        contentType: XLSX_CONTENT_TYPE,
+        type: 'file',
+        referenceNumber
+      })
 
       expect(recordId).toBe(`${referenceNumber}-submission`)
       expect(recordMetadata).toEqual({
@@ -944,10 +1015,12 @@ describe('diagnostic tests routes', () => {
         referenceNumber
       })
 
-      // The record itself carries the lab's details and tests
+      // The record names the workbook and itself carries the lab's details
+      // and tests
       const written = JSON.parse(record.toString())
 
       expect(written).toEqual(submission)
+      expect(written.fileName).toBe(workbookMetadata.originalName)
       expect(written.laboratoryDetails).toEqual(LABORATORY_DETAILS_RECORD)
       expect(written.diagnosticTestsData).toEqual([
         {
@@ -963,7 +1036,7 @@ describe('diagnostic tests routes', () => {
       ])
     })
 
-    test('Should show the error page, and keep nothing, when the delivery fails', async () => {
+    test('Should show the error page, and keep nothing, when the workbook delivery fails', async () => {
       config.set('azure.storage.enabled', true)
       azureStorageService.uploadFile.mockRejectedValueOnce(
         new Error('Azure upload failed: container unavailable')
@@ -980,13 +1053,39 @@ describe('diagnostic tests routes', () => {
       )
 
       expect(statusCode).toBe(statusCodes.internalServerError)
+      // The workbook goes first, so the record was never written
       expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(1)
+      expect(azureStorageService.uploadFile.mock.calls[0][2].type).toBe('file')
       expect(jar.get('diagnosticTests')).toBeUndefined()
       expect(jar.get('laboratoryDetails')).toBeUndefined()
 
       const confirmation = await getConfirmation(auth, jar)
 
       expect(confirmation.headers.location).toBe(LABORATORY_DETAILS_PATH)
+    })
+
+    test('Should show the error page, and keep nothing, when the record delivery fails', async () => {
+      config.set('azure.storage.enabled', true)
+      azureStorageService.uploadFile
+        .mockResolvedValueOnce({ success: true })
+        .mockRejectedValueOnce(
+          new Error('Azure upload failed: container unavailable')
+        )
+
+      const jar = cookieJar()
+      const { statusCode } = await postDiagnosticTests(
+        {
+          tests: 'bhv-fat',
+          [accreditationFieldId(bhvFat)]: 'Yes'
+        },
+        auth,
+        jar
+      )
+
+      expect(statusCode).toBe(statusCodes.internalServerError)
+      expect(azureStorageService.uploadFile).toHaveBeenCalledTimes(2)
+      expect(jar.get('diagnosticTests')).toBeUndefined()
+      expect(jar.get('laboratoryDetails')).toBeUndefined()
     })
 
     test('Should send the user back to the laboratory details page, delivering nothing, when the session no longer holds them', async () => {

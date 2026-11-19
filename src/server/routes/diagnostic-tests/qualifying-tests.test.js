@@ -1,6 +1,7 @@
 import { definition } from '#/server/forms/definitions/animal-health-regulations-web-form.js'
 import {
   ACCREDITATION_OPTIONS,
+  FIRST_XLS_ROW,
   pathogens,
   tests,
   testsByKey
@@ -102,10 +103,11 @@ describe('qualifying tests catalogue', () => {
     }
   })
 
-  test('Should resolve a key to its test and pathogen', () => {
+  test('Should resolve a key to its test, its pathogen and its workbook row', () => {
     expect(testsByKey.get('bhv-fat')).toEqual({
       key: 'bhv-fat',
       name: 'FAT',
+      xlsRow: 18,
       pathogen: {
         key: 'bhv',
         name: 'Bovine Herpes Virus 1 (BHV-1)',
@@ -123,5 +125,12 @@ describe('qualifying tests catalogue', () => {
       'mycoplasma-culture',
       'campylobacter-culture'
     ])
+  })
+
+  test('Should give each test the workbook row that follows the one before, from the first test row', () => {
+    expect(FIRST_XLS_ROW).toBe(6)
+    expect(tests.map((test) => test.xlsRow)).toEqual(
+      tests.map((_, index) => FIRST_XLS_ROW + index)
+    )
   })
 })

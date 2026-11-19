@@ -3,6 +3,8 @@ import { generateUniqueReference } from '@defra/forms-engine-plugin/engine/refer
 import { canUpdateDiagnosticTests } from '#/server/auth/report-access.js'
 import { POST_SIGN_IN_PATH } from '#/server/auth/auth-constants.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { submissionIdentity } from '#/server/forms/services/submission-identity.js'
+import { reportMonthYearLabel } from '#/server/forms/validation/report-file-name.js'
 
 import {
   ACCREDITATION_OPTIONS,
@@ -11,6 +13,10 @@ import {
   testsByKey
 } from './qualifying-tests.js'
 import { deliverDiagnosticTestsSubmission } from './diagnostic-tests-output.js'
+import {
+  buildDiagnosticTestsWorkbook,
+  diagnosticTestsFileName
+} from './diagnostic-tests-workbook.js'
 import {
   getLabDiagnosticTests,
   saveLabDetails,
@@ -125,13 +131,26 @@ export function validateDiagnosticTests(selections) {
     }))
 }
 
+// The month the declaration was submitted, as a report records its month
+// ("November 2026"). Taken from the same instant as submittedAt, in UTC, so
+// the two cannot name different months.
+function submissionMonthYear(now) {
+  return reportMonthYearLabel({
+    month: now.getUTCMonth() + 1,
+    year: now.getUTCFullYear()
+  })
+}
+
 /**
  * The record of a lab's details and qualifying tests, shaped like the
  * submission.json of a report (see src/server/forms/services/output-service.js)
- * with only the fields that apply: no report month and no file. The tests
- * are one row each, in catalogue order, so they can be written out as lines
- * of a spreadsheet downstream.
- * @param {{ id?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
+ * with only the fields that apply: no notification email. It names the one
+ * file of the submission, APHA's workbook filled in from the ticks (see
+ * diagnostic-tests-workbook.js), and also carries the tests as one row each,
+ * in catalogue order, so they can be read without opening the workbook.
+ * `reportMonthYear` is the month of submission (see submissionMonthYear): a
+ * diagnostic tests declaration has no report date of its own.
+ * @param {{ provider?: string, id?: string, email?: string, name?: string, organisationId?: string, organisationName?: string }} [user] - the session user
  * @param {{ test: object, accreditation: string }[]} selections - validated selections
  * @param {Record<string, string | null>} [laboratoryDetails] - the laboratory details page's answers
  * @param {{ referenceNumber?: string, now?: Date }} [options] - fixed for tests
@@ -146,14 +165,10 @@ export function buildDiagnosticTestsSubmission(
     referenceNumber,
     form: DIAGNOSTIC_TESTS_FORM,
     processName: DIAGNOSTIC_TESTS_PROCESS_NAME,
-    userId: user?.id ?? null,
-    organisationId: user?.organisationId ?? null,
-    // Customer Identity organisation IDs are opaque GUIDs, so the lab's name
-    // travels with them; Entra lab codes are readable on their own
-    ...(user?.organisationName
-      ? { organisationName: user.organisationName }
-      : {}),
+    ...submissionIdentity(user),
     submittedAt: now.toISOString(),
+    fileName: diagnosticTestsFileName(referenceNumber),
+    reportMonthYear: submissionMonthYear(now),
     laboratoryDetails: buildLaboratoryDetailsRecord(user, laboratoryDetails),
     diagnosticTestsData: selections.map(({ test, accreditation }) => ({
       pathogen: test.pathogen.name,
@@ -291,10 +306,11 @@ export const diagnosticTestsGetController = {
 }
 
 /**
- * Continue: the ticked tests are validated and, once they pass, delivered
- * with the laboratory details to the Azure container under the reference
- * number, as a report's record is, and kept as the lab's current tests and
- * details. The user is then sent to the confirmation. A failed delivery
+ * Continue: the ticked tests are validated and, once they pass, written into
+ * APHA's workbook and delivered with the record of them and the laboratory
+ * details to the Azure container under the reference number, as a report
+ * is, and kept as the lab's current tests and details. The user is then
+ * sent to the confirmation. A failed delivery
  * surfaces as the service's error page, as it does for a report, and
  * nothing is kept. Without the laboratory details in the session (it
  * expired) the user is sent back to give them.
@@ -328,6 +344,7 @@ export const diagnosticTestsPostController = {
 
     await deliverDiagnosticTestsSubmission({
       submission,
+      workbook: buildDiagnosticTestsWorkbook(selections),
       logger: request.logger
     })
     await saveLabDiagnosticTests(request, h, selections)

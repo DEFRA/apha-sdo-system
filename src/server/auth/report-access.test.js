@@ -5,6 +5,7 @@ import {
   getAllowedReportTypes,
   getDefraIdReportAccess,
   getReportAccess,
+  labNameOf,
   parseDefraIdRelationship,
   parseDefraIdRole,
   parseLabRole,
@@ -121,6 +122,45 @@ describe('getReportAccess', () => {
     expect(() =>
       getReportAccess({ roles: ['Lab.TestLab1.BR', 'Lab.TestLab2.BR'] })
     ).not.toThrow()
+  })
+})
+
+describe('labNameOf', () => {
+  test.each([
+    ['TestLab1', 'Test Lab 1'],
+    ['TestLab2', 'Test Lab 2'],
+    ['LocalLab', 'Local Lab'],
+    ['APHAWeybridge', 'APHA Weybridge'],
+    ['SRUC', 'SRUC'],
+    ['Lab12', 'Lab 12'],
+    ['Wales_Vet-Centre', 'Wales Vet Centre']
+  ])('reads the name of %s from its code as "%s"', (code, name) => {
+    expect(labNameOf(code)).toBe(name)
+  })
+
+  test('prefers the configured name, decoding it', () => {
+    expect(
+      labNameOf('APHAVIC', [
+        'TestLab1=Somewhere%20Else',
+        'APHAVIC=APHA%20Veterinary%20Investigation%20Centre'
+      ])
+    ).toBe('APHA Veterinary Investigation Centre')
+  })
+
+  test('takes a configured name that does not decode as written', () => {
+    expect(labNameOf('TestLab1', ['TestLab1=100%Lab'])).toBe('100%Lab')
+  })
+
+  test('ignores configured entries that name no lab or no name', () => {
+    expect(
+      labNameOf('TestLab1', ['TestLab1', '=Nameless', 'TestLab1=', 42])
+    ).toBe('Test Lab 1')
+  })
+
+  test('has no name for no lab', () => {
+    expect(labNameOf(null)).toBeNull()
+    expect(labNameOf(undefined)).toBeNull()
+    expect(labNameOf('  ')).toBeNull()
   })
 })
 

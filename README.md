@@ -480,7 +480,9 @@ diagnostic tests declaration included, goes under that folder.
   "form": "bat-rabies",
   "processName": "BR",
   "userId": "<Entra object ID>",
-  "organisationId": "TestLab1",
+  "userEmail": "a.person@apha.gov.uk",
+  "organisationId": "Test Lab 1",
+  "organisationName": "Test Lab 1",
   "submittedAt": "2026-09-09T10:30:00.000Z",
   "fileName": "March2025.csv",
   "reportMonthYear": "March 2025",
@@ -497,11 +499,33 @@ diagnostic tests declaration included, goes under that folder.
 ```
 
 - `processName` is the report type `code` for the journey slug in `form`.
-- `userId` and `organisationId` come from the signed-in user's session:
-  the Entra object ID and the lab code from the app roles. For external users
-  they will be the Defra Customer Identity contact ID and organisation ID.
-- `fileName` is the data file the uploader completed, or `null` when the
-  report has none.
+- `userId`, `userEmail`, `organisationId`, `organisationName` and
+  `organisationUniqueId` come from the signed-in user
+  (`src/server/forms/services/submission-identity.js`), the same way for every
+  record this service writes:
+  - `userId` is the user's ID: the Entra object ID, or the Defra Customer
+    Identity contact ID for an external user. `userEmail` is their email
+    address.
+  - `organisationId` and `organisationName` are both the lab's name. For an
+    external user that is the name Customer Identity gives the organisation
+    they signed in for ("Local Test Laboratory" locally). For an internal user
+    it is read from the lab code in their app role: `Lab.TestLab1.AHR` gives
+    "Test Lab 1", `APHAWeybridge` would give "APHA Weybridge". A lab whose
+    code does not read as its name is named in `AUTH_ENTRA_ID_LAB_NAMES`, as
+    comma-separated `Code=Name` entries with the name percent-encoded, since
+    CDP configuration fields take no spaces
+    (`APHAVIC=APHA%20Veterinary%20Investigation%20Centre`); a configured name
+    wins.
+  - `organisationUniqueId` is the lab's Customer Identity organisation ID. It
+    is only present for external users, after `organisationName`; Entra does
+    not identify the lab beyond its code.
+  - The lab's saved reports, submission history and diagnostic tests are
+    still kept under the session's lab (the Entra lab code or Customer
+    Identity organisation ID), not the name, and the pages still show the
+    laboratory as before.
+- `fileName` is the data file the uploader completed or, for a web form
+  report, the workbook built from its entries (below); it is left out when
+  the report has neither.
 - `reportMonthYear` is the report date exactly as shown on check your answers.
 - `entries` carries the entries of a web-form report (below) and is empty for
   an uploaded one, so the record has the same shape for every journey.
@@ -512,12 +536,32 @@ diagnostic tests declaration included, goes under that folder.
   [Previous submissions](#previous-submissions)).
 
 An Animal Health Regulations report entered as a web form goes through the
-same output service and produces the same record, so `userId`,
-`organisationId`, `processName` (`AHR`) and `reportMonthYear` are filled in
-the same way. What differs is that there is no data file: only
-`submission.json` is written, `fileName` is `null`,
-`form` is `animal-health-regulations-web-form`, `answers` holds only the
-`reportDate`, and the report itself is in `entries`.
+same output service and produces the same record, so the user and lab
+fields, `processName` (`AHR`) and `reportMonthYear` are filled in the same
+way. What differs is that the user uploads no data file: the
+report itself is in `entries`, `form` is
+`animal-health-regulations-web-form`, `answers` holds only the `reportDate`,
+and the data file is built here. APHA's "Monthly disease reporting for labs"
+workbook (`src/server/forms/templates/animal-health-regulations-template.xlsx`,
+v4.0-beta, the template an uploading lab fills in by hand) is filled in from
+the entries by `src/server/forms/services/animal-health-regulations-workbook.js`
+and written as
+`landingzone/{referenceNumber}/{referenceNumber}-{YYYY-MM}-animal-health-regulations.xlsx`
+before `submission.json`, which names it in `fileName`; the name carries
+the report month as `YYYY-MM`, the way an uploaded report's must (see
+`src/server/forms/validation/report-file-name.js`). Downstream therefore
+reads one format whichever way the report came. The workbook gets the signed-in user's
+name as who prepared the report (B4), the month by name and the year (B5,
+C5), and one row per entry from row 11: the pathogen, the species (the
+form's "Other" as the template's "Other (please specify)", with the other
+species alongside), the country and the three counts as numbers. The
+disease and qualifying tests columns are the template's own lookup
+formulas, left to Excel, which is asked to recalculate on open. As with the
+diagnostic tests workbook, the template is edited as the zip of XML parts it
+is (see `src/server/common/helpers/xlsx-template.js`) so its dropdowns,
+validation rules, protection and hidden lookup sheet survive; text is
+written as inline strings and every other part is copied through unchanged.
+The template has 50 entry rows, which is why `MAX_ENTRIES` (below) is 50.
 
 A web-form report covers one month but any number of entries, one per
 pathogen, species and country. After the report date, the user answers the
@@ -557,9 +601,10 @@ answers; `otherSpecies` is only present when that entry's species is "Other":
 
 ```json
 {
+  "referenceNumber": "AB12-CD34-EF56",
   "form": "animal-health-regulations-web-form",
   "processName": "AHR",
-  "fileName": null,
+  "fileName": "AB12-CD34-EF56-2026-08-animal-health-regulations.xlsx",
   "reportMonthYear": "August 2026",
   "answers": [
     { "name": "reportDate", "title": "Report Date", "value": "August 2026" }
@@ -591,7 +636,8 @@ The forms engine only repeats single pages, so the entry pages are served by
 `ReportEntriesPageController` (see `src/server/forms/controllers/report-entries.js`
 for how entries are kept in form state and validated). A report needs at least
 one entry and every entry complete before it can continue or be submitted;
-`MAX_ENTRIES` in that module caps how many can be added.
+`MAX_ENTRIES` in that module caps how many can be added, at the number of
+entry rows the workbook template has (`ENTRY_ROWS`, 50).
 
 Locally, Azurite receives the same blobs under the same `sdo/landingzone`
 layout (see `AZURE_*` in `.env.example`); `npm run storage:check` lists them.
@@ -638,8 +684,8 @@ your diagnostic tests in use**, opens
 your qualifying tests in use"): plain pages served by
 `src/server/routes/diagnostic-tests` rather than a forms-engine journey. The
 pathogens are the ones of the Animal Health Regulations report; the tests are
-APHA's qualifying diagnostic tests for them, listed in
-`src/server/routes/diagnostic-tests/qualifying-tests.js`.
+those of APHA's "Define diagnostic tests in use" workbook, in its row order,
+listed in `src/server/routes/diagnostic-tests/qualifying-tests.js`.
 
 ### Laboratory details
 
@@ -676,11 +722,15 @@ to the laboratory details. Once the lab has defined its tests, the page opens
 with them already ticked and their sections open, so updating them starts
 from what the lab has now.
 
-**Continue** delivers the declaration the way a report's record is
-delivered: the record below is written to the landing zone of the Azure
-container as `landingzone/{referenceNumber}/submission.json`
+**Continue** delivers the declaration the way a report is delivered: the
+workbook, filled in from the ticks, is written to the landing zone of the
+Azure container as
+`landingzone/{referenceNumber}/{referenceNumber}-diagnostic-tests.xlsx`,
+then the record below alongside it as
+`landingzone/{referenceNumber}/submission.json`
 (`src/server/routes/diagnostic-tests/diagnostic-tests-output.js`, reusing the
-output service's `uploadSubmissionJson`). There is no data file. When
+output service's `uploadSubmissionJson`). The workbook goes first, so a
+record is never written without the file it names. When
 `AZURE_STORAGE_ENABLED` is off the submission is only logged
 (`Diagnostic tests submission received`). The tests and laboratory details
 are then kept as the lab's current ones (see below), the laboratory details
@@ -693,10 +743,30 @@ page of the journey again ends it. Without one, the confirmation sends the
 user to `/diagnostic-tests/laboratory-details`. A failed delivery shows the
 error page and keeps nothing.
 
+The workbook is APHA's template
+(`src/server/routes/diagnostic-tests/templates/diagnostic-tests-template.xlsx`)
+with one row per test: the disease, the test, an **Accreditation** dropdown
+and, hidden, a `TRUE`/`FALSE` cell driven by a form-control checkbox. Filling
+it means writing that cell and the accreditation for every row and setting
+the checkbox's state; a ticked test gets `TRUE` and its accreditation, every
+other row `FALSE` and `Not applicable`, which is why the page does not offer
+`Not applicable` for a test in use. Spreadsheet libraries drop form controls,
+so `diagnostic-tests-workbook.js` edits the workbook's XML parts inside the
+zip (with `fflate`, through the helpers of
+`src/server/common/helpers/xlsx-template.js`, shared with the Animal Health
+Regulations web form workbook) and copies everything else through unchanged,
+keeping the template's styles, dropdowns, check formulas and protection
+intact. The
+catalogue in `qualifying-tests.js` is in the template's row order, and each
+test carries its row (`xlsRow`), so the n-th test is written to the n-th test
+row of the sheet.
+
 The record follows the shape of `submission.json` with just the fields that
-apply, the laboratory details as one block (a blank optional field is
-`null`), and one row per ticked test so the rows can be written out as
-spreadsheet lines downstream:
+apply: it names the workbook (`fileName`), carries the laboratory details as
+one block (a blank optional field is `null`), and one row per ticked test so
+the tests can be read without opening the workbook. `reportMonthYear` is the
+month the declaration was submitted, written the way a report writes its
+month ("November 2026"), taken from the same instant as `submittedAt`:
 
 ```json
 {
@@ -704,8 +774,12 @@ spreadsheet lines downstream:
   "form": "diagnostic-tests",
   "processName": "DT",
   "userId": "<Entra object ID>",
-  "organisationId": "TestLab1",
+  "userEmail": "caroline.ford@apha.gov.uk",
+  "organisationId": "Test Lab 1",
+  "organisationName": "Test Lab 1",
   "submittedAt": "2026-09-24T14:04:00.000Z",
+  "fileName": "ABC-DEF-GHJ-diagnostic-tests.xlsx",
+  "reportMonthYear": "September 2026",
   "laboratoryDetails": {
     "reportingPerson": "Caroline Ford",
     "laboratoryName": "TestLab1",
@@ -882,7 +956,8 @@ has this lab submitted?" for the page and Submission Welcome:
 - `getSubmissionHistory(request)` resolves to the reports of the user's lab
   (`organisationId`), newest first, as `{ referenceNumber, reportType,
 reportMonthYear, submittedAt, fileName, status }`, with `reportType` the
-  registry entry, `fileName` `null` for a web form report and `status` one of
+  registry entry, `fileName` the uploaded file or the workbook built from a
+  web form report (`null` for a report recorded with neither) and `status` one of
   `SUBMISSION_STATUS` (`processing`, `accepted`, `rejected`), worked out as
   above (`SHOWCASE_DECISION_DELAY_MS`); an empty list when there are none. It
   is read once per request and memoised on `request.app`.
@@ -899,7 +974,7 @@ Until the backend can be queried, the store keeps the reports in an encrypted
 `HttpOnly`, `SameSite=Lax`), as `[organisationId, reports]` pairs for the two
 most recently used labs, each report a
 `[code, referenceNumber, reportMonthYear, submittedAt, fileName, decision]`
-tuple (`fileName` `null` for a web form report, `decision` the showcase's
+tuple (`fileName` `null` for a report without one, `decision` the showcase's
 `accepted` or `rejected`, decided when the report is recorded; reports kept
 before decisions read as accepted), newest first. The output service has no
 response toolkit, so a report recorded during a request is written by an

@@ -45,9 +45,14 @@ import {
 import { redirectPath } from '@defra/forms-engine-plugin/engine/helpers.js'
 import { validationOptions } from '@defra/forms-engine-plugin/engine/pageControllers/validationOptions.js'
 
+import { ENTRY_ROWS } from '../services/animal-health-regulations-workbook.js'
+
 export const ENTRIES_KEY = 'entries'
 export const MIN_ENTRIES = 1
-export const MAX_ENTRIES = 100
+// A report is delivered as APHA's workbook filled in, one row per entry, so
+// it can hold no more entries than the workbook has rows (see
+// ../services/animal-health-regulations-workbook.js)
+export const MAX_ENTRIES = ENTRY_ROWS
 
 // The controller names the form definition uses for the two kinds of page
 export const ENTRY_PAGE_CONTROLLER = 'ReportEntryPageController'
