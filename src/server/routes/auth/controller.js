@@ -83,6 +83,24 @@ function withReturnTo(path, returnTo) {
 }
 
 /**
+ * The ECS log format keeps only an error's type, message and stack, so the
+ * provider's OAuth error (from Customer Identity, an AADB2C code and
+ * description) has to be written into the log message or it is lost.
+ */
+export function describeSignInFailure(message, error) {
+  if (typeof error?.error !== 'string') {
+    return message
+  }
+
+  const status = error.status ? ` (HTTP ${error.status})` : ''
+  const description = error.error_description
+    ? ` - ${error.error_description}`
+    : ''
+
+  return `${message}: ${error.error}${status}${description}`
+}
+
+/**
  * Internal users authenticate with Entra ID; external laboratory users with
  * Defra Customer Identity, once an environment has been onboarded to it.
  */
@@ -170,7 +188,7 @@ export const defraIdCallbackController = {
     } catch (error) {
       request.logger.warn(
         { err: error },
-        'Defra Customer Identity sign-in failed'
+        describeSignInFailure('Defra Customer Identity sign-in failed', error)
       )
       request.yar.flash(
         SIGN_IN_ERROR_FLASH_KEY,
@@ -241,7 +259,10 @@ export const entraCallbackController = {
     try {
       token = await request.callback(h)
     } catch (error) {
-      request.logger.warn({ err: error }, 'Entra sign-in failed')
+      request.logger.warn(
+        { err: error },
+        describeSignInFailure('Entra sign-in failed', error)
+      )
       request.yar.flash(
         SIGN_IN_ERROR_FLASH_KEY,
         'We could not sign you in. Try again.'
