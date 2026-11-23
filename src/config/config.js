@@ -43,9 +43,14 @@ export const config = convict({
     env: 'STATIC_CACHE_TIMEOUT'
   },
   serviceName: {
-    doc: 'Applications Service Name',
+    doc: 'Applications Service Name, as logged',
     format: String,
     default: 'apha-sdo-system'
+  },
+  serviceDisplayName: {
+    doc: 'The service name users see, in the header and page titles',
+    format: String,
+    default: 'Disease surveillance data portal'
   },
   root: {
     doc: 'Project root',

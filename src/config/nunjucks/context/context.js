@@ -42,7 +42,7 @@ export function context(request) {
 
   return {
     assetPath: `${assetPath}/assets`,
-    serviceName: config.get('serviceName'),
+    serviceName: config.get('serviceDisplayName'),
     serviceUrl: '/',
     isAuthenticated: request?.auth?.isAuthenticated ?? false,
     signedInUser,

@@ -1,9 +1,9 @@
 {#
-  "Define your qualifying tests in use", rendered by the diagnostic-tests
-  controller: one accordion section per pathogen, each test a checkbox that
-  reveals an "Accreditation" select when ticked (GOV.UK checkboxes with
-  conditionally revealed content). Sections start collapsed; the controller
-  expands those holding a ticked test or an error.
+  "Which qualifying tests do you have in use?", rendered by the
+  diagnostic-tests controller: one accordion section per pathogen, each test a
+  checkbox that reveals a "UKAS accreditation" select when ticked (GOV.UK
+  checkboxes with conditionally revealed content). Sections start collapsed;
+  the controller expands those holding a ticked test or an error.
 #}
 {% extends 'layouts/page.njk' %}
 
@@ -27,10 +27,11 @@
 
       <h1 class="govuk-heading-l">{{ pageTitle }}</h1>
 
+      <p class="govuk-body">Set up or amend the list of qualifying tests and UKAS accreditations used in your laboratory.</p>
       <p class="govuk-body">Only use this service if you are:</p>
       <ul class="govuk-list govuk-list--bullet">
-        <li>setting up your Qualifying tests for the first time</li>
-        <li>updating your tests and UK Accreditation Service (<strong>UKAS</strong>) since your last report month</li>
+        <li>setting up your qualifying tests for the first time</li>
+        <li>updating which qualifying tests you offer or updating UKAS accreditation status</li>
       </ul>
 
       <form method="post" action="{{ diagnosticTestsPath }}" novalidate>
@@ -48,7 +49,7 @@
                 id: item.accreditation.id,
                 name: item.accreditation.name,
                 label: {
-                  text: "Accreditation"
+                  text: "UKAS accreditation"
                 },
                 items: item.accreditation.items,
                 errorMessage: { text: item.accreditation.errorMessage } if item.accreditation.errorMessage

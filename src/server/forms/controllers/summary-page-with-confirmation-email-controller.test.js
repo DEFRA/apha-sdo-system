@@ -85,7 +85,7 @@ function buildViewModel({ files, value = 'Uploaded 1 file' } = {}) {
         summaryList: {
           rows: [
             {
-              key: { text: 'Supporting documents' },
+              key: { text: 'File uploaded' },
               value: { classes: 'app-prose-scope', html: value }
             }
           ]
@@ -97,7 +97,7 @@ function buildViewModel({ files, value = 'Uploaded 1 file' } = {}) {
 
 function filesRow(viewModel) {
   return viewModel.checkAnswers[0].summaryList.rows.find(
-    (row) => row.key.text !== 'Submission kind'
+    (row) => row.key.text !== 'Report type'
   )
 }
 
@@ -167,8 +167,11 @@ describe('#getSummaryViewModel', () => {
   })
 
   test.each([
-    { slug: 'bat-rabies', kind: 'Bat rabies' },
-    { slug: 'animal-health-regulations', kind: 'Animal Health Regulation' }
+    { slug: 'bat-rabies', kind: 'Bat rabies report' },
+    {
+      slug: 'animal-health-regulations',
+      kind: 'Reportable diseases monthly report'
+    }
   ])('Should show $kind as the submission kind for $slug', ({ slug, kind }) => {
     const viewModel = buildViewModel({
       files: [buildFile('March2025.xlsx')]
@@ -188,7 +191,7 @@ describe('#getSummaryViewModel', () => {
 
     expect(firstRow).toEqual({
       classes: 'govuk-summary-list__row--no-actions',
-      key: { text: 'Submission kind' },
+      key: { text: 'Report type' },
       value: { classes: 'app-prose-scope', text: kind }
     })
     expect(secondRow.value.html).toBe('March2025.xlsx')
@@ -209,8 +212,8 @@ describe('#getSummaryViewModel', () => {
         summaryList: {
           rows: [
             expect.objectContaining({
-              key: { text: 'Submission kind' },
-              value: expect.objectContaining({ text: 'Bat rabies' })
+              key: { text: 'Report type' },
+              value: expect.objectContaining({ text: 'Bat rabies report' })
             })
           ]
         }
@@ -234,7 +237,7 @@ describe('#getSummaryViewModel', () => {
 
     expect(result.checkAnswers[0].summaryList.rows).toHaveLength(1)
     expect(result.checkAnswers[0].summaryList.rows[0].key.text).toBe(
-      'Supporting documents'
+      'File uploaded'
     )
   })
 })
@@ -407,7 +410,11 @@ describe('web form report entries', () => {
         {
           name: undefined,
           items: [
-            { name: 'reportDate', title: 'Report Date', value: 'August 2026' }
+            {
+              name: 'reportDate',
+              title: 'Month your report covers',
+              value: 'August 2026'
+            }
           ]
         }
       ],
@@ -427,7 +434,7 @@ describe('web form report entries', () => {
           summaryList: {
             rows: [
               {
-                key: { text: 'Report Date' },
+                key: { text: 'Month your report covers' },
                 value: { html: 'August 2026' }
               }
             ]
@@ -491,12 +498,12 @@ describe('web form report entries', () => {
 
       expect(main.title).toBeUndefined()
       expect(main.summaryList.rows.map((row) => row.key.text)).toEqual([
-        'Submission kind',
-        'Report Date',
-        'Entries'
+        'Report type',
+        'Month your report covers',
+        'Number of entries'
       ])
       expect(main.summaryList.rows[2]).toEqual({
-        key: { text: 'Entries' },
+        key: { text: 'Number of entries' },
         value: { classes: 'app-prose-scope', text: '2 entries' },
         actions: {
           items: [
@@ -504,7 +511,7 @@ describe('web form report entries', () => {
               href: ENTRIES_CHANGE_HREF,
               text: 'Change',
               classes: 'govuk-link--no-visited-state',
-              visuallyHiddenText: 'entries'
+              visuallyHiddenText: 'number of entries'
             }
           ]
         }
@@ -552,7 +559,7 @@ describe('web form report entries', () => {
       expect(entriesItem).toEqual(
         expect.objectContaining({
           name: 'entries',
-          title: 'Entries',
+          title: 'Number of entries',
           value: '2 entries',
           href: ENTRIES_CHANGE_HREF,
           page: pageOf(model, ENTRIES_PATH)
@@ -621,7 +628,7 @@ describe('web form report entries', () => {
 
       expect(
         viewModel.checkAnswers[0].summaryList.rows.map((row) => row.key.text)
-      ).toEqual(['Submission kind', 'Entries'])
+      ).toEqual(['Report type', 'Number of entries'])
       expect(viewModel.checkAnswers).toHaveLength(2)
       expect(viewModel.details).toHaveLength(1)
     })

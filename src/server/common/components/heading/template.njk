@@ -1,5 +1,5 @@
 <div class="govuk-grid-row app-heading" data-testid="app-heading">
-  <div class="govuk-grid-column-two-thirds">
+  <div class="govuk-grid-column-{{ params.width or 'two-thirds' }}" data-testid="app-heading-column">
     <h1 class="govuk-heading-xl govuk-!-margin-bottom-2"
         data-testid="app-heading-title">{{ params.text }}</h1>
 

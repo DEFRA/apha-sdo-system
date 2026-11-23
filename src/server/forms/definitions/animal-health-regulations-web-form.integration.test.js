@@ -39,7 +39,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SUBMISSION_WELCOME = '/submission-welcome'
 const HOW_TO_REPORT = `/${ahr.slug}/how-to-report`
 const SAVED_REPORT_HEADING =
-  'You have a saved Animal Health Regulations report that has not been submitted.'
+  'You have a saved Reportable diseases monthly report that has not been submitted.'
 const CONTINUE_SAVED_REPORT = 'continue-web-form'
 
 const COUNTS = {
@@ -266,6 +266,13 @@ describe('animal health regulations web form (end to end)', () => {
       'href="/animal-health-regulations/how-to-report" class="govuk-back-link"'
     )
     expect(reportDatePage.result).toContain(ahr.title)
+    expect(reportDatePage.result).toContain(
+      '<p>The month your report covers is the month in which your lab tested the samples.</p>'
+    )
+    expect(reportDatePage.result).toContain(
+      'You must submit the report within the 30 days that follow the end of the month your report covers. You can add updates or amendments after this deadline, but you&#39;ll need to submit your whole report again.'
+    )
+    expect(reportDatePage.result).toContain('For example, 08 2026')
 
     // A report cannot cover a month that has not started yet
     const futureMonth = await post(PAGES.reportDate, {
@@ -276,11 +283,11 @@ describe('animal health regulations web form (end to end)', () => {
     expect(errorSummaryLinks(futureMonth.result)).toEqual([
       {
         href: '#reportDate__month',
-        text: 'Add report date must be this month or in the past'
+        text: 'Month covered must be this month or in the past'
       }
     ])
     expect(futureMonth.result).toContain(
-      '<span class="govuk-visually-hidden">Error:</span> Add report date must be this month or in the past'
+      '<span class="govuk-visually-hidden">Error:</span> Month covered must be this month or in the past'
     )
 
     await answer(
@@ -324,7 +331,7 @@ describe('animal health regulations web form (end to end)', () => {
 
     expect(pathogenPage.result).toContain('value="save-and-exit"')
     expect(pathogenPage.result).toContain(
-      '<button type="submit" name="action" value="delete" class="govuk-link app-link-button">Abort new entry</button>'
+      '<button type="submit" name="action" value="delete" class="govuk-link app-link-button">Cancel this entry</button>'
     )
 
     // Save and exit leaves for Submission Welcome without saving the page
@@ -456,6 +463,15 @@ describe('animal health regulations web form (end to end)', () => {
       href: entryPage(PAGES.pathogen, first)
     })
 
+    // No species chosen
+    const noSpecies = await post(entryPage(PAGES.species, first), {
+      species: ''
+    })
+    expect(noSpecies.statusCode).toBe(statusCodes.ok)
+    expect(errorSummaryLinks(noSpecies.result)).toEqual([
+      { href: '#species', text: 'Select a species' }
+    ])
+
     // A species reported for another pathogen is refused
     const wrongSpecies = await post(entryPage(PAGES.species, first), {
       species: 'Chicken'
@@ -484,13 +500,33 @@ describe('animal health regulations web form (end to end)', () => {
 
     const otherSpeciesPage = await get(entryPage(PAGES.otherSpecies, first))
     expect(otherSpeciesPage.statusCode).toBe(statusCodes.ok)
-    expect(otherSpeciesPage.result).toContain('Enter other species')
+    // The only question on the page, so its label is the page heading
+    expect(otherSpeciesPage.result).toMatch(
+      /<h1 class="govuk-label-wrapper">\s*<label class="govuk-label govuk-label--l" for="otherSpecies">\s*Enter species name\s*<\/label>/
+    )
+    expect(otherSpeciesPage.result).toContain(
+      'Enter the name of the species the report is for.'
+    )
+
+    const noOtherSpecies = await post(entryPage(PAGES.otherSpecies, first), {
+      otherSpecies: ''
+    })
+    expect(errorSummaryLinks(noOtherSpecies.result)).toEqual([
+      { href: '#otherSpecies', text: 'Enter name of species' }
+    ])
 
     await answer(
       entryPage(PAGES.otherSpecies, first),
       { otherSpecies: 'Alpaca' },
       entryPage(PAGES.country, first)
     )
+
+    const noNation = await post(entryPage(PAGES.country, first), {
+      country: ''
+    })
+    expect(errorSummaryLinks(noNation.result)).toEqual([
+      { href: '#country', text: 'Select a nation' }
+    ])
 
     await answer(
       entryPage(PAGES.country, first),
@@ -506,7 +542,11 @@ describe('animal health regulations web form (end to end)', () => {
     const backHere = entryPage(PAGES.numbers, first)
 
     expect(answersSoFar(numbersPage.result)).toEqual([
-      ['Report Date', 'August 2026', withReturnUrl(PAGES.reportDate, backHere)],
+      [
+        'Month your report covers',
+        'August 2026',
+        withReturnUrl(PAGES.reportDate, backHere)
+      ],
       [
         'Pathogen, disease and qualifying tests',
         pathogenSummaryHtml('Tritrichomonas foetus'),
@@ -534,7 +574,7 @@ describe('animal health regulations web form (end to end)', () => {
       'Total submissions with at least one qualifying test'
     )
     expect(numbersPage.result).toContain(
-      'Totals submissions that contained one or more positive samples'
+      'Total submissions that contained one or more positive samples'
     )
     expect(numbersPage.result).toContain(
       'Total number of positive samples identified'
@@ -561,7 +601,7 @@ describe('animal health regulations web form (end to end)', () => {
     expect(
       answersSoFar(numbersAgain.result).map(([key, value]) => [key, value])
     ).toEqual([
-      ['Report Date', 'August 2026'],
+      ['Month your report covers', 'August 2026'],
       [
         'Pathogen, disease and qualifying tests',
         pathogenSummaryHtml('Tritrichomonas foetus')
@@ -692,7 +732,7 @@ describe('animal health regulations web form (end to end)', () => {
       withReturnUrl(entryPage(PAGES.species, first), PAGES.entries)
     )
     expect(entryCaption(editingPage.result)).toBe('Editing entry 1/2')
-    expect(editingPage.result).not.toContain('Abort new entry')
+    expect(editingPage.result).not.toContain('Cancel this entry')
     expect(backLink(editingPage.result)).toEqual({
       text: 'Back',
       href: PAGES.entries
@@ -887,14 +927,17 @@ describe('animal health regulations web form (end to end)', () => {
 
     await answer(PAGES.entries, { action: 'continue' }, PAGES.summary)
 
-    // Check your answers shows the submission kind first, the report date,
+    // Check your answers shows the report type first, the month covered,
     // the number of entries, then a card per entry
     const summaryPage = await get(PAGES.summary)
     expect(summaryPage.statusCode).toBe(statusCodes.ok)
     expect(summaryPage.result).toContain('govuk-grid-column-full')
     expect(summaryPage.result).toContain('Confirm diagnostic test status')
     expect(summaryPage.result).toContain(
-      'Change my diagnostic tests and UKAS Accreditation my laboratory provides'
+      'I confirm that the diagnostic tests for each listed pathogen (and each test’s associated UKAS accreditation status) are the ones currently in use at this laboratory'
+    )
+    expect(summaryPage.result).toContain(
+      'Change the diagnostic tests and UKAS accreditation for my laboratory'
     )
     expect(summaryPage.result).toContain(
       'href="/diagnostic-tests/laboratory-details"'
@@ -907,14 +950,15 @@ describe('animal health regulations web form (end to end)', () => {
       )
     ]
       .map((match) => match[0])
-      .find((list) => list.includes('Submission kind'))
+      .find((list) => list.includes('Report type'))
 
-    expect(answers).toMatch(/Submission kind/)
+    expect(answers).toMatch(/Report type/)
     expect(answers).toMatch(new RegExp(ahr.kind))
-    expect(answers.indexOf('Submission kind')).toBeLessThan(
-      answers.indexOf('Report Date')
+    expect(answers.indexOf('Report type')).toBeLessThan(
+      answers.indexOf('Month your report covers')
     )
     expect(answers).toContain('August 2026')
+    expect(answers).toMatch(/Number of entries/)
     expect(answers).toContain('2 entries')
     expect(answers).toContain(
       `href="${withReturnUrl(PAGES.entries, PAGES.summary)}"`
@@ -1061,6 +1105,11 @@ describe('animal health regulations web form (end to end)', () => {
     const statusPage = await get(PAGES.status)
     expect(statusPage.statusCode).toBe(statusCodes.ok)
     expect(statusPage.result).toContain(submission.referenceNumber)
+    expect(statusPage.result).toMatch(
+      /<h1 class="govuk-panel__title">\s*Report submitted\s*<\/h1>/
+    )
+    expect(statusPage.result).toContain('<p>Thank you for your report.</p>')
+    expect(statusPage.result).not.toContain('What happens next')
 
     // Submitted, the report is no longer a saved one to continue
     const howToReportAfterSubmit = await get(HOW_TO_REPORT)

@@ -415,7 +415,7 @@ describe('laboratory details routes', () => {
       )
     })
 
-    test('Should sit under the Animal Health Regulations report in the breadcrumbs', async () => {
+    test('Should sit under the Reportable diseases monthly report in the breadcrumbs', async () => {
       const { result } = await get(LABORATORY_DETAILS_PATH)
 
       expect(result).toEqual(expect.stringContaining('govuk-breadcrumbs'))

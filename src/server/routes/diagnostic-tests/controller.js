@@ -8,6 +8,7 @@ import { reportMonthYearLabel } from '#/server/forms/validation/report-file-name
 
 import {
   ACCREDITATION_OPTIONS,
+  pathogenText,
   pathogens,
   tests,
   testsByKey
@@ -30,21 +31,20 @@ import {
 } from './laboratory-details.js'
 
 export const DIAGNOSTIC_TESTS_PATH = '/diagnostic-tests'
-export const DIAGNOSTIC_TESTS_TITLE = 'Define your qualifying tests in use'
+export const DIAGNOSTIC_TESTS_TITLE =
+  'Which qualifying tests do you have in use?'
 
 export const DIAGNOSTIC_TESTS_CONFIRMATION_PATH =
   '/diagnostic-tests/confirmation'
-export const DIAGNOSTIC_TESTS_CONFIRMATION_TITLE = 'Form submitted'
+export const DIAGNOSTIC_TESTS_CONFIRMATION_TITLE = 'Diagnostic tests submitted'
 
 // The reference of the last submission, kept in the session (not flashed) so
 // that refreshing the confirmation still shows it, as the report journeys'
 // confirmation does
 const CONFIRMATION_SESSION_KEY = 'diagnosticTestsConfirmation'
 
-// The report journeys' guidance (see report-journey.js), so every
-// confirmation tells the user the same
-const SUBMISSION_GUIDANCE =
-  'Thank you for your submission. We will process it and contact you if additional information is required.'
+// The last line of the report journeys' guidance (see report-journey.js)
+const SUBMISSION_GUIDANCE = 'We will contact you if we need more information.'
 
 // `form` and `processName` of the record, the way a report journey's slug and
 // report type code fill them (see src/server/forms/services/output-service.js)
@@ -74,10 +74,10 @@ export function accreditationFieldId(test) {
 /**
  * Named after the test and its pathogen, since several pathogens share test
  * names (PCR) and the error summary lists every message together
- * @param {{ name: string, pathogen: { name: string } }} test - an entry of the catalogue
+ * @param {{ name: string, pathogen: { name: string, text?: string } }} test - an entry of the catalogue
  */
 export function accreditationError(test) {
-  return `Select the accreditation for ${test.name} (${test.pathogen.name})`
+  return `Select the UKAS accreditation for ${test.name} (${pathogenText(test.pathogen)})`
 }
 
 /**
@@ -226,7 +226,7 @@ function buildViewModel(selections = [], errors = []) {
 
     return {
       key: pathogen.key,
-      heading: pathogen.name,
+      heading: pathogenText(pathogen),
       expanded: items.some(
         (item) => item.checked || item.accreditation.errorMessage
       ),
@@ -277,7 +277,7 @@ export function endDiagnosticTestsConfirmation(request) {
 }
 
 /**
- * "Define your qualifying tests in use": the tests a lab uses for each
+ * "Which qualifying tests do you have in use?": the tests a lab uses for each
  * pathogen and whether each is UKAS accredited. Reached from the laboratory
  * details page by a user who can submit Animal Health Regulations; without
  * its answers in the session the user is sent there first. The lab's

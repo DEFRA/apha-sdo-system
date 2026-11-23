@@ -1,0 +1,38 @@
+{#
+  The upload page of a report journey, rendered by
+  ReportFileUploadPageController. The engine's file-upload.html, except that
+  once the report's one file is attached the warning says how to change it.
+#}
+{% extends "index.html" %}
+
+{% from "govuk/components/button/macro.njk" import govukButton %}
+{% from "govuk/components/file-upload/macro.njk" import govukFileUpload %}
+{% from "govuk/components/warning-text/macro.njk" import govukWarningText %}
+
+{% block form %}
+  {{ componentList(componentsBefore) }}
+
+  <div class="govuk-error-summary-container"></div>
+
+  <form method="post" {%- if formAction and not context.isForceAccess %} action="{{ formAction }}" enctype="multipart/form-data" data-upload-id="{{ uploadId }}" {% if proxyUrl %}data-proxy-url="{{ proxyUrl }}"{% endif %} {%- else %} action="#" {%- endif %} novalidate>
+    {{ govukFileUpload(formComponent.model) }}
+
+    {% if formAction %}
+      {{ govukButton({
+        text: t('pages.fileUpload.upload'),
+        classes: "govuk-button--secondary upload-file-button js-hidden",
+        preventDoubleClick: true,
+        disabled: context.isForceAccess
+      }) }}
+    {% else %}
+      {{ govukWarningText({
+        text: maxFilesText,
+        iconFallbackText: t('common.warningIconFallback')
+      }) }}
+    {% endif %}
+  </form>
+
+  {{ super() }}
+
+  <div class="govuk-summary-list-container"></div>
+{% endblock %}

@@ -37,7 +37,10 @@
 import { randomUUID } from 'node:crypto'
 import escapeHtml from 'lodash/escape.js'
 
-import { pathogensByName } from '#/server/routes/diagnostic-tests/qualifying-tests.js'
+import {
+  pathogenText,
+  pathogensByName
+} from '#/server/routes/diagnostic-tests/qualifying-tests.js'
 import {
   getAnswer,
   hasListFormField
@@ -65,7 +68,7 @@ export const PATHOGEN_SUMMARY_LABEL = 'Pathogen, disease and qualifying tests'
 export const CHANGE_TEXT = 'Change'
 export const REMOVE_TEXT = 'Remove'
 export const SAVE_AND_EXIT_TEXT = 'Save and exit'
-export const ABORT_ENTRY_TEXT = 'Abort new entry'
+export const ABORT_ENTRY_TEXT = 'Cancel this entry'
 
 // The flag an entry carries once it has been completed for the first time
 export const ADDED_KEY = 'added'
@@ -558,8 +561,8 @@ export function answerData(field, state, translator) {
 }
 
 /**
- * The disease and qualifying tests recognised for a selected pathogen, or
- * null when the name is not in the catalogue.
+ * How a selected pathogen is shown, and the disease and qualifying tests
+ * recognised for it, or null when the name is not in the catalogue.
  * @param {string} pathogenName
  */
 export function recognitionOf(pathogenName) {
@@ -570,6 +573,7 @@ export function recognitionOf(pathogenName) {
   }
 
   return {
+    text: pathogenText(pathogen),
     disease: pathogen.disease,
     qualifyingTests: pathogen.tests.map((test) => test.name)
   }
@@ -582,11 +586,12 @@ export function recognitionOf(pathogenName) {
  */
 export function pathogenSummaryHtml(pathogenName) {
   const recognition = recognitionOf(pathogenName)
-  const name = escapeHtml(pathogenName)
 
   if (!recognition) {
-    return name
+    return escapeHtml(pathogenName)
   }
+
+  const name = escapeHtml(recognition.text)
 
   const tests = escapeHtml(recognition.qualifyingTests.join(', '))
 
@@ -656,7 +661,7 @@ export function entryDetailItems(model, entry, translator, options = {}) {
       page.collection.fields.map((field) => ({
         name: field.name,
         label: field.title,
-        title: field.label,
+        title: field.summaryLabel,
         value: answerHtml(field, entry, translator),
         data: answerData(field, entry, translator),
         href: entryPageHref(page, entry.itemId, {
@@ -712,7 +717,7 @@ export function answersSoFar(model, page, entry, state, translator) {
       const recognised =
         field.name === 'pathogen' &&
         recognitionOf(answerData(field, answerState, translator))
-      const label = recognised ? PATHOGEN_SUMMARY_LABEL : field.label
+      const label = recognised ? PATHOGEN_SUMMARY_LABEL : field.summaryLabel
 
       return {
         key: { text: label },

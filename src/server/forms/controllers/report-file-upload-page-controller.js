@@ -9,6 +9,10 @@ import {
   uploadedFileName
 } from '../validation/report-file-name.js'
 
+// Shown in place of the upload button once the report's one file is attached
+export const MAX_FILES_TEXT =
+  'Maximum number of files is 1. Remove the uploaded file to upload a different one.'
+
 /**
  * Upload page for a report submission. Files are uploaded by the browser
  * straight to the cdp-uploader, so the only point at which this service sees a
@@ -20,8 +24,16 @@ import {
  * rejectMisnamedFiles is also called by the report date and summary pages, so
  * a file cannot survive a change of report date or reach the output service by
  * another route.
+ *
+ * Rendered with report-file-upload.html, the engine's upload page worded for
+ * a report's single file.
  */
 export class ReportFileUploadPageController extends FileUploadPageController {
+  constructor(model, pageDef) {
+    super(model, pageDef)
+    this.viewName = 'report-file-upload'
+  }
+
   async getState(request) {
     const state = await super.getState(request)
 
@@ -102,7 +114,7 @@ export class ReportFileUploadPageController extends FileUploadPageController {
         ...formComponent.model,
         hint: {
           html: [
-            `The file name must include "${expected}", for example "${expected}.xlsx" or "${expected}-Report.xlsx"`,
+            `The name of your file must include the year and month that your report covers in figures and a hyphen, for example: ‘Report-${expected}.xlsx’.`,
             existingHint
           ]
             .filter(Boolean)
@@ -111,7 +123,7 @@ export class ReportFileUploadPageController extends FileUploadPageController {
       }
     }
 
-    return viewModel
+    return { ...viewModel, maxFilesText: MAX_FILES_TEXT }
   }
 }
 

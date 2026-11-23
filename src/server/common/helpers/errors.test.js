@@ -31,7 +31,9 @@ describe('#errors', () => {
     })
 
     expect(result).toEqual(
-      expect.stringContaining('Page not found | apha-sdo-system')
+      expect.stringContaining(
+        'Page not found | Disease surveillance data portal'
+      )
     )
     expect(statusCode).toBe(statusCodes.notFound)
   })

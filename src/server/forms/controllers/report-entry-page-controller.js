@@ -38,7 +38,7 @@ import { statusCodes } from '#/server/common/constants/status-codes.js'
 // Rendered above the page heading rather than among the questions
 const NOTIFICATION_BANNER = 'NotificationBanner'
 
-// "Abort new entry" posts the engine's delete action, the one its routes
+// "Cancel this entry" posts the engine's delete action, the one its routes
 // accept that means removing an item
 const ABORT_ACTION = 'delete'
 
@@ -68,7 +68,7 @@ const BACK_TEXT_KEY = 'common.back'
  *
  * Beside Continue, "Save and exit" leaves for Submission Welcome without
  * saving the page being left (the pages before it are already saved), and
- * while an entry is being added, "Abort new entry" discards it.
+ * while an entry is being added, "Cancel this entry" discards it.
  *
  * The engine evaluates conditions, including those that decide which options
  * of a list are offered, against top-level state. Before it renders a page
@@ -271,7 +271,7 @@ export class ReportEntryPageController extends QuestionPageController {
   }
 
   /**
-   * Handles "Abort new entry", and refuses an answer that is not among the
+   * Handles "Cancel this entry", and refuses an answer that is not among the
    * options offered to the entry, or counts that contradict each other,
    * before the engine saves the page. A count the engine has already found
    * wrong is not compared with the others: its own error is enough.
@@ -296,7 +296,7 @@ export class ReportEntryPageController extends QuestionPageController {
             path: [field.name],
             href: `#${field.name}`,
             name: field.name,
-            text: `Select one of the options shown for ${field.label.toLowerCase()}`
+            text: `Select one of the options shown for ${field.summaryLabel.toLowerCase()}`
           }))
         ]
       }
@@ -419,7 +419,7 @@ export class ReportEntryPageController extends QuestionPageController {
   }
 
   /**
-   * "Abort new entry": drops the entry being added and sends the user on to
+   * "Cancel this entry": drops the entry being added and sends the user on to
    * the report entries page when there are other entries. With none left the
    * report is abandoned, all of its state goes, the report date included, so
    * coming back starts afresh, and the user goes to Submission Welcome. An

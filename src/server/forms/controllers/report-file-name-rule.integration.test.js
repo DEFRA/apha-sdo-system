@@ -1,6 +1,7 @@
 import { config } from '#/config/config.js'
 import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
+import { MAX_FILES_TEXT } from './report-file-upload-page-controller.js'
 
 /**
  * A stand-in cdp-uploader on an ephemeral port, wired up before any imports so
@@ -148,13 +149,27 @@ describe('report file name rule (end to end)', () => {
     const reportDatePage = await get(`/${SLUG}/report-date`)
     expect(reportDatePage.statusCode).toBe(statusCodes.ok)
     expect(reportDatePage.result).toContain(
-      'What month does your submission cover?'
+      'What month does your report cover?'
     )
     expect(reportDatePage.result).toContain(
-      'Submit your report within 30 days after the end of the reporting month.'
+      'The month your report covers is the month in which your lab received the samples.'
     )
-    expect(reportDatePage.result).toContain('Reporting period')
-    expect(reportDatePage.result).toContain('Add the report month and year')
+    expect(reportDatePage.result).toContain(
+      'This means that if you need to upload an amended report for that month, it will replace the one you&#39;ve already uploaded.'
+    )
+    // Bat rabies has no 30-day deadline
+    expect(reportDatePage.result).not.toContain('30 days')
+    expect(reportDatePage.result).toContain('Month covered')
+    expect(reportDatePage.result).toContain('For example, 08 2026')
+
+    // Nothing entered: the error names the month covered
+    const dateMissing = await post(`/${SLUG}/report-date`, {
+      reportDate__month: '',
+      reportDate__year: ''
+    })
+    expect(dateMissing.statusCode).toBe(statusCodes.ok)
+    expect(dateMissing.result).toContain('There is a problem')
+    expect(dateMissing.result).toContain('Month covered must include a month')
     expect(reportDatePage.result).toContain(
       'href="/submission-welcome" class="govuk-back-link"'
     )
@@ -181,9 +196,18 @@ describe('report file name rule (end to end)', () => {
     expect(uploadPage.result).toContain(
       `href="/${SLUG}/report-date" class="govuk-back-link"`
     )
+    expect(uploadPage.result).toContain('Upload your report')
     expect(uploadPage.result).toContain(
-      'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"<br>Only csv, xls and xlsx files are supported.'
+      'To upload the file, drag and drop it or choose it from your documents folder.'
     )
+    expect(uploadPage.result).toContain(
+      'The name of your file must include the year and month that your report covers in figures and a hyphen, for example: ‘Report-2024-03.xlsx’.<br>Only CSV, XLS and XLSX files are accepted.'
+    )
+
+    // Continuing without a file asks for one
+    const noFile = await post(`/${SLUG}/files-upload`, {})
+    expect(noFile.statusCode).toBe(statusCodes.ok)
+    expect(noFile.result).toContain('Select a file')
     expect(uploadPage.result).not.toContain(
       'Upload laboratory results spreadsheet'
     )
@@ -225,6 +249,12 @@ describe('report file name rule (end to end)', () => {
     expect(acceptedPage.result).toContain('2024-03-part2.xlsx')
     expect(acceptedPage.result).toContain('1 file uploaded')
 
+    // With the one file attached, the page says how to change it
+    expect(acceptedPage.result).toContain(MAX_FILES_TEXT)
+    expect(acceptedPage.result).not.toContain(
+      'You have reached the maximum number of files'
+    )
+
     // Continue to the summary, which names the attached file rather than
     // counting it
     const continued = await post(`/${SLUG}/files-upload`, {})
@@ -245,12 +275,13 @@ describe('report file name rule (end to end)', () => {
       )
     ]
       .map((match) => match[0])
-      .find((list) => list.includes('Submission kind'))
+      .find((list) => list.includes('Report type'))
 
-    expect(answers).toMatch(/Submission kind/)
-    expect(answers).toMatch(/Bat rabies/)
-    expect(answers.indexOf('Submission kind')).toBeLessThan(
-      answers.indexOf('Reporting period')
+    expect(answers).toMatch(/Report type/)
+    expect(answers).toMatch(/Bat rabies report/)
+    expect(answers).toMatch(/File uploaded/)
+    expect(answers.indexOf('Report type')).toBeLessThan(
+      answers.indexOf('Month your report covers')
     )
 
     // Changing the report date from check-your-answers invalidates the stored
@@ -274,7 +305,7 @@ describe('report file name rule (end to end)', () => {
     )
     expect(invalidatedPage.result).not.toContain('1 file uploaded')
     expect(invalidatedPage.result).toContain(
-      'The file name must include "2024-04", for example "2024-04.xlsx" or "2024-04-Report.xlsx"<br>Only csv, xls and xlsx files are supported.'
+      'for example: ‘Report-2024-04.xlsx’.<br>Only CSV, XLS and XLSX files are accepted.'
     )
   })
 
@@ -307,8 +338,23 @@ describe('report file name rule (end to end)', () => {
     const statusPage = await get(`/${SLUG}/status`)
     expect(statusPage.statusCode).toBe(statusCodes.ok)
     expect(statusPage.result).toMatch(
+      /<title>\s*Report submitted \| [^<]+<\/title>/
+    )
+    expect(statusPage.result).toMatch(
+      /<h1 class="govuk-panel__title">\s*Report submitted\s*<\/h1>/
+    )
+    expect(statusPage.result).toMatch(
       /Your reference number<br><strong>[^<\s]+<\/strong>/
     )
+    expect(statusPage.result).toContain(
+      '<p>This reference number will be emailed to you. Please use it if you need to contact us about your report.</p>'
+    )
+    expect(statusPage.result).toContain('<p>Thank you for your report.</p>')
+    expect(statusPage.result).toContain(
+      '<p>We will contact you if we need more information.</p>'
+    )
+    expect(statusPage.result).not.toContain('Form submitted')
+    expect(statusPage.result).not.toContain('What happens next')
     expect(statusPage.result).not.toContain('/form/feedback')
   })
 })

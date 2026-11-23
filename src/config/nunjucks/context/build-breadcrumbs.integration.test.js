@@ -16,6 +16,9 @@ vi.mock(
  * for the service's own routes, and the forms-engine-plugin `viewContext` for
  * the journey pages. Both are covered here.
  */
+// Added to the page container when there are no breadcrumbs
+const NO_BREADCRUMBS_SPACING = 'app-width-container--no-breadcrumbs'
+
 describe('breadcrumbs rendering', () => {
   let server
   const auth = {
@@ -45,7 +48,23 @@ describe('breadcrumbs rendering', () => {
     return /<nav class="govuk-breadcrumbs[\s\S]*?<\/nav>/.exec(html)?.[0]
   }
 
-  test('Should render breadcrumbs on a route view', async () => {
+  test('Should render breadcrumbs on a route view, starting at the welcome page', async () => {
+    const { statusCode, result } = await server.inject({
+      method: 'GET',
+      url: '/previous-submissions',
+      auth
+    })
+    const breadcrumbs = getBreadcrumbs(result)
+
+    expect(statusCode).toBe(statusCodes.ok)
+    expect(breadcrumbs).toEqual(
+      expect.stringContaining('href="/submission-welcome">Welcome page')
+    )
+    expect(breadcrumbs).not.toEqual(expect.stringContaining('href="/"'))
+    expect(result).not.toEqual(expect.stringContaining(NO_BREADCRUMBS_SPACING))
+  })
+
+  test('Should not render a breadcrumb of the welcome page alone', async () => {
     const { statusCode, result } = await server.inject({
       method: 'GET',
       url: '/submission-welcome',
@@ -53,8 +72,12 @@ describe('breadcrumbs rendering', () => {
     })
 
     expect(statusCode).toBe(statusCodes.ok)
-    expect(getBreadcrumbs(result)).toEqual(
-      expect.stringContaining('href="/">Home')
+    expect(getBreadcrumbs(result)).toBeUndefined()
+    // Spaced from the header as the breadcrumbs would have spaced it
+    expect(result).toEqual(
+      expect.stringContaining(
+        `<div class="govuk-width-container ${NO_BREADCRUMBS_SPACING}">`
+      )
     )
   })
 
@@ -69,13 +92,16 @@ describe('breadcrumbs rendering', () => {
       const breadcrumbs = getBreadcrumbs(result)
 
       expect(statusCode).toBe(statusCodes.ok)
-      expect(breadcrumbs).toEqual(expect.stringContaining('href="/">Home'))
+      expect(breadcrumbs).not.toEqual(expect.stringContaining('href="/"'))
       expect(breadcrumbs).toEqual(
-        expect.stringContaining('href="/submission-welcome"')
+        expect.stringContaining('href="/submission-welcome">Welcome page')
       )
       // The current page is the final item and must not be a link.
       expect(breadcrumbs).toEqual(
         expect.stringContaining(`aria-current="page">${title}</li>`)
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(NO_BREADCRUMBS_SPACING)
       )
     }
   )
@@ -88,5 +114,10 @@ describe('breadcrumbs rendering', () => {
 
     expect(statusCode).toBe(statusCodes.ok)
     expect(getBreadcrumbs(result)).toBeUndefined()
+    expect(result).toEqual(
+      expect.stringContaining(
+        `<div class="govuk-width-container ${NO_BREADCRUMBS_SPACING}">`
+      )
+    )
   })
 })

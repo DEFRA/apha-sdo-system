@@ -6,8 +6,9 @@ const journeys = reportTypes.map((reportType) => ({
   ...createReportJourney(reportType)
 }))
 
-// Everything a report type is allowed to change. Stripping these leaves the
-// journey structure, which must be identical for every report type.
+// Everything a report type is allowed to change, the report date guidance
+// included. Stripping these leaves the journey structure, which must be
+// identical for every report type.
 function structureOf({ metadata, definition }) {
   return {
     metadata: { ...metadata, id: undefined, slug: undefined, title: undefined },
@@ -20,12 +21,24 @@ function structureOf({ metadata, definition }) {
         components: page.components?.map((component) => ({
           ...component,
           id: undefined,
-          hint: undefined
+          hint: undefined,
+          content: page.path === '/report-date' ? undefined : component.content
         }))
       }))
     }
   }
 }
+
+function guidanceOf(definition, path) {
+  const [guidance] = definition.pages.find(
+    (page) => page.path === path
+  ).components
+
+  return guidance
+}
+
+const journeyOf = (slug) =>
+  journeys.find(({ metadata }) => metadata.slug === slug)
 
 function idsOf({ metadata, definition }) {
   return [
@@ -110,7 +123,57 @@ describe('#createReportJourney', () => {
       // second upload once one file is attached
       expect(fileUpload.schema).toEqual({ max: 1 })
       expect(guidance.content).not.toMatch(/multiple/i)
-      expect(guidance.content).toMatch(/single file/)
+      expect(guidance.content).toBe(
+        'To upload the file, drag and drop it or choose it from your documents folder.'
+      )
+    }
+  )
+
+  test.each(journeys)(
+    'Should explain the month covered on the report date page of $metadata.slug as its report type does',
+    ({ reportType, definition }) => {
+      expect(guidanceOf(definition, '/report-date').content).toBe(
+        reportType.reportDateGuidance
+      )
+    }
+  )
+
+  test('Should count bat rabies samples by when they were received, with no deadline', () => {
+    const { content } = guidanceOf(
+      journeyOf('bat-rabies').definition,
+      '/report-date'
+    )
+
+    expect(content).toContain(
+      'The month your report covers is the month in which your lab received the samples.'
+    )
+    expect(content).toContain(
+      "it will replace the one you've already uploaded."
+    )
+    expect(content).not.toMatch(/30 days/)
+  })
+
+  test('Should count Animal Health Regulations samples by when they were tested, within 30 days', () => {
+    const { content } = guidanceOf(
+      journeyOf('animal-health-regulations').definition,
+      '/report-date'
+    )
+
+    expect(content).toContain(
+      'The month your report covers is the month in which your lab tested the samples.'
+    )
+    expect(content).toContain(
+      'You must submit the report within the 30 days that follow the end of the month your report covers.'
+    )
+    expect(content).toContain("you'll need to upload your whole report again.")
+  })
+
+  test.each(journeys)(
+    'Should thank the user for the report once $metadata.slug is submitted',
+    ({ metadata }) => {
+      expect(metadata.submissionGuidance).toBe(
+        'This reference number will be emailed to you. Please use it if you need to contact us about your report.\n\nThank you for your report.\n\nWe will contact you if we need more information.'
+      )
     }
   )
 

@@ -1,6 +1,7 @@
 import { FileUploadPageController } from '@defra/forms-engine-plugin/controllers/FileUploadPageController.js'
 
 import {
+  MAX_FILES_TEXT,
   ReportFileUploadPageController,
   findReportFileUploadPage
 } from '#/server/forms/controllers/report-file-upload-page-controller.js'
@@ -239,8 +240,24 @@ describe('#getViewModel', () => {
     const result = controller.getViewModel({}, { state: buildState() }, {})
 
     expect(result.formComponent.model.hint).toEqual({
-      html: 'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"<br>Only csv, xls and xlsx.'
+      html: 'The name of your file must include the year and month that your report covers in figures and a hyphen, for example: ‘Report-2024-03.xlsx’.<br>Only csv, xls and xlsx.'
     })
+  })
+
+  test('Should say how to change the file once the one allowed is attached', () => {
+    const controller = buildController()
+
+    vi.spyOn(
+      FileUploadPageController.prototype,
+      'getViewModel'
+    ).mockReturnValue(buildViewModel(undefined))
+
+    const result = controller.getViewModel({}, { state: buildState() }, {})
+
+    expect(result.maxFilesText).toBe(
+      'Maximum number of files is 1. Remove the uploaded file to upload a different one.'
+    )
+    expect(result.maxFilesText).toBe(MAX_FILES_TEXT)
   })
 
   test('Should add a hint when the component has none', () => {
@@ -254,7 +271,7 @@ describe('#getViewModel', () => {
     const result = controller.getViewModel({}, { state: buildState() }, {})
 
     expect(result.formComponent.model.hint).toEqual({
-      html: 'The file name must include "2024-03", for example "2024-03.xlsx" or "2024-03-Report.xlsx"'
+      html: 'The name of your file must include the year and month that your report covers in figures and a hyphen, for example: ‘Report-2024-03.xlsx’.'
     })
   })
 

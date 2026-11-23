@@ -2,46 +2,31 @@
 
 {% block content %}
   {{ appHeading({
-    text: heading,
-    caption: "Surveillance data submission portal"
+    text: serviceName,
+    width: "three-quarters"
   }) }}
 
   <div class="govuk-grid-row">
-    <div class="govuk-grid-column-two-thirds">
+    <div class="govuk-grid-column-three-quarters">
       <div class="govuk-body" data-testid="app-page-body">
         <p class="govuk-body-l">
-          The surveillance data submission portal allows you to submit veterinary surveillance data to enhance the detection, assessment, and mitigation of disease-related threats to livestock and wildlife in Great Britain.
+          Submit your veterinary surveillance data to APHA. You'll be helping with the detection and assessment of disease-related threats to livestock and wildlife in Great Britain.
         </p>
 
         <a href="/sign-in-choose" class="govuk-button govuk-button--start govuk-!-margin-top-4 govuk-!-margin-bottom-6" data-module="govuk-button">
-          Continue to Surveillance data submission portal
+          Continue
           <svg class="govuk-button__start-icon" xmlns="http://www.w3.org/2000/svg" width="17.5" height="19" viewBox="0 0 33 40" aria-hidden="true" focusable="false">
             <path fill="currentColor" d="m0 0h13l20 20-20 20H0l20-20z"></path>
           </svg>
         </a>
 
-        <h2 class="govuk-heading-m">What the surveillance data submission portal does</h2>
-        <p>
-          The surveillance data submission portal allows APHA to securely and easily receive data from data providers and is the gateway to a comprehensive and integrated data storage platform.
-        </p>
-
-        <h2 class="govuk-heading-m">How your submission helps</h2>
-        <p>
-          By bringing together different sources of veterinary surveillance data through modern data management and analytical tool, to provide enriched and more timely insights into animal disease threat detection.
-        </p>
-
         <div class="govuk-inset-text govuk-!-margin-top-7">
           <p>This system is for authorised APHA personnel and approved external partners involved in veterinary surveillance activities.</p>
         </div>
-      </div>
-    </div>
 
-    <div class="govuk-grid-column-one-third">
-      <div class="govuk-body">
-        <h2 class="govuk-heading-s">Quick links</h2>
-        <ul class="govuk-list">
-          <li><a href="https://www.gov.uk/guidance/view-apha-surveillance-reports-publications-and-data" class="govuk-link">Go to APHA Dashboard</a></li>
-        </ul>
+        <p>
+          Check the guidance on <a href="https://www.gov.uk/government/publications/listed-diseases-in-animals-case-definitions-testing-and-reporting/reportable-diseases-monthly-reporting-requirements-for-diagnostic-laboratories" class="govuk-link">Reportable diseases: monthly reporting requirements for diagnostic laboratories</a>.
+        </p>
       </div>
     </div>
   </div>
