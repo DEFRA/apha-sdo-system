@@ -300,7 +300,7 @@ describe('previous submissions routes', () => {
 
     expect(result).toEqual(expect.stringContaining('All submissions'))
     expect(result).toEqual(
-      expect.stringContaining('Animal Health Regulations reports')
+      expect.stringContaining('Reportable diseases monthly reports')
     )
     // Only the table of all reports names each report's type, by its code
     expect(result.match(/>\s*Type\s*</g)).toHaveLength(1)
@@ -333,7 +333,7 @@ describe('previous submissions routes', () => {
     expect(result).toEqual(expect.stringContaining('govuk-tabs'))
     expect(result).toEqual(
       expect.stringContaining(
-        'You have not submitted any Animal Health Regulations reports yet.'
+        'You have not submitted any Reportable diseases monthly reports yet.'
       )
     )
     expect(result).not.toEqual(expect.stringContaining(NO_SUBMISSIONS_TEXT))

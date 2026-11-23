@@ -10,6 +10,12 @@
 
 {% set mainClasses = "app-main-wrapper" %}
 
+{# Breadcrumbs space the page from the header, so a page without them needs
+   the same space #}
+{% if not (breadcrumbs.length > 1) %}
+  {% set containerClasses = "app-width-container--no-breadcrumbs" %}
+{% endif %}
+
 {% block headIcons %}
   <link rel="icon" sizes="48x48" href="{{ getAssetPath("node_modules/govuk-frontend/dist/govuk/assets/images/favicon.ico") }}">
   <link rel="icon" sizes="any" href="{{ getAssetPath("node_modules/govuk-frontend/dist/govuk/assets/images/favicon.svg") }}" type="image/svg+xml" >
@@ -60,8 +66,9 @@
   {% endif %}
 {% endblock %}
 
+{# The home page has no title of its own: it is titled by the service name #}
 {% block pageTitle %}
-  {{ pageTitle }} | {{ serviceName }}
+  {% if pageTitle %}{{ pageTitle }} | {% endif %}{{ serviceName }}
 {% endblock %}
 
 {% block beforeContent %}

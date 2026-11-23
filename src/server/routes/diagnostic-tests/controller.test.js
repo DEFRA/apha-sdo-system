@@ -26,6 +26,7 @@ import {
 } from './diagnostic-tests-workbook.js'
 import {
   ACCREDITATION_OPTIONS,
+  pathogenText,
   pathogens,
   tests,
   testsByKey
@@ -95,7 +96,7 @@ function sectionOf(html, pathogen) {
     .split(SECTION_START)
     .slice(1)
     .find((section) =>
-      section.includes(`Qualifying tests for ${pathogen.name}`)
+      section.includes(`Qualifying tests for ${pathogenText(pathogen)}`)
     )
 }
 
@@ -221,10 +222,19 @@ describe('diagnostic tests helpers', () => {
 
     test('Should name the test and its pathogen, since tests share names', () => {
       expect(accreditationError(bhvPcr)).toBe(
-        'Select the accreditation for PCR (including gE PCR) (Bovine Herpes Virus 1 (BHV-1))'
+        'Select the UKAS accreditation for PCR (including gE PCR) (Bovine Herpes Virus 1 (BHV-1))'
       )
       expect(accreditationError(mycoplasmaPcr)).toBe(
-        'Select the accreditation for PCR (Mycoplasma gallisepticum / M. meleagridis)'
+        'Select the UKAS accreditation for PCR (Mycoplasma gallisepticum / M. meleagridis)'
+      )
+    })
+
+    test('Should name the pathogen without the dashes of its workbook name', () => {
+      expect(accreditationError(testsByKey.get('bvdv-antigen-elisa'))).toBe(
+        'Select the UKAS accreditation for Antigen ELISA (Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated))'
+      )
+      expect(accreditationError(testsByKey.get('prrsv-virus-isolation'))).toBe(
+        'Select the UKAS accreditation for Virus isolation (Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated))'
       )
     })
   })
@@ -577,16 +587,21 @@ describe('diagnostic tests routes', () => {
       expect(statusCode).toBe(statusCodes.ok)
       expect(result).toEqual(expect.stringContaining(DIAGNOSTIC_TESTS_TITLE))
       expect(result).toEqual(
+        expect.stringContaining(
+          'Set up or amend the list of qualifying tests and UKAS accreditations used in your laboratory.'
+        )
+      )
+      expect(result).toEqual(
         expect.stringContaining('Only use this service if you are:')
       )
       expect(result).toEqual(
         expect.stringContaining(
-          'setting up your Qualifying tests for the first time'
+          'setting up your qualifying tests for the first time'
         )
       )
       expect(result).toEqual(
         expect.stringContaining(
-          'updating your tests and UK Accreditation Service (<strong>UKAS</strong>) since your last report month'
+          'updating which qualifying tests you offer or updating UKAS accreditation status'
         )
       )
       expect(result).not.toEqual(expect.stringContaining('There is a problem'))
@@ -620,8 +635,13 @@ describe('diagnostic tests routes', () => {
 
         expect(section).toBeDefined()
         expect(isExpanded(section)).toBe(false)
-        expect(section).toEqual(expect.stringContaining(pathogen.name))
+        expect(section).toEqual(expect.stringContaining(pathogenText(pathogen)))
       }
+
+      // Headed without the dashes of the workbooks' names
+      expect(result).not.toEqual(
+        expect.stringContaining('(-1 and -2 not differentiated)')
+      )
     })
 
     test('Should render a checkbox for every test that reveals an accreditation select', async () => {
@@ -643,9 +663,9 @@ describe('diagnostic tests routes', () => {
         )
       }
 
-      // The label of the test, with the design's own capitalisation
+      // The label of the test, capitalised as the workbook's row is
       expect(result).toEqual(
-        expect.stringContaining('>\n              culture\n')
+        expect.stringContaining('>\n              Culture\n')
       )
       expect(result).toEqual(
         expect.stringContaining(
@@ -678,7 +698,7 @@ describe('diagnostic tests routes', () => {
       expect(select).not.toEqual(expect.stringContaining(NOT_APPLICABLE))
 
       expect(result).toMatch(
-        new RegExp(`for="${selectId}">\\s*Accreditation\\s*</label>`)
+        new RegExp(`for="${selectId}">\\s*UKAS accreditation\\s*</label>`)
       )
     })
 
@@ -709,7 +729,7 @@ describe('diagnostic tests routes', () => {
       expect(headers.location).toBe(LABORATORY_DETAILS_PATH)
     })
 
-    test('Should sit under the Animal Health Regulations report in the breadcrumbs', async () => {
+    test('Should sit under the Reportable diseases monthly report in the breadcrumbs', async () => {
       const { result } = await getDiagnosticTests()
 
       expect(result).toEqual(expect.stringContaining('govuk-breadcrumbs'))
@@ -1155,15 +1175,19 @@ describe('diagnostic tests routes', () => {
           `Your reference number<br><strong>${referenceNumber}</strong>`
         )
       )
-      expect(result).toEqual(expect.stringContaining('What happens next'))
+      expect(result).toMatch(
+        /<h1 class="govuk-panel__title">\s*Diagnostic tests submitted\s*<\/h1>/
+      )
+      expect(result).not.toEqual(expect.stringContaining('What happens next'))
+      expect(result).not.toEqual(expect.stringContaining('Thank you'))
       expect(result).toEqual(
         expect.stringContaining(
-          'Thank you for your submission. We will process it and contact you if additional information is required.'
+          '<p class="govuk-body">We will contact you if we need more information.</p>'
         )
       )
       expect(result).toEqual(
         expect.stringContaining(
-          'href="/submission-welcome" class="govuk-link govuk-link--no-visited-state">Return to Submission Welcome</a>'
+          'href="/submission-welcome" class="govuk-link govuk-link--no-visited-state">Return to the welcome page</a>'
         )
       )
       expect(result).toEqual(

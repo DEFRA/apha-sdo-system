@@ -24,20 +24,25 @@ const SPREADSHEET_MIME_TYPES = [
   'text/csv'
 ].join(',')
 
-const REPORT_DATE_PAGE_TITLE = 'What month does your submission cover?'
+const REPORT_DATE_PAGE_TITLE = 'What month does your report cover?'
 
-const REPORT_DATE_GUIDANCE =
-  'Submit your report within 30 days after the end of the reporting month.'
+const REPORT_DATE_TITLE = 'Month covered'
 
-const REPORT_DATE_TITLE = 'Reporting period'
-
-const REPORT_DATE_HINT = 'Add the report month and year'
+const REPORT_DATE_HINT = 'For example, 08 2026'
 
 const FILE_UPLOAD_GUIDANCE =
-  'Drag and drop your file to upload it, or choose it from your device.\n' +
-  'A report is a single file. To replace the file you have uploaded, remove it first.'
+  'To upload the file, drag and drop it or choose it from your documents folder.'
 
-function createPages({ ids }) {
+// Under "Report submitted" and the reference number on the confirmation page,
+// shared with the web form
+export const REPORT_SUBMISSION_GUIDANCE =
+  'This reference number will be emailed to you. Please use it if you need to contact us about your report.\n' +
+  '\n' +
+  'Thank you for your report.\n' +
+  '\n' +
+  'We will contact you if we need more information.'
+
+function createPages({ ids, reportDateGuidance }) {
   return [
     {
       id: ids.reportDatePage,
@@ -48,7 +53,7 @@ function createPages({ ids }) {
         {
           id: ids.reportDateGuidance,
           type: 'Markdown',
-          content: REPORT_DATE_GUIDANCE,
+          content: reportDateGuidance,
           options: {},
           schema: {}
         },
@@ -57,7 +62,7 @@ function createPages({ ids }) {
           type: 'MonthYearField',
           name: 'reportDate',
           title: REPORT_DATE_TITLE,
-          shortDescription: REPORT_DATE_TITLE,
+          shortDescription: 'Month your report covers',
           hint: REPORT_DATE_HINT,
           options: {
             required: true
@@ -70,7 +75,7 @@ function createPages({ ids }) {
     {
       id: ids.filesUploadPage,
       path: '/files-upload',
-      title: 'Upload a report',
+      title: 'Upload your report',
       controller: 'ReportFileUploadPageController',
       components: [
         {
@@ -85,8 +90,9 @@ function createPages({ ids }) {
           type: 'FileUploadField',
           name: 'supportingDocuments',
           title: 'File upload',
-          shortDescription: 'Supporting documents',
-          hint: 'Only csv, xls and xlsx files are supported.',
+          shortDescription: 'File uploaded',
+          errorDescription: 'a file',
+          hint: 'Only CSV, XLS and XLSX files are accepted.',
           options: {
             required: true,
             accept: SPREADSHEET_MIME_TYPES
@@ -119,8 +125,7 @@ export function createReportJourney(reportType) {
     organisation: 'Defra',
     teamName: 'APHA SDO',
     teamEmail: 'sdo@apha.gov.uk',
-    submissionGuidance:
-      'Thank you for your submission. We will process it and contact you if additional information is required.',
+    submissionGuidance: REPORT_SUBMISSION_GUIDANCE,
     notificationEmail: 'sdo@apha.gov.uk',
     ...author,
     live: author

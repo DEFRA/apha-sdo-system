@@ -9,15 +9,14 @@ describe('#buildBreadcrumbs', () => {
   test('Should provide expected breadcrumbs for the submission welcome page', () => {
     expect(
       buildBreadcrumbs(mockRequest({ path: '/submission-welcome' }))
-    ).toEqual([{ text: 'Home', href: '/' }, { text: 'Submission Welcome' }])
+    ).toEqual([{ text: 'Welcome page' }])
   })
 
   test('Should provide expected breadcrumbs for the previous submissions page', () => {
     expect(
       buildBreadcrumbs(mockRequest({ path: '/previous-submissions' }))
     ).toEqual([
-      { text: 'Home', href: '/' },
-      { text: 'Submission Welcome', href: '/submission-welcome' },
+      { text: 'Welcome page', href: '/submission-welcome' },
       { text: 'Previous submissions' }
     ])
   })
@@ -28,10 +27,9 @@ describe('#buildBreadcrumbs', () => {
     '/diagnostic-tests/confirmation'
   ])('Should provide expected breadcrumbs for %s', (path) => {
     expect(buildBreadcrumbs(mockRequest({ path }))).toEqual([
-      { text: 'Home', href: '/' },
-      { text: 'Submission Welcome', href: '/submission-welcome' },
+      { text: 'Welcome page', href: '/submission-welcome' },
       {
-        text: 'Animal Health Regulations report',
+        text: 'Reportable diseases monthly report',
         href: '/animal-health-regulations/how-to-report'
       },
       { text: 'Update diagnostic tests' }
@@ -44,8 +42,7 @@ describe('#buildBreadcrumbs', () => {
       expect(
         buildBreadcrumbs(mockRequest({ path: `/${slug}/report-date` }))
       ).toEqual([
-        { text: 'Home', href: '/' },
-        { text: 'Submission Welcome', href: '/submission-welcome' },
+        { text: 'Welcome page', href: '/submission-welcome' },
         { text: title }
       ])
     }
@@ -67,8 +64,7 @@ describe('#buildBreadcrumbs', () => {
   test('Should treat the how-to-report screen and the web form as the report type', () => {
     const ahr = reportTypes.find((reportType) => reportType.webFormSlug)
     const expected = [
-      { text: 'Home', href: '/' },
-      { text: 'Submission Welcome', href: '/submission-welcome' },
+      { text: 'Welcome page', href: '/submission-welcome' },
       { text: ahr.title }
     ]
 

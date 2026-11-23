@@ -26,5 +26,30 @@ describe('Heading Component', () => {
         $heading('[data-testid="app-heading-caption"]').text().trim()
       ).toBe('A page showing available services')
     })
+
+    test('Should sit in a two-thirds column by default', () => {
+      expect($heading('[data-testid="app-heading-column"]').attr('class')).toBe(
+        'govuk-grid-column-two-thirds'
+      )
+    })
+  })
+
+  describe('With a width', () => {
+    beforeEach(() => {
+      $heading = renderComponent('heading', {
+        text: 'Services',
+        width: 'three-quarters'
+      })
+    })
+
+    test('Should sit in a column of that width', () => {
+      expect($heading('[data-testid="app-heading-column"]').attr('class')).toBe(
+        'govuk-grid-column-three-quarters'
+      )
+    })
+
+    test('Should leave out the caption when there is none', () => {
+      expect($heading('[data-testid="app-heading-caption"]')).toHaveLength(0)
+    })
   })
 })

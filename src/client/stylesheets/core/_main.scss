@@ -7,3 +7,8 @@
   padding-top: govuk-spacing(4);
   padding-bottom: govuk-spacing(3);
 }
+
+// The breadcrumbs' top margin, for a page that has none
+.app-width-container--no-breadcrumbs {
+  padding-top: govuk-spacing(3);
+}

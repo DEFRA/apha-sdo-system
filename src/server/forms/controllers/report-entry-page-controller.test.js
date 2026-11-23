@@ -987,7 +987,7 @@ describe('ReportEntryPageController', () => {
         components: [
           banner,
           {
-            type: 'AutocompleteField',
+            type: 'SelectField',
             isFormComponent: true,
             model: {
               name: 'species',
@@ -1034,7 +1034,7 @@ describe('ReportEntryPageController', () => {
 
       expect(adding).toEqual(
         expect.objectContaining({
-          abortText: 'Abort new entry',
+          abortText: 'Cancel this entry',
           canAbort: true,
           saveAndExitText: 'Save and exit'
         })
@@ -1052,7 +1052,7 @@ describe('ReportEntryPageController', () => {
       )
 
       expect(answersSoFar.rows.map((row) => row.key.text)).toEqual([
-        'Report Date',
+        'Month your report covers',
         'Pathogen, disease and qualifying tests',
         'Species'
       ])

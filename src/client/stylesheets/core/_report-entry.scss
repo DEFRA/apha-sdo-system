@@ -10,7 +10,7 @@
   max-width: none;
 }
 
-// "Abort new entry" posts the form, so it cannot be triggered from another
+// "Cancel this entry" posts the form, so it cannot be triggered from another
 // site, but sits among the buttons as a link, like Sign out does in the
 // header. The govuk-link class gives it the underline and focus style, but
 // its colours come from :link and :visited, which only apply to anchors, so

@@ -2,14 +2,16 @@ import { definition } from '#/server/forms/definitions/animal-health-regulations
 import {
   ACCREDITATION_OPTIONS,
   FIRST_XLS_ROW,
+  pathogenText,
   pathogens,
   tests,
   testsByKey
 } from './qualifying-tests.js'
 
-const ahrPathogenNames = definition.lists
-  .find((list) => list.name === 'pathogens')
-  .items.map((item) => item.value)
+const ahrPathogens = definition.lists.find(
+  (list) => list.name === 'pathogens'
+).items
+const ahrPathogenNames = ahrPathogens.map((item) => item.value)
 
 describe('qualifying tests catalogue', () => {
   test('Should offer the accreditations of a test in use, in order', () => {
@@ -20,8 +22,28 @@ describe('qualifying tests catalogue', () => {
     expect(ACCREDITATION_OPTIONS).not.toContain('Not applicable')
   })
 
-  test('Should list the pathogens of the Animal Health Regulations report, by name', () => {
+  test('Should list the pathogens of the Reportable diseases monthly report, by name', () => {
     expect(pathogens.map((pathogen) => pathogen.name)).toEqual(ahrPathogenNames)
+  })
+
+  test('Should show each pathogen as the web form lists it', () => {
+    expect(pathogens.map(pathogenText)).toEqual(
+      ahrPathogens.map((item) => item.text)
+    )
+  })
+
+  test('Should show a pathogen by its name when it has no text of its own', () => {
+    expect(pathogenText({ name: 'Tritrichomonas foetus' })).toBe(
+      'Tritrichomonas foetus'
+    )
+    expect(
+      pathogenText({
+        name: 'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+        text: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
+      })
+    ).toBe(
+      'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
+    )
   })
 
   test('Should give every pathogen at least one test and its disease', () => {
@@ -40,7 +62,7 @@ describe('qualifying tests catalogue', () => {
         pathogen.tests.map((test) => test.name)
       ])
     ).toEqual([
-      ['mycoplasma', ['PCR', 'DGGE/PCR', 'culture']],
+      ['mycoplasma', ['PCR', 'DGGE/PCR', 'Culture']],
       ['campylobacter', ['Culture of Campylobacter foetus subsp venerealis']],
       [
         'bvdv',
@@ -49,7 +71,7 @@ describe('qualifying tests catalogue', () => {
           'PCR differentiating BVDV-1 and BVDV-2',
           'PCR not differentiating BVDV-1 and BVDV-2',
           'Virus isolation',
-          'immunohistochemistry'
+          'Immunohistochemistry'
         ]
       ],
       [
@@ -79,7 +101,7 @@ describe('qualifying tests catalogue', () => {
           'PCR differentiating PRRSV-1 and PRRSV-2',
           'PCR not differentiating PRRSV-1 and PRRSV-2',
           'Virus isolation',
-          'immunohistochemistry'
+          'Immunohistochemistry'
         ]
       ],
       [

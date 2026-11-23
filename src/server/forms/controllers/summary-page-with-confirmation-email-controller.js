@@ -21,13 +21,13 @@ import {
 } from './report-entries.js'
 
 const FILE_UPLOAD_FIELD = 'FileUploadField'
-const SUBMISSION_KIND_KEY = 'Submission kind'
-const ENTRIES_KEY_TEXT = 'Entries'
+const SUBMISSION_KIND_KEY = 'Report type'
+const ENTRIES_KEY_TEXT = 'Number of entries'
 
 export const QUALIFYING_TESTS_FIELD = 'qualifyingTestsConfirmed'
 export const QUALIFYING_TESTS_CONFIRMATION = 'confirmed'
 export const QUALIFYING_TESTS_ERROR =
-  'Confirm that the diagnostic tests and UKAS accreditation selected are the ones your laboratory used this reporting month'
+  'Confirm that the diagnostic tests for each listed pathogen (and each test’s associated UKAS accreditation status) are the ones currently in use at this laboratory'
 
 const QUALIFYING_TESTS_ERROR_HREF = '#qualifying-tests'
 
@@ -238,7 +238,7 @@ function removeEntriesSectionGroup(viewModel, sectionName) {
 }
 
 /**
- * Puts Submission kind first on check your answers, before Reporting period. It is
+ * Puts Report type first on check your answers, before the month covered. It is
  * not a question in the journey — the user already chose it on Submission
  * Welcome — so the row has no Change link.
  * @param {{ checkAnswers?: object[] }} viewModel - the summary view model

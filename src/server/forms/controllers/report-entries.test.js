@@ -291,7 +291,7 @@ describe('report entries', () => {
       ])
       expect(
         offered(
-          'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)'
+          'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)'
         )
       ).toEqual([
         'Domestic cattle',
@@ -319,7 +319,7 @@ describe('report entries', () => {
       ])
       expect(
         offered(
-          'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
+          'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)'
         )
       ).toEqual([
         'Domestic pig',
@@ -726,7 +726,7 @@ describe('report entries', () => {
         ])
       ).toEqual([
         [
-          'Report Date',
+          'Month your report covers',
           'August 2026',
           `/${WEB_FORM_SLUG}${REPORT_DATE_PATH}?returnUrl=${returnUrl(numbers, SECOND_ENTRY_ID)}`
         ],
@@ -770,7 +770,7 @@ describe('report entries', () => {
       )
 
       expect(rows.map((row) => row.key.text)).toEqual([
-        'Report Date',
+        'Month your report covers',
         PATHOGEN_SUMMARY_LABEL,
         'Species'
       ])
@@ -805,7 +805,9 @@ describe('report entries', () => {
         translator
       )
 
-      expect(rows.map((row) => row.key.text)).toEqual(['Report Date'])
+      expect(rows.map((row) => row.key.text)).toEqual([
+        'Month your report covers'
+      ])
     })
   })
 
@@ -851,6 +853,23 @@ describe('report entries', () => {
       expect(pathogenSummaryHtml('Not a catalogue pathogen')).toBe(
         'Not a catalogue pathogen'
       )
+    })
+
+    test('Should show a pathogen without the dashes of its workbook name, and submit it with them', () => {
+      const bvdv =
+        'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)'
+      const pathogen = pageOf(model, ENTRY_PATHS.pathogen).collection.fields[0]
+
+      expect(recognitionOf(bvdv).text).toBe(
+        'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)'
+      )
+      expect(pathogenSummaryHtml(bvdv)).toContain(
+        '<p class="govuk-body govuk-!-margin-bottom-2">Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)</p>'
+      )
+      expect(pathogenSummaryHtml(bvdv)).not.toContain('(-1 and -2')
+      expect(
+        answerData(pathogen, buildEntry({ pathogen: bvdv }), translator)
+      ).toBe(bvdv)
     })
 
     test('Should submit an answer as given', () => {
@@ -902,7 +921,7 @@ describe('report entries', () => {
           'Submissions with at least one positive result',
           '3'
         ],
-        ['positiveSamples', 'Total positive submissions', '5']
+        ['positiveSamples', 'Total positive samples', '5']
       ])
 
       // In the engine's shape: field and state for the submission records,

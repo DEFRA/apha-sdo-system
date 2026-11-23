@@ -38,7 +38,7 @@ const batRabies = reportTypesBySlug.get('bat-rabies')
 const HOW_TO_REPORT = howToReportPath(ahr)
 const ERROR_MESSAGE = 'Select how you would like to report'
 const DIAGNOSTIC_TESTS_BANNER_HEADING =
-  'You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.'
+  'You need to set up your diagnostic tests before you can submit a ‘Reportable diseases monthly report’.'
 
 const valueOf = (method) => `value="${method}"`
 const radioCount = (html) => html.match(/name="reportMethod"/g).length
@@ -189,7 +189,7 @@ describe('report method routes', () => {
       )
       expect(result).toEqual(
         expect.stringContaining(
-          'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
+          'Only use this service if you are setting up your qualifying tests for the first time, or updating which qualifying tests you offer or their UKAS accreditation status'
         )
       )
 

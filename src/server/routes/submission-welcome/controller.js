@@ -54,13 +54,14 @@ function viewSubmissionHistoryItem(hint) {
 }
 
 /**
- * "Submit an Animal Health Regulations report", "Submit a Bat rabies report".
+ * "Submit a ‘Bat rabies report’". The title is quoted as the name of the
+ * report, which keeps its capital letter mid-sentence.
  * @param {string} title - the report type's label
  */
 function submitReportText(title) {
   const article = /^[aeiou]/i.test(title) ? 'an' : 'a'
 
-  return `Submit ${article} ${title}`
+  return `Submit ${article} ‘${title}’`
 }
 
 /**

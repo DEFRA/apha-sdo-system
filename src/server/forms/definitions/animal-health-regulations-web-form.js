@@ -19,7 +19,7 @@
  * species and conditions), the counts being whole non-negative numbers, and
  * the report entries page.
  *
- * A report can carry several entries (one per pathogen, species and country),
+ * A report can carry several entries (one per pathogen, species and nation),
  * so the five pages from pathogen to counts are answered once per entry. The
  * engine only repeats single pages, so those pages belong to the `entries`
  * section and are served by ReportEntryPageController, which keeps each
@@ -33,6 +33,7 @@
  */
 
 import { reportTypesBySlug } from '../report-types.js'
+import { REPORT_SUBMISSION_GUIDANCE } from './report-journey.js'
 
 const reportType = reportTypesBySlug.get('animal-health-regulations')
 
@@ -135,8 +136,7 @@ export const metadata = {
   organisation: 'Defra',
   teamName: 'APHA SDO',
   teamEmail: 'sdo@apha.gov.uk',
-  submissionGuidance:
-    'Thank you for your submission. We will process it and contact you if additional information is required.',
+  submissionGuidance: REPORT_SUBMISSION_GUIDANCE,
   notificationEmail: 'sdo@apha.gov.uk',
   ...author,
   live: author
@@ -166,12 +166,11 @@ export const definition = {
           id: '686b276a-fdd5-4c35-8d2e-01755b5f0f83',
           type: 'Markdown',
           content:
-            'Submit results received during the reporting month and within 30 days of the month end.\n' +
-            'You can submit older reports retrospectively, using this form\n' +
+            'The month your report covers is the month in which your lab tested the samples.\n' +
             '\n' +
-            '## Reporting period\n' +
-            'Enter the month and year your report covers.\n' +
-            'For example, for results from August 2026, enter 08 2026',
+            'You can only have one report for all the samples tested during that month.\n' +
+            '\n' +
+            "You must submit the report within the 30 days that follow the end of the month your report covers. You can add updates or amendments after this deadline, but you'll need to submit your whole report again.",
           options: {},
           schema: {}
         },
@@ -179,9 +178,9 @@ export const definition = {
           id: 'c3f80afa-be88-4aad-af06-b762c8a4d72b',
           type: 'MonthYearField',
           name: 'reportDate',
-          title: 'Add report date',
-          shortDescription: 'Report Date',
-          hint: '',
+          title: 'Month covered',
+          shortDescription: 'Month your report covers',
+          hint: 'For example, 08 2026',
           options: {
             required: true
           },
@@ -234,18 +233,19 @@ export const definition = {
           id: 'a16fd9e2-9178-41ce-ad63-4d3043fcc666',
           type: 'Markdown',
           content:
-            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation.\n' +
-            'You can add another nation or species report after completing this one.',
+            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation.',
           options: {},
           schema: {}
         },
         {
+          // Designed as an autocomplete; a select shows every species offered
           id: SPECIES_FIELD_ID,
-          type: 'AutocompleteField',
+          type: 'SelectField',
           name: 'species',
           title: 'What species is the report for?',
           shortDescription: 'Species',
-          hint: 'Start typing the name of the species. If the species is not on the list, select "Other" and enter it on the next page.',
+          errorDescription: 'a species',
+          hint: 'Select the species. If the species is not listed by its family name or the species name, select ‘Other’.',
           list: SPECIES_LIST_ID,
           options: {
             required: true
@@ -257,25 +257,20 @@ export const definition = {
     {
       id: 'a5d6bb63-ed7d-4dde-81a9-1d06ac125608',
       path: '/enter-other-species',
-      title: 'Enter other species',
+      title: 'Enter species name',
       section: ENTRIES_SECTION_ID,
       controller: ENTRY_PAGE_CONTROLLER,
       condition: SPECIES_IS_OTHER_CONDITION_ID,
       components: [
         {
-          id: 'b4f085e8-62ae-47c5-884c-59423e5416b2',
-          type: 'Markdown',
-          content: 'Enter the name of the species the report is for',
-          options: {},
-          schema: {}
-        },
-        {
+          // The only question on the page, so its label is the page heading
           id: 'db751722-9009-4940-be55-f13eb3524444',
           type: 'TextField',
           name: 'otherSpecies',
-          title: 'Other species',
+          title: 'Species name',
           shortDescription: 'Other species',
-          hint: 'Type the name of the species the report is for',
+          errorDescription: 'Name of species',
+          hint: 'Enter the name of the species the report is for.',
           options: {
             required: true,
             classes: ''
@@ -305,6 +300,7 @@ export const definition = {
           name: 'country',
           title: 'Nation',
           shortDescription: 'Nation',
+          errorDescription: 'a nation',
           hint: 'Select where the samples were collected.',
           list: COUNTRIES_LIST_ID,
           options: {
@@ -325,7 +321,7 @@ export const definition = {
           id: '925f35f5-e94f-46ca-952d-0edc7d5868a0',
           type: 'Markdown',
           content:
-            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation. You can add another nation or species report after completing this one.\n' +
+            'A submission may contain samples from multiple individual animals from the same premises as part of the investigation.\n' +
             '\n' +
             '# Enter number of submissions',
           options: {},
@@ -347,7 +343,7 @@ export const definition = {
           type: 'NumberField',
           name: 'submissionsWithPositiveSamples',
           title:
-            'Totals submissions that contained one or more positive samples',
+            'Total submissions that contained one or more positive samples',
           shortDescription: 'Submissions with at least one positive result',
           hint: '',
           options: NUMBER_FIELD_OPTIONS,
@@ -358,7 +354,7 @@ export const definition = {
           type: 'NumberField',
           name: 'positiveSamples',
           title: 'Total number of positive samples identified',
-          shortDescription: 'Total positive submissions',
+          shortDescription: 'Total positive samples',
           hint: '',
           options: NUMBER_FIELD_OPTIONS,
           schema: COUNT_SCHEMA
@@ -449,10 +445,13 @@ export const definition = {
           value: 'Campylobacter fetus subsp. venerealis'
         },
         {
+          // Shown without the template's dashes. The value stays the
+          // template's: the workbook and the diagnostic tests catalogue
+          // (qualifying-tests.js) match on it.
           id: 'f41b569c-e86e-4661-9545-2df884d7a22a',
           text: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
           value:
-            'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)'
+            'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)'
         },
         {
           id: '693b205b-7805-457e-83eb-f9f565326a87',
@@ -468,7 +467,7 @@ export const definition = {
           id: 'cbdb34fe-4990-4c21-a3e6-d06802732ae2',
           text: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
           value:
-            'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)'
+            'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)'
         },
         {
           id: '67fec981-093e-4d7d-9565-9e290316dfa6',

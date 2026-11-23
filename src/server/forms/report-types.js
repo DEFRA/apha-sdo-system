@@ -8,13 +8,16 @@
  * differs: the URL slug, the copy, and the identifiers.
  *
  * `title` is the report type's one label, used for the form title and the
- * breadcrumb. Submission Welcome offers it as "Submit a" or "Submit an"
- * followed by this title.
+ * breadcrumb. Submission Welcome offers it quoted, after "Submit a" or
+ * "Submit an".
  *
  * `welcomeHint`, when present, is the hint under that radio on Submission
  * Welcome.
  *
- * `kind` is the shorter name shown as "Submission kind" on check your answers.
+ * `reportDateGuidance` is the Markdown above the report date question: what
+ * the month covered means for that report type and how often it is reported.
+ *
+ * `kind` is the name shown as "Report type" on check your answers.
  *
  * `code` is the report type's identifier outside this service: it is the
  * suffix of the Entra app role that grants access to the journey
@@ -37,9 +40,13 @@ export const reportTypes = [
     slug: 'bat-rabies',
     code: 'BR',
     title: 'Bat rabies report',
-    kind: 'Bat rabies',
+    kind: 'Bat rabies report',
     welcomeHint:
       'Use this service to submit your monthly bat rabies reports. The information you provide helps monitor and manage health threats and disease in bat populations across the UK and the British Isles.',
+    reportDateGuidance:
+      'The month your report covers is the month in which your lab received the samples.\n' +
+      '\n' +
+      "You can only have one report for all the samples received during that month. This means that if you need to upload an amended report for that month, it will replace the one you've already uploaded.",
     ids: {
       form: 'b4c2d8e1-7f3a-4b96-9d05-8e6f1a2c3d40',
       reportDatePage: 'd06a6bbe-d570-4348-aec8-4b454bea9c1b',
@@ -55,10 +62,16 @@ export const reportTypes = [
     slug: 'animal-health-regulations',
     webFormSlug: 'animal-health-regulations-web-form',
     code: 'AHR',
-    title: 'Animal Health Regulations report',
-    kind: 'Animal Health Regulation',
+    title: 'Reportable diseases monthly report',
+    kind: 'Reportable diseases monthly report',
     welcomeHint:
-      'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across the UK.',
+      'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across Great Britain.',
+    reportDateGuidance:
+      'The month your report covers is the month in which your lab tested the samples.\n' +
+      '\n' +
+      'You can only have one report for all the samples tested during that month.\n' +
+      '\n' +
+      "You must submit the report within the 30 days that follow the end of the month your report covers. You can add updates or amendments after this deadline, but you'll need to upload your whole report again.",
     ids: {
       form: '2f9a5c17-3b48-4e0d-9a61-c5d7e8f01234',
       reportDatePage: '5c1e7a92-8d34-4b6f-a0c8-1e2f3a4b5c6d',

@@ -25,7 +25,31 @@ describe('#homeController', () => {
       url: '/'
     })
 
-    expect(result).toEqual(expect.stringContaining('Home |'))
+    expect(result).toMatch(
+      /<title>\s*Disease surveillance data portal\s*<\/title>/
+    )
+    expect(result).toMatch(
+      /class="govuk-header__link govuk-header__service-name">\s*Disease surveillance data portal\s*</
+    )
+    expect(result).not.toEqual(expect.stringContaining('apha-sdo-system'))
+    expect(result).toMatch(
+      /<h1 class="govuk-heading-xl govuk-!-margin-bottom-2"\s+data-testid="app-heading-title">Disease surveillance data portal<\/h1>/
+    )
+    expect(result).not.toEqual(
+      expect.stringContaining('Surveillance data submission portal')
+    )
+    expect(result).not.toEqual(expect.stringContaining('>Home<'))
+    expect(result).toEqual(
+      expect.stringContaining(
+        "Submit your veterinary surveillance data to APHA. You'll be helping with the detection and assessment of disease-related threats to livestock and wildlife in Great Britain."
+      )
+    )
+    expect(result).not.toEqual(expect.stringContaining('Related links'))
+    // Nothing sits beside the content, so it takes three quarters of the row
+    expect(result).not.toEqual(
+      expect.stringContaining('govuk-grid-column-two-thirds')
+    )
+    expect(result.match(/govuk-grid-column-three-quarters/g)).toHaveLength(2)
     expect(statusCode).toBe(statusCodes.ok)
   })
 

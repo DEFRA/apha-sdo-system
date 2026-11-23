@@ -1,0 +1,33 @@
+{#
+  The forms engine's confirmation page (its views/confirmation.html), found
+  here first. Every journey the engine serves here submits a report, so the
+  panel says "Report submitted" rather than "Form submitted", and the
+  guidance follows it without a "What happens next" heading, as it is only a
+  sentence or two.
+#}
+{% extends baseLayoutPath %}
+
+{% from "govuk/components/panel/macro.njk" import govukPanel %}
+
+{# Also the browser title: the engine's own is a translation key #}
+{% set pageTitle = "Report submitted" %}
+{% set mainClasses = "govuk-main-wrapper--l" %}
+
+{% block content %}
+  <div class="govuk-grid-row">
+    <div class="govuk-grid-column-two-thirds">
+      {{ govukPanel({
+        titleText: pageTitle,
+        html: t('pages.confirmation.referenceNumber') + "<br><strong>" + (referenceNumber | escape) + "</strong>" if showReferenceNumber
+      }) }}
+      <div class="app-prose-scope">
+        {{ submissionGuidance | markdown(3) | safe }}
+      </div>
+      {% if feedbackLink %}
+        <p class="govuk-body">
+          <a href="{{ feedbackLink }}" class="govuk-link govuk-link--no-visited-state">{{ t('pages.confirmation.feedbackLink') }}</a>
+        </p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

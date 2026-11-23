@@ -48,7 +48,7 @@ function submittedReport(code, overrides = {}) {
 }
 
 const BANNER_HEADING =
-  'You need to set up your diagnostic tests before you can submit an Animal Health Regulations report.'
+  'You need to set up your diagnostic tests before you can submit a ‘Reportable diseases monthly report’.'
 const UPDATE_DIAGNOSTIC_TESTS_VALUE = `value="${REPORT_METHOD.UPDATE_DIAGNOSTIC_TESTS}"`
 
 function getCookieValue(response, name) {
@@ -237,7 +237,7 @@ describe('submission welcome routes', () => {
 
       expect(result).toEqual(
         expect.stringContaining(
-          'Last report submitted: Animal Health Regulations report for March 2026'
+          'Last report submitted: Reportable diseases monthly report for March 2026'
         )
       )
       expect(result).not.toEqual(
@@ -284,7 +284,7 @@ describe('submission welcome routes', () => {
       const { result } = await getSubmissionWelcome()
 
       expect(result).toEqual(
-        expect.stringContaining('Submit a Bat rabies report')
+        expect.stringContaining('Submit a ‘Bat rabies report’')
       )
       expect(result).toEqual(
         expect.stringContaining(
@@ -292,11 +292,11 @@ describe('submission welcome routes', () => {
         )
       )
       expect(result).toEqual(
-        expect.stringContaining('Submit an Animal Health Regulations report')
+        expect.stringContaining('Submit a ‘Reportable diseases monthly report’')
       )
       expect(result).toEqual(
         expect.stringContaining(
-          'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across the UK.'
+          'Submit monthly disease reports using this service. Your reports help monitor animal health and support the management of disease threats across Great Britain.'
         )
       )
     })

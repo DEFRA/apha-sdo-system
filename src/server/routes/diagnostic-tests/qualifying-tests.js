@@ -1,8 +1,8 @@
 /**
- * The qualifying tests a lab can declare on the "Define your qualifying tests
- * in use" page, grouped by the pathogen they diagnose. The pathogens are the
- * ones an Animal Health Regulations report is made for, named exactly as in
- * that web form's pathogen list (see
+ * The qualifying tests a lab can declare on the "Which qualifying tests do you
+ * have in use?" page, grouped by the pathogen they diagnose. The pathogens are
+ * the ones an Animal Health Regulations report is made for, named exactly as
+ * the values of that web form's pathogen list (see
  * src/server/forms/definitions/animal-health-regulations-web-form.js), so a
  * declared test can be matched to the reports that follow.
  *
@@ -10,14 +10,17 @@
  * (templates/diagnostic-tests-template.xlsx), in its row order, because the
  * declaration is delivered as that workbook filled in (see
  * diagnostic-tests-workbook.js): the n-th test here is written to the n-th
- * test row of the sheet. Test names are reproduced from the design as they
- * were given, including their capitalisation; where the design had one PCR
- * for BVDV and for PRRSV, the workbook has two (differentiating or not the
- * -1 and -2 strains), and the workbook's two are offered.
+ * test row of the sheet. Test names are capitalised as the workbook's rows
+ * are; where the design had one PCR for BVDV and for PRRSV, the workbook has
+ * two (differentiating or not the -1 and -2 strains), and the workbook's two
+ * are offered.
  *
  * `key` identifies a test in the form (the checkbox value and the element
  * ids) and is unique across pathogens, so a posted value resolves to its
  * pathogen without ambiguity.
+ *
+ * A pathogen's `name` is the workbooks' own, as recorded; `text`, when
+ * present, is how it is shown instead (see pathogenText).
  */
 
 /**
@@ -38,7 +41,7 @@ export const pathogens = [
     tests: [
       { key: 'mycoplasma-pcr', name: 'PCR' },
       { key: 'mycoplasma-dgge-pcr', name: 'DGGE/PCR' },
-      { key: 'mycoplasma-culture', name: 'culture' }
+      { key: 'mycoplasma-culture', name: 'Culture' }
     ]
   },
   {
@@ -54,7 +57,8 @@ export const pathogens = [
   },
   {
     key: 'bvdv',
-    name: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
+    name: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+    text: 'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (1 and 2 not differentiated)',
     disease: 'Bovine viral diarrhoea (BVD)',
     tests: [
       { key: 'bvdv-antigen-elisa', name: 'Antigen ELISA' },
@@ -67,7 +71,7 @@ export const pathogens = [
         name: 'PCR not differentiating BVDV-1 and BVDV-2'
       },
       { key: 'bvdv-virus-isolation', name: VIRUS_ISOLATION },
-      { key: 'bvdv-immunohistochemistry', name: 'immunohistochemistry' }
+      { key: 'bvdv-immunohistochemistry', name: 'Immunohistochemistry' }
     ]
   },
   {
@@ -101,7 +105,8 @@ export const pathogens = [
   },
   {
     key: 'prrsv',
-    name: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
+    name: 'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+    text: 'Porcine reproductive and respiratory syndrome virus 1 (PRRSV-1) or PRRSV (1 and 2 not differentiated)',
     disease: 'Porcine Reproductive and Respiratory Syndrome (PRRS)',
     tests: [
       {
@@ -113,7 +118,7 @@ export const pathogens = [
         name: 'PCR not differentiating PRRSV-1 and PRRSV-2'
       },
       { key: 'prrsv-virus-isolation', name: VIRUS_ISOLATION },
-      { key: 'prrsv-immunohistochemistry', name: 'immunohistochemistry' }
+      { key: 'prrsv-immunohistochemistry', name: 'Immunohistochemistry' }
     ]
   },
   {
@@ -137,7 +142,7 @@ export const FIRST_XLS_ROW = 6
  * Every test with its pathogen and its row in the workbook, in catalogue
  * order: the order the page lists them in, the order they are recorded in
  * and the order the sheet holds them.
- * @type {{ key: string, name: string, xlsRow: number, pathogen: { key: string, name: string, disease: string } }[]}
+ * @type {{ key: string, name: string, xlsRow: number, pathogen: { key: string, name: string, text?: string, disease: string } }[]}
  */
 export const tests = pathogens
   .flatMap(({ tests: pathogenTests, ...pathogen }) =>
@@ -152,3 +157,12 @@ export const testsByKey = new Map(tests.map((test) => [test.key, test]))
 export const pathogensByName = new Map(
   pathogens.map((pathogen) => [pathogen.name, pathogen])
 )
+
+/**
+ * How a pathogen is shown: two of the workbooks' names put a dash before the
+ * strain numbers, which the service leaves out.
+ * @param {{ name: string, text?: string }} pathogen - a catalogue entry
+ */
+export function pathogenText(pathogen) {
+  return pathogen.text ?? pathogen.name
+}

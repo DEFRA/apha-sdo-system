@@ -68,7 +68,7 @@ const updateDiagnosticTestsItem = {
   text: 'Update your diagnostic tests in use',
   label: optionLabel,
   hint: {
-    text: 'Only use this service if you are setting up your qualifying tests for the first time, or updating your tests and UKAS accreditation since your last report month'
+    text: 'Only use this service if you are setting up your qualifying tests for the first time, or updating which qualifying tests you offer or their UKAS accreditation status'
   }
 }
 

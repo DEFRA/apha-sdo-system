@@ -423,7 +423,7 @@ describe('auth routes', () => {
 
       expect(journeyResponse.headers.location).toBe('/no-access')
       expect(noAccess.statusCode).toBe(statusCodes.forbidden)
-      expect(noAccess.result).toContain('Animal Health Regulations report')
+      expect(noAccess.result).toContain('Reportable diseases monthly report')
       expect(noAccess.result).toContain("laboratory's account administrator")
       expect(noAccess.result).not.toContain('APHA administrator')
     })
@@ -675,7 +675,7 @@ describe('auth routes', () => {
         'You do not have access to this report type'
       )
       expect(noAccessResponse.result).toContain(
-        'Animal Health Regulations report'
+        'Reportable diseases monthly report'
       )
       // The session is intact: this is about one report type, not the service
       expect(noAccessResponse.result).toContain('/submission-welcome')

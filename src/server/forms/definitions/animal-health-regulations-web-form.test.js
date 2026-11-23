@@ -200,10 +200,17 @@ describe('animal health regulations web form', () => {
       'Tritrichomonas foetus'
     ])
 
-    // Submitted as shown
-    for (const item of pathogens.items) {
-      expect(item.value).toBe(item.text)
-    }
+    // Submitted as the APHA workbook names them, which for two of them puts
+    // a dash before the strain numbers
+    expect(pathogens.items.map((item) => item.value)).toEqual([
+      'Mycoplasma gallisepticum / M. meleagridis',
+      'Campylobacter fetus subsp. venerealis',
+      'Bovine Virus Diarrhoea Virus 1 (BVDV-1) or BVDV (-1 and -2 not differentiated)',
+      'Bovine Herpes Virus 1 (BHV-1)',
+      'Mycobacterium avium subsp. paratuberculosis (Map)',
+      'Porcine reproductive and respiratory syndrome virus - 1 (PRRSV-1) or PRRSV (-1 and -2 not differentiated)',
+      'Tritrichomonas foetus'
+    ])
   })
 
   test('Should offer each species for the pathogens it is reported for', () => {
@@ -302,19 +309,45 @@ describe('animal health regulations web form', () => {
     expect(conditionalPages).toEqual([otherSpeciesPage])
   })
 
-  test('Should introduce every question page with guidance', () => {
+  test('Should introduce every question page with guidance, except the one asking the other species', () => {
     const questionPages = definition.pages.filter(
       (page) => page.components?.length
     )
 
     expect(questionPages).toHaveLength(6)
 
-    for (const page of questionPages) {
+    for (const page of questionPages.filter(
+      ({ path }) => path !== '/enter-other-species'
+    )) {
       const [guidance] = page.components
 
       expect(['Markdown', 'NotificationBanner']).toContain(guidance.type)
       expect(guidance.content).toBeTruthy()
     }
+  })
+
+  test('Should ask the other species as the page heading, with a hint', () => {
+    const page = findPage('/enter-other-species')
+
+    expect(page.title).toBe('Enter species name')
+    expect(page.components).toEqual([
+      expect.objectContaining({
+        type: 'TextField',
+        name: 'otherSpecies',
+        hint: 'Enter the name of the species the report is for.',
+        errorDescription: 'Name of species'
+      })
+    ])
+  })
+
+  test('Should ask the species from a dropdown, "Select a species" when none is chosen', () => {
+    const species = questionComponents().find(
+      (component) => component.name === 'species'
+    )
+
+    expect(species.type).toBe('SelectField')
+    expect(species.errorDescription).toBe('a species')
+    expect(species.shortDescription).toBe('Species')
   })
 
   test('Should flag what not to include as an Important notification banner', () => {
