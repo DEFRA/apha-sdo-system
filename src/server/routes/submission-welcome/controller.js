@@ -8,7 +8,7 @@ import {
 } from '#/server/forms/report-types.js'
 import { isHeldBackForDiagnosticTests } from '../diagnostic-tests/diagnostic-tests-gate.js'
 import { PREVIOUS_SUBMISSIONS_PATH } from '../previous-submissions/controller.js'
-import { getSubmissionHistory } from '../previous-submissions/submission-history.js'
+import { getLatestSubmission } from '../previous-submissions/submission-history.js'
 
 const SUBMISSION_ERROR_FLASH_KEY = 'submissionWelcomeError'
 
@@ -25,15 +25,19 @@ const optionLabel = { classes: 'govuk-!-font-weight-bold' }
 
 /**
  * "Last report submitted: Bat rabies report for February 2026", or that the
- * lab has submitted none, among the report types the user holds.
+ * lab has submitted none, among the report types the user holds. Null when
+ * the submission history cannot be read, which the history page explains.
  * @param {import('@hapi/hapi').Request} request
  * @param {{ code: string }[]} allowedReportTypes - those the user's roles grant
  */
 async function submissionHistoryHint(request, allowedReportTypes) {
-  const allowedCodes = new Set(allowedReportTypes.map(({ code }) => code))
-  const latest = (await getSubmissionHistory(request)).find((submission) =>
-    allowedCodes.has(submission.reportType.code)
-  )
+  let latest
+
+  try {
+    latest = await getLatestSubmission(request, allowedReportTypes)
+  } catch {
+    return null
+  }
 
   if (!latest) {
     return NO_SUBMISSION_HISTORY_HINT
@@ -49,7 +53,7 @@ function viewSubmissionHistoryItem(hint) {
     value: VIEW_SUBMISSION_HISTORY,
     text: 'View your laboratory submission history',
     label: optionLabel,
-    hint: { text: hint }
+    ...(hint ? { hint: { text: hint } } : {})
   }
 }
 

@@ -4,6 +4,8 @@ import { fileURLToPath } from 'node:url'
 
 import convictFormatWithValidator from 'convict-format-with-validator'
 
+import { submissionHistoryApiSchema } from './submission-history-api-schema.js'
+
 const dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const fourHoursMs = 14400000
@@ -446,6 +448,8 @@ export const config = convict({
       }
     }
   },
+  // See ./submission-history-api-schema.js
+  submissionHistoryApi: submissionHistoryApiSchema,
   cdpUploader: {
     stagingPrefix: {
       doc: 'Key prefix within the scanned-files bucket, used to resolve the conventional S3 location of a scanned file when no scan record is available. Defaults follow the STAGING_PREFIX env var read by @defra/forms-engine-plugin so the two config surfaces cannot drift. Trailing slashes are tolerated.',

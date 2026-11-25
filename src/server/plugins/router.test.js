@@ -1,4 +1,5 @@
 import hapi from '@hapi/hapi'
+import { Engine as CatboxMemory } from '@hapi/catbox-memory'
 import { vi } from 'vitest'
 
 const viteMiddleware = vi.fn((request, response) => {
@@ -32,7 +33,11 @@ const { router } = await import('./router.js')
 
 describe('router development assets', () => {
   test('serves Vite CSS through the unauthenticated public route', async () => {
-    const server = hapi.server()
+    // The session cache and strategy createServer provides, which the
+    // routes rely on
+    const server = hapi.server({
+      cache: [{ name: 'session', engine: new CatboxMemory() }]
+    })
     server.auth.scheme('test', () => ({
       authenticate(_request, h) {
         return h.authenticated({ credentials: {} })
