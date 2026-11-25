@@ -20,6 +20,9 @@ export default defineConfig({
       // Off unless a test turns it on through config: the server's import
       // graph loads .env, and a developer's .env enables the local stub
       AUTH_DEFRA_ID_ENABLED: 'false',
+      // Off unless a test turns it on, for the same reason: a developer's
+      // .env may point it at the DEV API
+      SUBMISSION_HISTORY_API_ENABLED: 'false',
       SESSION_COOKIE_SECURE: 'false'
     },
     reporters: ['default', 'junit'],

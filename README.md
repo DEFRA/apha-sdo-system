@@ -225,7 +225,11 @@ Do not set `AUTH_ENTRA_ID_OIDC_CONFIGURATION_URL` in DEV. CDP must also supply
 ```dotenv
 AUTH_ENTRA_ID_CLIENT_SECRET=<temporary-dev-secret>
 SESSION_COOKIE_PASSWORD=<unique-random-value-at-least-32-characters>
+SUBMISSION_HISTORY_API_CLIENT_SECRET=<secret-issued-by-the-api-team>
 ```
+
+The submission history API's other settings are ordinary environment
+variables; see [Submission history API](#submission-history-api).
 
 Do not put these values in source control, logs or tickets.
 
@@ -519,10 +523,11 @@ diagnostic tests declaration included, goes under that folder.
   - `organisationUniqueId` is the lab's Customer Identity organisation ID. It
     is only present for external users, after `organisationName`; Entra does
     not identify the lab beyond its code.
-  - The lab's saved reports, submission history and diagnostic tests are
-    still kept under the session's lab (the Entra lab code or Customer
-    Identity organisation ID), not the name, and the pages still show the
-    laboratory as before.
+  - The lab's saved reports and diagnostic tests are still kept under the
+    session's lab (the Entra lab code or Customer Identity organisation ID),
+    not the name, and the pages still show the laboratory as before. Its
+    submission history is asked for by this name (see
+    [Previous submissions](#previous-submissions)).
 - `fileName` is the data file the uploader completed or, for a web form
   report, the workbook built from its entries (below); it is left out when
   the report has neither.
@@ -532,8 +537,9 @@ diagnostic tests declaration included, goes under that folder.
 - No notification email is recorded or sent. The journey definitions still
   name one (`notificationEmail` in their metadata) because the forms engine
   only runs a live form's submission when it is set.
-- Once delivered, the report is added to the lab's submission history (see
-  [Previous submissions](#previous-submissions)).
+- The lab's submission history is built downstream from the delivered
+  record (see [Previous submissions](#previous-submissions)); this service
+  does not record it.
 
 An Animal Health Regulations report entered as a web form goes through the
 same output service and produces the same record, so the user and lab
@@ -913,101 +919,210 @@ client will be mocked at too.
 
 Choosing **View your laboratory submission history** on Submission Welcome
 opens `/previous-submissions` ("Previous submissions"), which lists the
-lab's reports for the report types the user holds, newest first, one line
+lab's reports for each report type the user holds, newest first, one line
 each, under the headings **Period**, **Submitted** (DD/MM/YYYY), **Method**
 (the file name for an upload, "Web form" otherwise), **Reference**,
-**Status** and **Actions**. The tables use 16px text and closer columns so
-all the columns fit; only a file name too long for the page wraps. Reports
-of a type the user no longer holds are not shown.
+**Status** and **Actions**. "Not known" stands in for a period or date the
+API does not give. The tables use 16px text and closer columns so all the
+columns fit; only a file name too long for the page wraps. Reports of a type
+the user does not hold are not asked for.
 
 - **One report type held:** a single table.
 - **Bat rabies and Animal Health Regulations held:** GOV.UK tabs, **All
   submissions** first (the only table with a **Type** column, which reads
-  `BR` or `AHR`), then
-  **Bat rabies** and **Animal Health Regulations**. Without JavaScript, or
-  on a small screen, the tabs read as a list of links to each section.
+  `BR` or `AHR`), then **Bat rabies** and **Reportable diseases monthly**.
+  Without JavaScript, or on a small screen, the tabs read as a list of
+  links to each section.
+- **More than a page:** each table shows `SUBMISSION_HISTORY_API_PAGE_SIZE`
+  reports (10) with GOV.UK pagination under it: previous and next only, as
+  the API gives no total, so a full page is taken to have another after
+  it. A page link reads
+  `?type={all or slug}&page={n}#{all or slug}-submissions`, so only that
+  tab moves to the page and the tabs open on it; the other tabs show their
+  first page. A `type` or `page` that is not one (page 0, a word, past
+  10000, an unknown slug) goes back to `/previous-submissions`; a page past
+  the last says "There are no reports on this page." and links back.
 - **Nothing submitted:** "You have not submitted any reports yet." in place
   of the tables; a tab of a report type with no reports says so for that
   type.
+- **API unavailable:** the tab whose reports could not be read says "Your
+  submissions cannot be shown at the moment. Try again later." rather than
+  that there are none; the failure is logged with the gateway's
+  `x-correlation-id`.
 
-The radio's hint on Submission Welcome names the newest of those reports
-("Last report submitted: Bat rabies report for February 2026"), or says "You
-have not submitted any reports yet". The option is still left out while
-every report type the user holds is held back for the diagnostic tests (see
+The radio's hint on Submission Welcome names the newest report of the
+report types the user holds ("Last report submitted: Bat rabies report for
+February 2026"), asking the API for the first of them, or says "You have
+not submitted any reports yet". When the API cannot be read, the option has
+no hint. The option is still left out while every report type the user
+holds is held back for the diagnostic tests (see
 [First-time setup](#first-time-setup)).
 
 **Status** is a GOV.UK tag: blue **Processing**, green **Accepted** or red
-**Rejected**. Whether a report was accepted or rejected is only known
-downstream, so until the backend is in place, for showcasing, a report is
-**Processing** for two minutes after it was submitted and then **Accepted**
-or **Rejected**, alternately for each lab (its first report accepted, the
-next rejected, and so on). The page does not refresh itself: reload it to
-see the change.
+**Rejected**, read from the API's status (see below). A report the lab has
+just submitted shows straight away as **Processing**, before the downstream
+process has loaded it into the API (see
+[Reports just submitted](#reports-just-submitted)). The page does not
+refresh itself: reload it to see a change.
 
 **Actions** offers **Resubmit** on accepted and rejected reports; a report
 still processing has nothing to resubmit yet. The link is not wired to a
 journey yet (`#`).
 
-### Submission history store (temporary)
+### Submission history
 
 `src/server/routes/previous-submissions/submission-history.js` answers "what
 has this lab submitted?" for the page and Submission Welcome:
 
-- `getSubmissionHistory(request)` resolves to the reports of the user's lab
-  (`organisationId`), newest first, as `{ referenceNumber, reportType,
-reportMonthYear, submittedAt, fileName, status }`, with `reportType` the
-  registry entry, `fileName` the uploaded file or the workbook built from a
-  web form report (`null` for a report recorded with neither) and `status` one of
-  `SUBMISSION_STATUS` (`processing`, `accepted`, `rejected`), worked out as
-  above (`SHOWCASE_DECISION_DELAY_MS`); an empty list when there are none. It
-  is read once per request and memoised on `request.app`.
-- `recordSubmission(request, submission)` adds a report, taking the record
-  written as `submission.json`. The output service calls it once the report is
-  delivered, so a failed delivery is not listed, and also when Azure storage
-  is disabled locally. Diagnostic tests declarations are not reports and are
-  not recorded.
-- `registerSubmissionHistoryStore(server)` runs when the previous submissions
-  routes are registered.
+- `getSubmissionPage(request, reportTypes, { page, pageSize })` resolves to
+  one page of the lab's reports of those types, asked for in one call,
+  newest first as the API sorts them, as
+  `{ submissions, page, totalPages, hasNextPage }`. Each submission is
+  `{ referenceNumber, reportType, reportMonthYear, submittedAt, fileName,
+status }`, with `reportType` the registry entry, `submittedAt` an ISO
+  timestamp and `status` one of `SUBMISSION_STATUS` (`processing`,
+  `accepted`, `rejected`). `totalPages` is null when the API does not give
+  a total; a full page is then taken to have another after it. Each page is
+  read once per request (memoised on `request.app`); a failure is logged
+  and thrown.
+- `getLatestSubmission(request, reportTypes)` asks for the first report of
+  those types, in one call, and resolves to it, or null.
+- With `SUBMISSION_HISTORY_API_ENABLED` off, for a user without a lab or
+  without report types, nothing is asked and the history is empty.
 
-Until the backend can be queried, the store keeps the reports in an encrypted
-`submissionHistory` cookie (iron, the session cookie password, one year,
-`HttpOnly`, `SameSite=Lax`), as `[organisationId, reports]` pairs for the two
-most recently used labs, each report a
-`[code, referenceNumber, reportMonthYear, submittedAt, fileName, decision]`
-tuple (`fileName` `null` for a report without one, `decision` the showcase's
-`accepted` or `rejected`, decided when the report is recorded; reports kept
-before decisions read as accepted), newest first. The output service has no
-response toolkit, so a report recorded during a request is written by an
-`onPreResponse` extension. Each lab keeps its 10 latest reports; because file
-names are the user's own, older reports are also forgotten once the cookie
-would pass 2 KB before encryption (about 3 KB after), and names are cut to
-255 characters, which keeps it inside the 4 KB browser limit. Sign-out leaves
-it in place. Only the reports submitted from the same browser are known: a
-report submitted by another user of the lab, or from another browser, is not
-listed. To start over locally, delete the `submissionHistory` cookie.
+The lab is asked for by its name: the `organisationId` written to
+`submission.json` (see [Submission output](#submission-output)), "Test Lab
+1" for the Entra role `Lab.TestLab1.*`, or the Customer Identity
+organisation name. The history is built downstream from those records, so
+every report of the lab is listed, whoever submitted it.
 
-### Moving submission history to the backend
+### Reports just submitted
 
-1. **Only the store changes.** Re-implement `getSubmissionHistory` as a query
-   by `organisationId` returning every Bat rabies and Animal Health
-   Regulations report of the lab, whoever in the lab submitted it, mapped to
-   registry entries by `processName`. `recordSubmission` becomes a no-op if
-   the backend builds its data from the delivered `submission.json`. Delete
-   the cookie registration, the `onPreResponse` writer and the cookie-specific
-   cases in `submission-history.test.js`. The page and Submission Welcome
-   stay as they are; their tests mock `getSubmissionHistory` or record
-   through the store.
-2. **Status.** Map the backend's status to one of `SUBMISSION_STATUS`, and
-   remove the showcase (`SHOWCASE_DECISION_DELAY_MS`, the stored decision
-   and its tests); the page already tags each status and offers
-   **Resubmit** on accepted and rejected reports. Point `RESUBMIT_HREF` in
-   the page's controller at the resubmission journey once there is one.
-3. **Paging.** The cookie keeps the list short; a lab's full history may need
-   GOV.UK pagination.
-4. **Decide what an unreachable backend means.** Today an unreadable cookie
-   reads as nothing submitted. Against a backend, the page should say the
-   submissions could not be shown rather than that there are none, and the
-   Submission Welcome hint should fall back to no hint.
+The pipeline takes about a minute to load a delivered report into the API.
+Until it does, `src/server/routes/previous-submissions/pending-submissions.js`
+stands in for it:
+
+- Once a report is delivered to Azure, the output service calls
+  `recordPendingSubmission(request, submission)`, which keeps
+  `{ referenceNumber, processName, reportMonthYear, submittedAt, fileName }`
+  under the lab's name (`organisationId`) in the shared server cache
+  (segment `pendingSubmissions`; memory locally, Redis on CDP), so every
+  user of the lab sees it, whichever instance serves them. The lab keeps
+  its 20 latest. A report that fails to deliver, or any report while Azure
+  storage is off, is not kept, and diagnostic tests are not reports.
+- `getSubmissionPage` puts the lab's reports just submitted, of the report
+  types asked for, before the API's rows on the first page, as
+  **Processing**, unless the API already returns their reference
+  (`UploadReferenceNumber`): from then on only the API's row is shown, with
+  its own status. So **All submissions**, each report type's tab and the
+  Submission Welcome hint show a report the moment it is submitted.
+- A report is kept for `SUBMISSION_HISTORY_PENDING_TTL_MS` (1 hour) after
+  it was submitted, in case the API never returns it. Later pages, the API
+  being unavailable or turned off leave the history as the API has it.
+- A failure to keep or read them is logged as a warning and otherwise
+  ignored.
+
+**Mapping the response.** Each row is a submission in the format the API
+team shared (`ROW_FIELDS`), with null or an empty string for a value it
+does not have:
+
+| API field               | Read as           | Example                       |
+| ----------------------- | ----------------- | ----------------------------- |
+| `UploadReferenceNumber` | `referenceNumber` | `MVK-WBM-TLY`                 |
+| `SubmissionProcessName` | `reportType`      | `BR` (the registry entry)     |
+| `SubmissionMnthYr`      | `reportMonthYear` | `June 2025`                   |
+| `SubmissionDate`        | `submittedAt`     | `2026-11-16 10:55:06.2750000` |
+| `FileName`              | `fileName`        | `2026-06 bat rabies.xlsx`     |
+| `SubmissionStatus`      | `status`          | `Running`, `Successful`       |
+
+`SubmissionDate` is SQL Server `datetime2` text without a zone and is read
+as UTC; `Date` alone would read it as local time, an hour out in summer. A
+row of a process that was not asked for (such as `DT`) or without a
+reference is dropped. Statuses map by name (`STATUSES_BY_NAME`): `Running`
+is **Processing** and `Successful` **Accepted**; `Failed`, rejected and
+error are taken as **Rejected**, and pending, queued and the like as
+**Processing**. Any other status shows as **Processing** and is logged as
+`Unknown submission status, shown as processing`. The other fields
+(`FailureReason`, `LaboratoryID` and the rest) are not used.
+
+The API wraps the rows of a page in a list (`[[row, row]]`), answers
+`[{}]` when there are none, and gives no total. The `apiRow` fixture in
+`submission-history.test.js` follows its format with made-up values.
+
+### Submission history API
+
+`src/server/services/submission-history-api.js` calls the APHA SDO API
+(Boomi, over Azure Synapse) on the Defra API gateway:
+
+```text
+GET {SUBMISSION_HISTORY_API_URL}?processName=BR,AHR&laboratoryId=Test%20Lab%201&page=1&pageSize=10
+Authorization: Bearer {access token}
+```
+
+As agreed with the API team: `laboratoryId` is required, so a lab only sees
+its own submissions; `processName` takes one or more of `BR`, `AHR` and
+`DT`, comma-separated (this service asks for `BR` and `AHR`); `page` and
+`pageSize` page the results, newest first by `SubmissionDate`. Boomi
+defaults them to 1 and 10, but they are always sent. The names are case
+sensitive. There is no filter by user: the page lists the whole lab's
+submissions. The access token comes from the client credentials grant at
+`SUBMISSION_HISTORY_API_TOKEN_URL`, is kept in memory and is requested
+again a minute before it expires, or after the gateway refuses it (401).
+Requests time out after `SUBMISSION_HISTORY_API_TIMEOUT_MS` (15 seconds):
+the token takes well under a second, but the DEV API answers in 3 to 5.
+Both go through global `fetch`, which uses the CDP proxy with
+`NODE_USE_ENV_PROXY=1`. The API answers an error as
+`[{ "message", "code", "errors": [{ "code", "message" }] }]`, at times with
+a 200 (an empty `processName` does); the client throws it whatever the
+status, with its codes and messages, so the page says the submissions
+cannot be shown rather than that there are none.
+
+The gateway allows 300 requests a minute. Submission Welcome makes one call
+and the page one per tab (three for a user who holds both report types),
+for some 18 to 20 Bat rabies users, busiest at the start of the month, so
+nothing is cached.
+
+DEV environment variables:
+
+```dotenv
+SUBMISSION_HISTORY_API_ENABLED=true
+SUBMISSION_HISTORY_API_URL=https://dev-api-gateway.azure.defra.cloud/api/aphasdo/v1.0/db/batchsubmissionmessage
+SUBMISSION_HISTORY_API_TOKEN_URL=https://login.microsoftonline.com/6f504113-6b64-43f2-ade9-242e05780007/oauth2/v2.0/token
+SUBMISSION_HISTORY_API_CLIENT_ID=0cbbcf16-67e3-4a4b-a955-5727ed851329
+SUBMISSION_HISTORY_API_SCOPE=api://762b655a-4a52-4478-922a-e59810b883d4/.default
+```
+
+`SUBMISSION_HISTORY_API_CLIENT_SECRET` is a secret (see
+[DEV secrets](#dev-secrets)); the current one expires on 20 November 2027.
+Locally it goes in `.env`, never in source control.
+
+Check the settings with:
+
+```bash
+npm run submissions:check                                    # "Test Lab 1", BR and AHR, page 1, 2 per page
+npm run submissions:check -- "APHA Weybridge" 5 BR,AHR,DT 2  # another lab, 5 per page, those processes, page 2
+```
+
+It asks for one page and prints the status, how long it took, the
+`x-correlation-id` and a line per row (`SubmissionID`,
+`UploadReferenceNumber`, `SubmissionProcessName`, `SubmissionDate`,
+`SubmissionStatus`), or the body as the API returned it when it holds no
+rows, whether `SUBMISSION_HISTORY_API_ENABLED` is on or not.
+
+**Open with the API team.**
+
+- Each call takes 3 to 5 seconds, which Submission Welcome and the page
+  wait for.
+- A submission is listed once per pipeline run, as rows with the same
+  `UploadReferenceNumber` and their own `SubmissionID`, and an earlier
+  `Running` row stays beside a later `Successful` one, so a report can show
+  as both **Processing** and **Accepted**.
+- Pages overlap: rows with the same `SubmissionDate` (as those repeated rows
+  have) come in a different order from one page to the next, so some show
+  on two pages and others on none. The sort needs a unique tiebreaker after
+  the date: `ORDER BY SubmissionDate DESC, SubmissionID`.
+- The status of a failed submission is not known yet: only `Running` and
+  `Successful` have been seen.
 
 ## CDP proxy
 
@@ -1024,6 +1139,7 @@ npm run dev              # start the app with file watching
 npm run auth:stub        # run only the local OIDC provider
 npm run docker:up        # start local dependencies
 npm run docker:down      # stop local dependencies
+npm run submissions:check # ask the submission history API with the .env settings
 npm test                 # run tests with coverage
 npm run lint             # run JavaScript and SCSS linting
 npm run format:check     # check formatting

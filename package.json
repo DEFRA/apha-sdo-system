@@ -20,6 +20,7 @@
     "docker:down": "docker compose down",
     "storage:check": "node --env-file-if-exists=.env scripts/storage.js",
     "storage:clean": "node --env-file-if-exists=.env scripts/storage.js clean",
+    "submissions:check": "node --env-file-if-exists=.env scripts/submission-history-api.js",
     "format": "prettier --write \"src/**/*.js\" \"**/*.{js,cjs,md,json,config.js,test.js}\"",
     "format:check": "prettier --check \"src/**/*.js\" \"**/*.{js,cjs,md,json,config.js,test.js}\"",
     "git:pre-commit-hook": "npm run security-audit && npm run format:check && npm run lint && npm test",

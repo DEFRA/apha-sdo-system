@@ -3,7 +3,7 @@ import { downloadFromS3 } from '#/server/common/helpers/s3-client.js'
 import { XLSX_CONTENT_TYPE } from '#/server/common/helpers/xlsx-template.js'
 import { azureStorageService } from '#/server/upload/services/azure-storage-service.js'
 import { redisUploadStore } from '#/server/services/redis-upload-store.js'
-import { recordSubmission } from '#/server/routes/previous-submissions/submission-history.js'
+import { recordPendingSubmission } from '#/server/routes/previous-submissions/pending-submissions.js'
 import { reportTypesBySlug } from '../report-types.js'
 import {
   reportDateFromState,
@@ -315,11 +315,12 @@ export async function uploadSubmissionJson(submission) {
  * {referenceNumber}/submission.json holding the form answers and the
  * submission metadata (see buildSubmission). A web form report has no
  * uploaded file; APHA's workbook is built from its entries and written in
- * its place (see buildWebFormFile), before the record that names it.
- *
- * Once delivered, the report is added to the lab's submission history (see
- * src/server/routes/previous-submissions/submission-history.js). A failed
- * delivery throws first, so it is not listed as submitted.
+ * its place (see buildWebFormFile), before the record that names it. The
+ * lab's submission history is built downstream from that record (see
+ * src/server/routes/previous-submissions/submission-history.js); until it
+ * is, the delivered report is kept as just submitted (see
+ * src/server/routes/previous-submissions/pending-submissions.js). A failed
+ * delivery throws first, so it is not.
  *
  * The engine passes the form's notification email as well; no email is sent
  * and it is not recorded, so it is not used here.
@@ -376,9 +377,8 @@ export const outputService = {
 
     if (config.get('azure.storage.enabled')) {
       await deliverToAzure(submission, fileStates, webFormFile, request.logger)
+      await recordPendingSubmission(request, submission)
     }
-
-    await recordSubmission(request, submission)
   }
 }
 

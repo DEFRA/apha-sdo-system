@@ -1,19 +1,25 @@
+import Joi from 'joi'
 import escapeHtml from 'lodash/escape.js'
 
 import { formatDate } from '#/config/nunjucks/filters/format-date.js'
 import { getAllowedReportTypes } from '#/server/auth/report-access.js'
-import {
-  SUBMISSION_STATUS,
-  getSubmissionHistory
-} from './submission-history.js'
+import { reportTypes } from '#/server/forms/report-types.js'
+import { SUBMISSION_STATUS, getSubmissionPage } from './submission-history.js'
 
 export const PREVIOUS_SUBMISSIONS_PATH = '/previous-submissions'
 export const PREVIOUS_SUBMISSIONS_TITLE = 'Previous submissions'
 
 export const NO_SUBMISSIONS_TEXT = 'You have not submitted any reports yet.'
+export const NO_REPORTS_ON_PAGE_TEXT = 'There are no reports on this page.'
+export const SUBMISSIONS_UNAVAILABLE_TEXT =
+  'Your submissions cannot be shown at the moment. Try again later.'
 
-const ALL_SUBMISSIONS_TAB_ID = 'all-submissions'
+// Far beyond any lab's history; keeps the page a number the API accepts
+const MAX_PAGE = 10000
+
+const ALL_SUBMISSIONS_KEY = 'all'
 const ALL_SUBMISSIONS_LABEL = 'All submissions'
+
 const SUBMITTED_ON_FORMAT = 'dd/MM/yyyy'
 const NOT_KNOWN_TEXT = 'Not known'
 const WEB_FORM_TEXT = 'Web form'
@@ -53,6 +59,14 @@ function howSubmittedCell(submission) {
     : { text: WEB_FORM_TEXT }
 }
 
+function submittedCell(submission) {
+  return {
+    text: submission.submittedAt
+      ? formatDate(submission.submittedAt, SUBMITTED_ON_FORMAT)
+      : NOT_KNOWN_TEXT
+  }
+}
+
 function statusCell(submission) {
   const tag = STATUS_TAGS[submission.status]
 
@@ -74,10 +88,10 @@ function actionsCell(submission) {
 }
 
 /**
- * A GOV.UK table of the reports, newest first, one line each. The report
- * type column, by code (BR, AHR), is only needed where reports of more than
- * one type are listed together. Reports that are accepted or rejected can
- * be resubmitted.
+ * A GOV.UK table of one page of reports, one line each. The report type
+ * column, by code (BR, AHR), is only needed where reports of more than one
+ * type are listed together. Reports that are accepted or rejected can be
+ * resubmitted.
  */
 function buildTable(submissions, { showReportType }) {
   return {
@@ -94,7 +108,7 @@ function buildTable(submissions, { showReportType }) {
     rows: submissions.map((submission) => [
       { text: submission.reportMonthYear ?? NOT_KNOWN_TEXT },
       ...(showReportType ? [{ text: submission.reportType.code }] : []),
-      { text: formatDate(submission.submittedAt, SUBMITTED_ON_FORMAT) },
+      submittedCell(submission),
       howSubmittedCell(submission),
       { text: submission.referenceNumber },
       statusCell(submission),
@@ -103,68 +117,132 @@ function buildTable(submissions, { showReportType }) {
   }
 }
 
-function reportTypePanel(reportType, submissions) {
-  const ofType = submissions.filter(
-    (submission) => submission.reportType.code === reportType.code
-  )
+/**
+ * Previous and next links, without page numbers: the API does not give the
+ * number of pages. Null for a single page.
+ */
+function buildPagination(hrefOf, { page, hasNextPage }, label) {
+  if (page <= 1 && !hasNextPage) {
+    return null
+  }
 
   return {
-    id: `${reportType.slug}-submissions`,
+    landmarkLabel: label,
+    ...(page > 1 ? { previous: { href: hrefOf(page - 1) } } : {}),
+    ...(hasNextPage ? { next: { href: hrefOf(page + 1) } } : {})
+  }
+}
+
+function reportTypeListing(reportType) {
+  return {
+    key: reportType.slug,
     label: tabLabelOf(reportType),
     heading: `${reportType.title}s`,
-    table: ofType.length ? buildTable(ofType, { showReportType: false }) : null,
+    reportTypes: [reportType],
+    showReportType: false,
     emptyText: `You have not submitted any ${reportType.title}s yet.`
   }
 }
 
 /**
- * One panel per report type the user holds. A user who holds more than one
- * also gets every report together, first, and the panels become tabs.
+ * What each panel lists: one report type each and, for a user who holds
+ * more than one, every report together, first.
  */
-function buildPanels(allowedReportTypes, submissions) {
-  if (allowedReportTypes.length === 1) {
-    return [reportTypePanel(allowedReportTypes[0], submissions)]
+function listingsOf(allowedReportTypes) {
+  const byReportType = allowedReportTypes.map(reportTypeListing)
+
+  if (allowedReportTypes.length < 2) {
+    return byReportType
   }
 
   return [
     {
-      id: ALL_SUBMISSIONS_TAB_ID,
+      key: ALL_SUBMISSIONS_KEY,
       label: ALL_SUBMISSIONS_LABEL,
       heading: ALL_SUBMISSIONS_LABEL,
-      table: buildTable(submissions, { showReportType: true }),
+      reportTypes: allowedReportTypes,
+      showReportType: true,
       emptyText: NO_SUBMISSIONS_TEXT
     },
-    ...allowedReportTypes.map((reportType) =>
-      reportTypePanel(reportType, submissions)
-    )
+    ...byReportType
   ]
+}
+
+/**
+ * A listing's reports, a page at a time. A page link names the listing,
+ * so only its panel moves to that page, and the panel's ID, so the tabs
+ * open on it. `isEmpty` when the lab has submitted none; a panel whose
+ * reports could not be read says so instead.
+ */
+async function submissionsPanel(request, listing, page) {
+  const id = `${listing.key}-submissions`
+  const panel = { id, label: listing.label, heading: listing.heading }
+
+  let result
+
+  try {
+    result = await getSubmissionPage(request, listing.reportTypes, { page })
+  } catch {
+    return { ...panel, isEmpty: false, text: SUBMISSIONS_UNAVAILABLE_TEXT }
+  }
+
+  const { submissions } = result
+  const hrefOf = (number) =>
+    `${PREVIOUS_SUBMISSIONS_PATH}?type=${listing.key}&page=${number}#${id}`
+
+  return {
+    ...panel,
+    isEmpty: page === 1 && submissions.length === 0,
+    table: submissions.length
+      ? buildTable(submissions, { showReportType: listing.showReportType })
+      : null,
+    text: submissions.length ? null : emptyTextOf(listing.emptyText, page),
+    pagination: buildPagination(hrefOf, result, `${listing.heading} pages`)
+  }
+}
+
+function emptyTextOf(emptyText, page) {
+  return page > 1 ? NO_REPORTS_ON_PAGE_TEXT : emptyText
 }
 
 /**
  * "Previous submissions": the reports the user's lab has submitted, newest
  * first, for the report types the user holds. Reached from Submission
- * Welcome. A user who holds Bat rabies and Animal Health Regulations can
- * switch between all of them and each type's on GOV.UK tabs. Without any
- * report to show, it says so instead.
+ * Welcome. A user who holds Bat rabies and Animal Health Regulations
+ * switches between all of them and each type's on GOV.UK tabs.
+ * `?type={all or slug}&page={n}` pages through one of them; a query that
+ * is not one is dropped. Without any report to show, it says so instead.
  */
 export const previousSubmissionsGetController = {
+  options: {
+    validate: {
+      query: Joi.object({
+        type: Joi.string().valid(
+          ALL_SUBMISSIONS_KEY,
+          ...reportTypes.map(({ slug }) => slug)
+        ),
+        page: Joi.number().integer().min(1).max(MAX_PAGE).default(1)
+      }).unknown(true),
+      failAction(_request, h) {
+        return h.redirect(PREVIOUS_SUBMISSIONS_PATH).takeover()
+      }
+    }
+  },
   async handler(request, h) {
-    const allowedReportTypes = getAllowedReportTypes(
-      request.auth.credentials?.user
+    const { type, page } = request.query
+    const panels = await Promise.all(
+      listingsOf(getAllowedReportTypes(request.auth.credentials?.user)).map(
+        (listing) =>
+          submissionsPanel(request, listing, listing.key === type ? page : 1)
+      )
     )
-    const allowedCodes = new Set(allowedReportTypes.map(({ code }) => code))
-    const submissions = (await getSubmissionHistory(request)).filter(
-      (submission) => allowedCodes.has(submission.reportType.code)
-    )
-    const panels = submissions.length
-      ? buildPanels(allowedReportTypes, submissions)
-      : []
+    const hasSubmissions = panels.some((panel) => !panel.isEmpty)
 
     return h.view('previous-submissions/index', {
       pageTitle: PREVIOUS_SUBMISSIONS_TITLE,
-      panels,
-      showTabs: panels.length > 1,
-      noSubmissionsText: submissions.length ? null : NO_SUBMISSIONS_TEXT
+      panels: hasSubmissions ? panels : [],
+      showTabs: hasSubmissions && panels.length > 1,
+      noSubmissionsText: hasSubmissions ? null : NO_SUBMISSIONS_TEXT
     })
   }
 }

@@ -2,7 +2,7 @@ import { createServer } from '#/server/server.js'
 import { statusCodes } from '#/server/common/constants/status-codes.js'
 import { reportTypes, reportTypesByCode } from '#/server/forms/report-types.js'
 import { getLabDiagnosticTests } from '../diagnostic-tests/lab-diagnostic-tests.js'
-import { getSubmissionHistory } from '../previous-submissions/submission-history.js'
+import { getLatestSubmission } from '../previous-submissions/submission-history.js'
 import { REPORT_METHOD } from '../report-method/controller.js'
 import { DEFINED_LAB_DIAGNOSTIC_TESTS } from '#/test-helpers/lab-diagnostic-tests.js'
 import {
@@ -28,12 +28,12 @@ vi.mock(
   '#/server/routes/previous-submissions/submission-history.js',
   async (importOriginal) => ({
     ...(await importOriginal()),
-    getSubmissionHistory: vi.fn(async () => [])
+    getLatestSubmission: vi.fn(async () => null)
   })
 )
 
 /**
- * A report as the submission history store reads it back
+ * A report as the submission history store reads it from the API
  */
 function submittedReport(code, overrides = {}) {
   return {
@@ -228,10 +228,9 @@ describe('submission welcome routes', () => {
     })
 
     test('Should name the last report submitted', async () => {
-      getSubmissionHistory.mockResolvedValueOnce([
-        submittedReport('AHR', { reportMonthYear: 'March 2026' }),
-        submittedReport('BR')
-      ])
+      getLatestSubmission.mockResolvedValueOnce(
+        submittedReport('AHR', { reportMonthYear: 'March 2026' })
+      )
 
       const { result } = await getSubmissionWelcome()
 
@@ -245,14 +244,14 @@ describe('submission welcome routes', () => {
       )
     })
 
-    test('Should only name a report of a type the user holds', async () => {
-      getSubmissionHistory.mockResolvedValueOnce([
-        submittedReport('AHR', { reportMonthYear: 'March 2026' }),
-        submittedReport('BR')
-      ])
+    test('Should only look for a report of a type the user holds', async () => {
+      getLatestSubmission.mockResolvedValueOnce(submittedReport('BR'))
 
       const { result } = await getSubmissionWelcome(authWithJourneys(['BR']))
 
+      expect(getLatestSubmission).toHaveBeenCalledWith(expect.anything(), [
+        reportTypesByCode.get('BR')
+      ])
       expect(result).toEqual(
         expect.stringContaining(
           'Last report submitted: Bat rabies report for February 2026'
@@ -260,20 +259,34 @@ describe('submission welcome routes', () => {
       )
     })
 
-    test('Should say none was submitted when the only reports are of a type the user does not hold', async () => {
-      getSubmissionHistory.mockResolvedValueOnce([submittedReport('AHR')])
+    test('Should leave out the hint when the submission history cannot be read', async () => {
+      getLatestSubmission.mockRejectedValueOnce(
+        new Error('Submission history API responded 503')
+      )
 
-      const { result } = await getSubmissionWelcome(authWithJourneys(['BR']))
+      const { result, statusCode } = await getSubmissionWelcome()
 
+      expect(statusCode).toBe(statusCodes.ok)
       expect(result).toEqual(
+        expect.stringContaining('View your laboratory submission history')
+      )
+      expect(result).not.toEqual(
         expect.stringContaining(NO_SUBMISSION_HISTORY_HINT)
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining('Last report submitted')
+      )
+      expect(result).not.toEqual(
+        expect.stringContaining(
+          `id="submissionAction-${reportTypes.length + 1}-hint"`
+        )
       )
     })
 
     test('Should name the report type alone when the report month is not known', async () => {
-      getSubmissionHistory.mockResolvedValueOnce([
+      getLatestSubmission.mockResolvedValueOnce(
         submittedReport('BR', { reportMonthYear: null })
-      ])
+      )
 
       const { result } = await getSubmissionWelcome()
 

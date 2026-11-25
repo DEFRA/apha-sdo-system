@@ -37,7 +37,8 @@ export const router = {
       // The qualifying tests a lab uses and their accreditation
       await server.register([diagnosticTests])
 
-      // The lab's submitted reports, and the store each report is recorded in
+      // The lab's submitted reports, and the cache the reports just
+      // submitted are kept in until the API returns them
       await server.register([previousSubmissions])
 
       // cdp-uploader scan-completion callback
