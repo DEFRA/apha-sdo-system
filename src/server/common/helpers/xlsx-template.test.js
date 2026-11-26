@@ -201,5 +201,22 @@ describe('xlsx template helpers', () => {
       // The template's own parts were not touched
       expect(partText(entries, WORKBOOK_PART)).toBe(workbook)
     })
+
+    test('Should zip the same parts to the same bytes whenever they are built', () => {
+      const { entries } = readTemplate(DIAGNOSTIC_TESTS_TEMPLATE)
+
+      vi.useFakeTimers({ toFake: ['Date'] })
+
+      try {
+        vi.setSystemTime(new Date('2026-11-26T11:23:58.900Z'))
+        const first = zipTemplate(entries)
+        vi.setSystemTime(new Date('2026-11-26T11:24:01.100Z'))
+        const later = zipTemplate(entries)
+
+        expect(later.equals(first)).toBe(true)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
   })
 })

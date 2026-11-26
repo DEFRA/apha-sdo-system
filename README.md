@@ -1010,12 +1010,16 @@ stands in for it:
   user of the lab sees it, whichever instance serves them. The lab keeps
   its 20 latest. A report that fails to deliver, or any report while Azure
   storage is off, is not kept, and diagnostic tests are not reports.
-- `getSubmissionPage` puts the lab's reports just submitted, of the report
-  types asked for, before the API's rows on the first page, as
+- `getSubmissionPage` places the lab's reports just submitted, of the report
+  types asked for, among the API's rows on the first page by date, as
   **Processing**, unless the API already returns their reference
   (`UploadReferenceNumber`): from then on only the API's row is shown, with
-  its own status. So **All submissions**, each report type's tab and the
-  Submission Welcome hint show a report the moment it is submitted.
+  its own status. When the first page is full, a report just submitted
+  that is older than its last row belongs on a later page, where the API
+  has it by then, so it is left out; a lab that submits more than a page
+  of reports within the hour would otherwise see the oldest twice. So
+  **All submissions**, each report type's tab and the Submission Welcome
+  hint show a report the moment it is submitted, in its place.
 - A report is kept for `SUBMISSION_HISTORY_PENDING_TTL_MS` (1 hour) after
   it was submitted, in case the API never returns it. Later pages, the API
   being unavailable or turned off leave the history as the API has it.
