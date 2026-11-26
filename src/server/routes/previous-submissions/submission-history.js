@@ -14,8 +14,8 @@ import { pendingSubmissionsOf } from './pending-submissions.js'
  * by its name, the `organisationId` of those records (see
  * submission-identity.js), so every report of the lab is listed, whoever
  * submitted it and from wherever. A report the lab has just submitted, which
- * the API does not return yet, leads the first page as processing until it
- * does (see pending-submissions.js).
+ * the API does not return yet, shows on the first page as processing, in
+ * its place by date, until it does (see pending-submissions.js).
  */
 
 /**
@@ -160,19 +160,28 @@ function labOf(request) {
   return submissionIdentity(request.auth?.credentials?.user).organisationId
 }
 
-// The lab's reports just submitted, of the report types asked for, that the
-// API has not returned among the submissions yet
-async function justSubmitted(
+function submittedTime(submission) {
+  return Date.parse(submission?.submittedAt ?? '') || 0
+}
+
+/**
+ * The first page with the lab's reports just submitted, of the report types
+ * asked for, that the API does not return on it, each in its place by date.
+ * A full page ends where a later page begins: a report just submitted that
+ * is older than its last report belongs on a later page, where the API
+ * returns it once loaded, so it is left out.
+ */
+async function withJustSubmitted(
   request,
-  laboratoryId,
-  reportTypesByCode,
-  submissions
+  { laboratoryId, reportTypesByCode, submissions, isFull }
 ) {
   const listed = new Set(
     submissions.map(({ referenceNumber }) => referenceNumber)
   )
+  const oldestListed = isFull ? submittedTime(submissions.at(-1)) : 0
+  const merged = [...submissions]
 
-  return (await pendingSubmissionsOf(request, laboratoryId))
+  const justSubmitted = (await pendingSubmissionsOf(request, laboratoryId))
     .filter(
       (pending) =>
         reportTypesByCode.has(pending.processName) &&
@@ -186,6 +195,18 @@ async function justSubmitted(
       fileName: textOf(pending.fileName),
       status: SUBMISSION_STATUS.PROCESSING
     }))
+    .filter((submission) => submittedTime(submission) > oldestListed)
+
+  for (const submission of justSubmitted) {
+    const olderAt = merged.findIndex(
+      (listedSubmission) =>
+        submittedTime(listedSubmission) < submittedTime(submission)
+    )
+
+    merged.splice(olderAt === -1 ? merged.length : olderAt, 0, submission)
+  }
+
+  return merged
 }
 
 async function readSubmissionPage(request, reportTypes, { page, pageSize }) {
@@ -214,23 +235,21 @@ async function readSubmissionPage(request, reportTypes, { page, pageSize }) {
     const submissions = rows
       .map((row) => submissionOf(request, reportTypesByCode, row))
       .filter(Boolean)
+    // The API gives no total, so a full page may have another after it
+    const isFull = rows.length >= pageSize
 
     return {
       submissions:
         page === 1
-          ? [
-              ...(await justSubmitted(
-                request,
-                laboratoryId,
-                reportTypesByCode,
-                submissions
-              )),
-              ...submissions
-            ]
+          ? await withJustSubmitted(request, {
+              laboratoryId,
+              reportTypesByCode,
+              submissions,
+              isFull
+            })
           : submissions,
       page,
-      // The API gives no total, so a full page may have another after it
-      hasNextPage: rows.length >= pageSize
+      hasNextPage: isFull
     }
   } catch (error) {
     request.logger?.error?.(
@@ -251,8 +270,9 @@ async function readSubmissionPage(request, reportTypes, { page, pageSize }) {
 /**
  * One page of the reports of the given report types the signed-in user's
  * lab has submitted, newest first, each with its entry of the report type
- * registry and its status (one of SUBMISSION_STATUS). The first page leads
- * with the reports just submitted that the API does not return yet. Empty
+ * registry and its status (one of SUBMISSION_STATUS). The first page also
+ * has the reports just submitted that belong on it and that the API does
+ * not return yet (see withJustSubmitted). Empty
  * when the API is turned off, the user has no lab or no report type is
  * given. Each page is read once per request; a failure is logged and
  * thrown.

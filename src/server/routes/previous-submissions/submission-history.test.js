@@ -433,7 +433,7 @@ describe('#submissionHistory', () => {
     const references = ({ submissions }) =>
       submissions.map(({ referenceNumber }) => referenceNumber)
 
-    test('Should lead the first page as processing, before the reports the API returns', async () => {
+    test('Should show one newer than the reports the API returns first, as processing', async () => {
       pendingSubmissionsOf.mockResolvedValue([justSubmittedBr])
 
       const request = createRequest()
@@ -471,6 +471,111 @@ describe('#submissionHistory', () => {
         'BR1-AAA-111'
       ])
       expect(page.submissions[2].status).toBe(SUBMISSION_STATUS.ACCEPTED)
+    })
+
+    // Between the API rows of 29 October, 2 October and 1 July 2026
+    const submittedMidOctober = {
+      ...justSubmittedBr,
+      referenceNumber: 'MID-OCTOBER',
+      submittedAt: '2026-10-10T12:00:00.000Z'
+    }
+    const submittedAugust = {
+      ...justSubmittedBr,
+      referenceNumber: 'AUGUST',
+      submittedAt: '2026-08-01T12:00:00.000Z'
+    }
+    const submittedJune = {
+      ...justSubmittedBr,
+      referenceNumber: 'JUNE',
+      submittedAt: '2026-06-01T12:00:00.000Z'
+    }
+
+    test('Should place each in its place by date among the reports the API returns', async () => {
+      pendingSubmissionsOf.mockResolvedValue([
+        submittedMidOctober,
+        submittedAugust
+      ])
+
+      expect(
+        references(await getSubmissionPage(createRequest(), bothReportTypes))
+      ).toEqual([
+        'BR1-CCC-333',
+        'MID-OCTOBER',
+        'AHR-BBB-222',
+        'AUGUST',
+        'BR1-AAA-111'
+      ])
+    })
+
+    test('Should leave out one older than the last report of a full first page, which belongs on a later page', async () => {
+      pendingSubmissionsOf.mockResolvedValue([
+        submittedMidOctober,
+        submittedJune
+      ])
+
+      expect(
+        references(
+          await getSubmissionPage(createRequest(), bothReportTypes, {
+            pageSize: 3
+          })
+        )
+      ).toEqual(['BR1-CCC-333', 'MID-OCTOBER', 'AHR-BBB-222', 'BR1-AAA-111'])
+      expect(
+        references(
+          await getSubmissionPage(createRequest(), bothReportTypes, {
+            pageSize: 4
+          })
+        )
+      ).toEqual([
+        'BR1-CCC-333',
+        'MID-OCTOBER',
+        'AHR-BBB-222',
+        'BR1-AAA-111',
+        'JUNE'
+      ])
+    })
+
+    test('Should not repeat the reports of a later page when a lab submits more than a page in the hour', async () => {
+      // January to December 2025, submitted one by one, three minutes apart
+      const reports = Array.from({ length: 12 }, (_, index) => {
+        const month = index + 1
+        const minute = String(month * 3).padStart(2, '0')
+
+        return {
+          reference: `REF-${month}`,
+          row: apiRow({
+            UploadReferenceNumber: `REF-${month}`,
+            SubmissionMnthYr: `Month ${month} 2025`,
+            SubmissionDate: `2026-11-26 10:${minute}:00.0000000`,
+            SubmissionStatus: 'Successful'
+          }),
+          pending: {
+            referenceNumber: `REF-${month}`,
+            processName: 'BR',
+            reportMonthYear: `Month ${month} 2025`,
+            submittedAt: `2026-11-26T10:${minute}:00.000Z`,
+            fileName: null
+          }
+        }
+      }).reverse()
+
+      // The API's first page of ten: December back to March
+      answerWith(reports.slice(0, 10).map(({ row }) => row))
+      pendingSubmissionsOf.mockResolvedValue(
+        reports.map(({ pending }) => pending)
+      )
+
+      const page = await getSubmissionPage(createRequest(), bothReportTypes, {
+        pageSize: 10
+      })
+
+      expect(references(page)).toEqual(
+        reports.slice(0, 10).map(({ reference }) => reference)
+      )
+      expect(page.submissions.map(({ status }) => status)).not.toContain(
+        SUBMISSION_STATUS.PROCESSING
+      )
+      expect(page.hasNextPage).toBe(true)
     })
 
     test('Should only show the report types asked for', async () => {
@@ -563,6 +668,24 @@ describe('#submissionHistory', () => {
           status: SUBMISSION_STATUS.PROCESSING
         })
       )
+    })
+
+    test('Should not name one older than the latest report the API returns', async () => {
+      answerWith([API_ROWS[0]])
+      pendingSubmissionsOf.mockResolvedValue([submittedMidOctober])
+
+      expect(
+        await getLatestSubmission(createRequest(), bothReportTypes)
+      ).toEqual(
+        expect.objectContaining({
+          referenceNumber: 'BR1-CCC-333',
+          status: SUBMISSION_STATUS.PROCESSING
+        })
+      )
+      expect(
+        (await getLatestSubmission(createRequest(), bothReportTypes))
+          .referenceNumber
+      ).not.toBe('MID-OCTOBER')
     })
   })
 

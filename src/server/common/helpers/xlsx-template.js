@@ -173,11 +173,17 @@ export function withFullCalcOnLoad(xml) {
   )
 }
 
+// A zip stamps each part with a time, the current one unless told
+// otherwise, to the nearest two seconds. One fixed time, the earliest a zip
+// records (in local time, so no time zone takes it before 1980), keeps the
+// same parts zipping to the same bytes whenever they are built.
+const PART_MODIFIED = new Date('1980-01-01T00:00:00')
+
 /**
  * The parts zipped back into the bytes of a .xlsx
  * @param {Record<string, Uint8Array>} entries - the parts by name
  * @returns {Buffer}
  */
 export function zipTemplate(entries) {
-  return Buffer.from(zipSync(entries, { level: 6 }))
+  return Buffer.from(zipSync(entries, { level: 6, mtime: PART_MODIFIED }))
 }
